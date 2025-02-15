@@ -38,7 +38,6 @@ type JetStreamPublicTestSuite struct {
 	ctrl *gomock.Controller
 
 	js *mocks.MockJetStreamContext
-	c  *client.Client
 }
 
 func (suite *JetStreamPublicTestSuite) SetupTest() {
