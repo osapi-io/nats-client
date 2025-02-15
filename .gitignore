@@ -1,0 +1,7 @@
+cobertura.xml
+cover.out
+dist/
+.envrc
+.nats/jetstream/
+result.xml
+.task/

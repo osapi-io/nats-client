@@ -1,0 +1,5 @@
+---
+version: "3"
+
+includes:
+  go: https://raw.githubusercontent.com/osapi-io/osapi-io-taskfile/refs/heads/main/Taskfile.yml
