@@ -86,11 +86,7 @@ func main() {
 
 	c := client.New(logger, streamOpts1, streamOpts2)
 	if err := c.SetupJetStream(js); err != nil {
-		logger.Error("failed setting up jetstream",
-			slog.String("host", s.Opts.Host),
-			slog.Int("port", s.Opts.Port),
-			slog.String("error", err.Error()),
-		)
+		logger.Error("failed setting up jetstream", "error", err)
 		os.Exit(1)
 	}
 
