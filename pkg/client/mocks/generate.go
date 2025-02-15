@@ -18,24 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-package client
+package mocks
 
-import (
-	"log/slog"
-)
-
-// New initialize and configure a new Client instance.
-func New(
-	logger *slog.Logger,
-	streamConfig ...*StreamConfig,
-) *Client {
-	client := &Client{
-		logger: logger,
-	}
-
-	if len(streamConfig) > 0 {
-		client.streamConfig = streamConfig
-	}
-
-	return client
-}
+//go:generate go run github.com/golang/mock/mockgen -destination=./jetstream.gen.go -package=mocks github.com/nats-io/nats.go JetStreamContext

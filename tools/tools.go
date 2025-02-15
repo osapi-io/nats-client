@@ -18,24 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-package client
+//go:build tools
+// +build tools
+
+package tools
 
 import (
-	"log/slog"
+	_ "github.com/golang/mock/mockgen"
+	_ "github.com/nats-io/nats.go/jetstream"
 )
-
-// New initialize and configure a new Client instance.
-func New(
-	logger *slog.Logger,
-	streamConfig ...*StreamConfig,
-) *Client {
-	client := &Client{
-		logger: logger,
-	}
-
-	if len(streamConfig) > 0 {
-		client.streamConfig = streamConfig
-	}
-
-	return client
-}

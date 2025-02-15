@@ -20,6 +20,8 @@ import (
 )
 
 func main() {
+  host := "localhost"
+  port := 4222
 	logger := getLogger(debug)
 
 	streamOpts1 := &client.StreamConfig{
@@ -76,11 +78,22 @@ func main() {
 		},
 	}
 
-	c := client.New(logger, streamOpts1, streamOpts2)
-	if err := c.SetupJetStream(); err != nil {
-		logger.Error("failed setting up JetStream: %w", err)
+	js, err := client.NewJetStreamContext(host, port)
+	if err != nil {
+		logger.Error("failed to create jetstream context", "error", err)
 		os.Exit(1)
 	}
+
+	c := client.New(logger, streamOpts1, streamOpts2)
+	if err := c.SetupJetStream(js); err != nil {
+		logger.Error("failed setting up jetstream",
+			slog.String("host", s.Opts.Host),
+			slog.Int("port", s.Opts.Port),
+			slog.String("error", err.Error()),
+		)
+		os.Exit(1)
+	}
+
 }
 ```
 
