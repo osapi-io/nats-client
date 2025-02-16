@@ -26,9 +26,9 @@ jobs:
       - name: Install shfmt
         uses: mfinelli/setup-shfmt@v3
       - name: Deps
-        run: task -y go:deps
+        run: task -y deps
       - name: Test
-        run: task -y go:test
+        run: task -y test
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         env:
