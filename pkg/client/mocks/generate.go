@@ -20,4 +20,4 @@
 
 package mocks
 
-//go:generate go run github.com/golang/mock/mockgen -destination=./jetstream.gen.go -package=mocks github.com/nats-io/nats.go JetStreamContext
+//go:generate go tool github.com/golang/mock/mockgen -destination=./jetstream.gen.go -package=mocks github.com/nats-io/nats.go JetStreamContext
