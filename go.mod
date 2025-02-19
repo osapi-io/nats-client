@@ -4,7 +4,7 @@ go 1.24
 
 require (
 	github.com/golang/mock v1.6.0
-	github.com/nats-io/nats.go v1.39.0
+	github.com/nats-io/nats.go v1.39.1
 	github.com/stretchr/testify v1.10.0
 )
 
