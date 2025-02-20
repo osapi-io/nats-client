@@ -25,6 +25,20 @@ func main() {
   port := 4222
 	logger := getLogger(debug)
 
+	jsOpts := &client.ClientOptions{
+		Host: s.Opts.Host,
+		Port: s.Opts.Port,
+		Auth: client.AuthOptions{
+			AuthType: client.NoAuth,
+		},
+	}
+
+	js, err := client.NewJetStreamContext(host, port)
+	if err != nil {
+		logger.Error("failed to create jetstream context", "error", err)
+		os.Exit(1)
+	}
+
 	streamOpts1 := &client.StreamConfig{
 		StreamConfig: &nats.StreamConfig{
 			Name:     "TASK_QUEUE",
@@ -79,18 +93,11 @@ func main() {
 		},
 	}
 
-	js, err := client.NewJetStreamContext(host, port)
-	if err != nil {
-		logger.Error("failed to create jetstream context", "error", err)
-		os.Exit(1)
-	}
-
-	c := client.New(logger, streamOpts1, streamOpts2)
-	if err := c.SetupJetStream(js); err != nil {
+	c := client.New(logger)
+	if err := c.SetupJetStream(js, streamOpts1, streamOpts2); err != nil {
 		logger.Error("failed setting up jetstream", "error", err)
 		os.Exit(1)
 	}
-
 }
 ```
 

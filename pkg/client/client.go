@@ -24,18 +24,9 @@ import (
 	"log/slog"
 )
 
-// New initialize and configure a new Client instance.
-func New(
-	logger *slog.Logger,
-	streamConfig ...*StreamConfig,
-) *Client {
-	client := &Client{
+// New initializes and configures a new Client instance.
+func New(logger *slog.Logger) *Client {
+	return &Client{
 		logger: logger,
 	}
-
-	if len(streamConfig) > 0 {
-		client.streamConfig = streamConfig
-	}
-
-	return client
 }

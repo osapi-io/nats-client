@@ -23,34 +23,66 @@ package client
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nkeys"
 )
 
-// NewJetStreamContext creates and returns a JetStream context by establishing a connection
-// to the NATS server using the provided host and port.
-func NewJetStreamContext(host string, port int) (nats.JetStreamContext, error) {
-	nc, err := nats.Connect(fmt.Sprintf("nats://%s:%d", host, port))
+// NewJetStreamContext creates a NATS connection with the given authentication options.
+func NewJetStreamContext(opts *ClientOptions) (nats.JetStreamContext, error) {
+	natsURL := fmt.Sprintf("nats://%s:%d", opts.Host, opts.Port)
+	var nc *nats.Conn
+	var err error
+
+	switch opts.Auth.AuthType {
+	case NoAuth:
+		nc, err = nats.Connect(natsURL)
+	case UserPassAuth:
+		nc, err = nats.Connect(natsURL, nats.UserInfo(opts.Auth.Username, opts.Auth.Password))
+	case NKeyAuth:
+		seed, readErr := os.ReadFile(opts.Auth.NKeyFile)
+		if readErr != nil {
+			return nil, fmt.Errorf("failed to read nkey seed file: %w", readErr)
+		}
+
+		kp, kpErr := nkeys.FromSeed(seed)
+		if kpErr != nil {
+			return nil, fmt.Errorf("failed to parse nkey seed: %w", kpErr)
+		}
+
+		pubKey, pubErr := kp.PublicKey()
+		if pubErr != nil {
+			return nil, fmt.Errorf("failed to get public key from nkey: %w", pubErr)
+		}
+
+		nc, err = nats.Connect(natsURL, nats.Nkey(pubKey, func(nonce []byte) ([]byte, error) {
+			return kp.Sign(nonce)
+		}))
+	default:
+		return nil, fmt.Errorf("unsupported authentication method")
+	}
+
 	if err != nil {
-		return nil, fmt.Errorf("error connecting to server: %w", err)
+		return nil, fmt.Errorf("error connecting to nats: %w", err)
 	}
 
 	js, err := nc.JetStream()
 	if err != nil {
-		return nil, fmt.Errorf("error enabling jetstream: %w", err)
+		return nil, fmt.Errorf("error enabling JetStream: %w", err)
 	}
 
 	return js, nil
 }
 
-// SetupJetStream creates the JetStream connection and stream configuration.
-func (c *Client) SetupJetStream(js nats.JetStreamContext) error {
-	if len(c.streamConfig) == 0 {
+// SetupJetStream configures JetStream streams and consumers.
+func (c *Client) SetupJetStream(js nats.JetStreamContext, streamConfigs ...*StreamConfig) error {
+	if len(streamConfigs) == 0 {
 		return fmt.Errorf("jetstream is enabled but no stream configuration was provided")
 	}
 
-	for _, stream := range c.streamConfig {
+	for _, stream := range streamConfigs {
 		natsStreamConfig := stream.StreamConfig
 		c.logger.Debug(
 			"creating stream",

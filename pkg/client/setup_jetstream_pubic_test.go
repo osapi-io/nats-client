@@ -134,9 +134,9 @@ func (suite *JetStreamPublicTestSuite) TestSetupJetStreamTable() {
 
 	for _, tc := range tests {
 		suite.Run(tc.name, func() {
-			c := client.New(slog.Default(), tc.streams...)
+			c := client.New(slog.Default())
 			tc.setupMocks()
-			err := c.SetupJetStream(suite.js)
+			err := c.SetupJetStream(suite.js, tc.streams...)
 			if tc.expectErr == "" {
 				suite.NoError(err)
 			} else {
