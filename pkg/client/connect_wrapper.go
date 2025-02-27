@@ -20,16 +20,41 @@
 
 package client
 
-import (
-	"log/slog"
-)
+import "github.com/nats-io/nats.go"
 
-// New creates a new Client instance using the provided logger and Options.
-func New(logger *slog.Logger, opts *Options) *Client {
-	return &Client{
-		logger: logger,
-		Opts:   opts,
-		NC:     &NATSConnWrapper{},
-		// NC, NativeJS, and ExtJS will be set in the Connect method.
+// NATSConnector defines an interface for managing a NATS connection.
+type NATSConnector interface {
+	JetStream(opts ...nats.JSOpt) (nats.JetStreamContext, error)
+	Close()
+	ConnectedUrl() string
+	Connect(url string, opts ...nats.Option) (*nats.Conn, error)
+}
+
+// NATSConnWrapper is a concrete implementation of NATSConnector, wrapping a *nats.Conn.
+type NATSConnWrapper struct {
+	Conn *nats.Conn
+}
+
+// JetStream wraps the JetStream method of nats.Conn.
+func (n *NATSConnWrapper) JetStream(opts ...nats.JSOpt) (nats.JetStreamContext, error) {
+	return n.Conn.JetStream(opts...)
+}
+
+// Close wraps the Close method of nats.Conn.
+func (n *NATSConnWrapper) Close() {
+	n.Conn.Close()
+}
+
+// ConnectedUrl wraps the ConnectedUrl method of nats.Conn.
+func (n *NATSConnWrapper) ConnectedUrl() string {
+	return n.Conn.ConnectedUrl()
+}
+
+func (n *NATSConnWrapper) Connect(url string, opts ...nats.Option) (*nats.Conn, error) {
+	conn, err := nats.Connect(url, opts...)
+	if err != nil {
+		return nil, err
 	}
+	n.Conn = conn
+	return conn, nil
 }

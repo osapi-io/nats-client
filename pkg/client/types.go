@@ -24,6 +24,7 @@ import (
 	"log/slog"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // AuthType defines the different authentication methods supported by the client.
@@ -38,15 +39,17 @@ const (
 	NKeyAuth
 )
 
-// ClientOptions holds the configuration for connecting to a NATS server,
+// Options holds the configuration for connecting to a NATS server,
 // including connection details and authentication settings.
-type ClientOptions struct {
+type Options struct {
 	// Host specifies the NATS server hostname or IP address.
 	Host string
 	// Port specifies the NATS server port.
 	Port int
 	// Auth contains authentication settings for connecting to the NATS server.
 	Auth AuthOptions
+	// Name is a human-readable name for this client connection.
+	Name string
 }
 
 // AuthOptions holds authentication-related settings for connecting to NATS.
@@ -65,6 +68,15 @@ type AuthOptions struct {
 // Client provides an implementation for interacting with an embedded NATS server.
 type Client struct {
 	logger *slog.Logger
+
+	// NC underlying connection.
+	NC NATSConnector
+	// NativeJS is the native JetStream context used for provisioning streams and consumers.
+	NativeJS nats.JetStreamContext
+	// ExtJS is the extended JetStream API for high-level operations (e.g. retrieving streams/consumers).
+	ExtJS jetstream.JetStream
+	// Opts configuration options used to create the client
+	Opts *Options
 }
 
 // StreamConfig extends nats.StreamConfig to include custom settings for an embedded NATS server stream configuration.
@@ -82,5 +94,5 @@ type StreamConfig struct {
 type ConsumerConfig struct {
 	// ConsumerConfig embeds nats.ConsumerConfig, which includes configurations
 	// such as durable name, acknowledgment policy, max deliver attempts, and more.
-	*nats.ConsumerConfig
+	*jetstream.ConsumerConfig
 }
