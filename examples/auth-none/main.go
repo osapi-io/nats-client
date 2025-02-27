@@ -21,18 +21,20 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/osapi-io/nats-client/pkg/client"
 )
 
 func main() {
 	logger := slog.Default()
 
-	jsOpts := &client.ClientOptions{
+	opts := &client.Options{
 		Host: "localhost",
 		Port: 4222,
 		Auth: client.AuthOptions{
@@ -40,11 +42,14 @@ func main() {
 		},
 	}
 
-	js, err := client.NewJetStreamContext(jsOpts)
-	if err != nil {
-		logger.Error("failed to create jetstream context", "error", err)
+	c := client.New(logger, opts)
+
+	if err := c.Connect(); err != nil {
+		logger.Error("failed to connect", "error", err)
 		os.Exit(1)
 	}
+	defer c.NC.Close()
+	logger.Info("connected", "url", c.NC.ConnectedUrl())
 
 	streamOpts := &client.StreamConfig{
 		StreamConfig: &nats.StreamConfig{
@@ -55,17 +60,17 @@ func main() {
 		},
 		Consumers: []*client.ConsumerConfig{
 			{
-				ConsumerConfig: &nats.ConsumerConfig{
+				ConsumerConfig: &jetstream.ConsumerConfig{
 					Durable:    "consumer3",
-					AckPolicy:  nats.AckExplicitPolicy,
+					AckPolicy:  jetstream.AckExplicitPolicy,
 					MaxDeliver: 5,
 					AckWait:    30 * time.Second,
 				},
 			},
 			{
-				ConsumerConfig: &nats.ConsumerConfig{
+				ConsumerConfig: &jetstream.ConsumerConfig{
 					Durable:    "consumer4",
-					AckPolicy:  nats.AckExplicitPolicy,
+					AckPolicy:  jetstream.AckExplicitPolicy,
 					MaxDeliver: 5,
 					AckWait:    30 * time.Second,
 				},
@@ -73,8 +78,9 @@ func main() {
 		},
 	}
 
-	c := client.New(logger)
-	if err := c.SetupJetStream(js, streamOpts); err != nil {
+	ctx := context.Background()
+
+	if err := c.SetupJetStream(ctx, streamOpts); err != nil {
 		logger.Error("failed setting up jetstream", "error", err)
 		os.Exit(1)
 	}

@@ -13,20 +13,21 @@
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, EXPRESS OR IMPLIED,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
 package client_test
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/osapi-io/nats-client/pkg/client"
@@ -35,117 +36,142 @@ import (
 
 type JetStreamPublicTestSuite struct {
 	suite.Suite
-	ctrl *gomock.Controller
 
-	js *mocks.MockJetStreamContext
+	mockCtrl *gomock.Controller
+	mockJS   *mocks.MockJetStreamContext
+	mockExt  *mocks.MockJetStream
+	client   *client.Client
+	ctx      context.Context
 }
 
-func (suite *JetStreamPublicTestSuite) SetupTest() {
-	suite.ctrl = gomock.NewController(suite.T())
-
-	suite.js = mocks.NewMockJetStreamContext(suite.ctrl)
+func (s *JetStreamPublicTestSuite) SetupTest() {
+	s.mockCtrl = gomock.NewController(s.T())
+	s.mockJS = mocks.NewMockJetStreamContext(s.mockCtrl)
+	s.mockExt = mocks.NewMockJetStream(s.mockCtrl)
+	s.client = client.New(slog.Default(), &client.Options{
+		Host: "localhost",
+		Port: 4222,
+		Auth: client.AuthOptions{
+			AuthType: client.NoAuth,
+		},
+	})
+	s.client.NativeJS = s.mockJS
+	s.client.ExtJS = s.mockExt
+	s.ctx = context.Background()
 }
 
-func (suite *JetStreamPublicTestSuite) SetupSubTest() {
-	suite.SetupTest()
+func (s *JetStreamPublicTestSuite) TearDownTest() {
+	s.mockCtrl.Finish()
 }
 
-func (suite *JetStreamPublicTestSuite) TearDownTest() {
-	suite.ctrl.Finish()
+func (s *JetStreamPublicTestSuite) SetupSubTest() {
+	s.SetupTest()
 }
 
-func (suite *JetStreamPublicTestSuite) TestSetupJetStreamTable() {
+func (s *JetStreamPublicTestSuite) TestSetupJetStream() {
 	tests := []struct {
-		name       string
-		streams    []*client.StreamConfig
-		setupMocks func()
-		expectErr  string
+		name        string
+		streams     []*client.StreamConfig
+		mockSetup   func()
+		expectedErr string
 	}{
 		{
-			name: "success",
+			name:        "returns error if no stream configs are provided",
+			streams:     []*client.StreamConfig{},
+			mockSetup:   func() {},
+			expectedErr: "jetstream is enabled but no stream configuration was provided",
+		},
+		{
+			name: "successfully configures streams and consumers",
 			streams: []*client.StreamConfig{
 				{
-					StreamConfig: &nats.StreamConfig{
-						Name:     "test-stream",
-						Subjects: []string{"test.subject"},
-					},
+					StreamConfig: &nats.StreamConfig{Name: "test-stream"},
 					Consumers: []*client.ConsumerConfig{
-						{ConsumerConfig: &nats.ConsumerConfig{Durable: "test-consumer"}},
+						{ConsumerConfig: &jetstream.ConsumerConfig{Durable: "consumer-1"}},
+						{ConsumerConfig: &jetstream.ConsumerConfig{Durable: "consumer-2"}},
 					},
 				},
 			},
-			setupMocks: func() {
-				suite.js.EXPECT().AddStream(gomock.Any()).Return(&nats.StreamInfo{}, nil).Times(1)
-				suite.js.EXPECT().
-					AddConsumer("test-stream", gomock.Any()).
-					Return(&nats.ConsumerInfo{}, nil).
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					AddStream(gomock.Any()).
+					Return(nil, nil).
+					Times(1)
+				s.mockExt.EXPECT().
+					CreateOrUpdateConsumer(gomock.Any(), "test-stream", gomock.Any()).
+					Return(nil, nil).
+					Times(2)
+			},
+			expectedErr: "",
+		},
+		{
+			name: "error creating or updating stream",
+			streams: []*client.StreamConfig{
+				{
+					StreamConfig: &nats.StreamConfig{Name: "test-stream"},
+					Consumers: []*client.ConsumerConfig{
+						{
+							ConsumerConfig: &jetstream.ConsumerConfig{
+								Durable: "consumer-1",
+							},
+						},
+					},
+				},
+			},
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					AddStream(gomock.Any()).
+					Return(nil, errors.New("stream creation failed")).
+					Times(1)
+				s.mockExt.EXPECT().
+					CreateOrUpdateConsumer(gomock.Any(), gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			expectedErr: "error creating stream test-stream: stream creation failed",
+		},
+		{
+			name: "error creating consumer",
+			streams: []*client.StreamConfig{
+				{
+					StreamConfig: &nats.StreamConfig{Name: "test-stream"},
+					Consumers: []*client.ConsumerConfig{
+						{
+							ConsumerConfig: &jetstream.ConsumerConfig{
+								Durable: "consumer-1",
+							},
+						},
+					},
+				},
+			},
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					AddStream(gomock.Any()).
+					Return(nil, nil).
+					Times(1)
+				s.mockExt.EXPECT().
+					CreateOrUpdateConsumer(gomock.Any(), "test-stream", gomock.Any()).
+					Return(nil, errors.New("consumer creation failed")).
 					Times(1)
 			},
-			expectErr: "",
-		},
-		{
-			name:       "no stream configuration",
-			streams:    nil,
-			setupMocks: func() {},
-			expectErr:  "jetstream is enabled but no stream configuration was provided",
-		},
-		{
-			name: "fail to add stream",
-			streams: []*client.StreamConfig{
-				{
-					StreamConfig: &nats.StreamConfig{
-						Name:     "test-stream",
-						Subjects: []string{"test.subject"},
-					},
-					Consumers: []*client.ConsumerConfig{
-						{ConsumerConfig: &nats.ConsumerConfig{Durable: "test-consumer"}},
-					},
-				},
-			},
-			setupMocks: func() {
-				suite.js.EXPECT().
-					AddStream(gomock.Any()).
-					Return(nil, errors.New("failed to add stream"))
-			},
-			expectErr: "failed to add stream",
-		},
-		{
-			name: "fail to add consumer",
-			streams: []*client.StreamConfig{
-				{
-					StreamConfig: &nats.StreamConfig{
-						Name:     "test-stream",
-						Subjects: []string{"test.subject"},
-					},
-					Consumers: []*client.ConsumerConfig{
-						{ConsumerConfig: &nats.ConsumerConfig{Durable: "test-consumer"}},
-					},
-				},
-			},
-			setupMocks: func() {
-				suite.js.EXPECT().AddStream(gomock.Any()).Return(&nats.StreamInfo{}, nil).Times(1)
-				suite.js.EXPECT().
-					AddConsumer("test-stream", gomock.Any()).
-					Return(nil, errors.New("failed to add consumer"))
-			},
-			expectErr: "failed to add consumer",
+			expectedErr: "error creating consumer for stream test-stream: consumer creation failed",
 		},
 	}
 
 	for _, tc := range tests {
-		suite.Run(tc.name, func() {
-			c := client.New(slog.Default())
-			tc.setupMocks()
-			err := c.SetupJetStream(suite.js, tc.streams...)
-			if tc.expectErr == "" {
-				suite.NoError(err)
+		s.Run(tc.name, func() {
+			tc.mockSetup()
+
+			err := s.client.SetupJetStream(s.ctx, tc.streams...)
+
+			if tc.expectedErr == "" {
+				s.NoError(err)
 			} else {
-				suite.ErrorContains(err, tc.expectErr)
+				s.EqualError(err, tc.expectedErr)
 			}
 		})
 	}
 }
 
-func TestSetupJetStreamPublicTestSuite(t *testing.T) {
+func TestJetStreamPublicTestSuite(t *testing.T) {
 	suite.Run(t, new(JetStreamPublicTestSuite))
 }

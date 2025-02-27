@@ -24,9 +24,12 @@ import (
 	"log/slog"
 )
 
-// New initializes and configures a new Client instance.
-func New(logger *slog.Logger) *Client {
+// New creates a new Client instance using the provided logger and Options.
+func New(logger *slog.Logger, opts *Options) *Client {
 	return &Client{
 		logger: logger,
+		Opts:   opts,
+		NC:     &NATSConnWrapper{},
+		// NC, NativeJS, and ExtJS will be set in the Connect method.
 	}
 }
