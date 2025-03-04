@@ -73,7 +73,6 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 		name        string
 		authType    client.AuthType
 		mockSetup   func()
-		overrideJS  bool
 		expectedErr string
 		needsNilNC  bool
 	}{
@@ -185,6 +184,29 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			expectedErr: "failed to parse nkey seed",
 		},
 		{
+			name:     "fails to get public key from nkey",
+			authType: client.NKeyAuth,
+			mockSetup: func() {
+				mockKP := mocks.NewMockKeyPair(s.mockCtrl)
+				mockKP.EXPECT().
+					PublicKey().
+					Return("", errors.New("simulated public key failure")).
+					Times(1)
+
+				s.client.KeyPair = mockKP
+
+				tempDir := s.T().TempDir()
+				tempFile := fmt.Sprintf("%s/test.nkey", tempDir)
+
+				validSeed := []byte("SUAJT6TKTZNOL3IR2G6FTLZOKM2YSJVD7BL4TUSZCAMHISXNN2DHHXTS4Q")
+				err := os.WriteFile(tempFile, validSeed, 0o644)
+				require.NoError(s.T(), err)
+
+				s.client.Opts.Auth.NKeyFile = tempFile
+			},
+			expectedErr: "failed to get public key from nkey: simulated public key failure",
+		},
+		{
 			name:     "error connecting to NATS",
 			authType: client.NoAuth,
 			mockSetup: func() {
@@ -195,17 +217,17 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			},
 			expectedErr: "error connecting to nats: nats: connection error",
 		},
-		{
-			name: "error enabling External JetStream",
-			mockSetup: func() {
-				s.mockNATS.EXPECT().
-					Connect(gomock.Any(), gomock.Any()).
-					Return(&nats.Conn{}, nil).
-					Times(1)
-			},
-			overrideJS:  true,
-			expectedErr: "simulated JetStream error",
-		},
+		// {
+		// 	name: "error enabling External JetStream",
+		// 	mockSetup: func() {
+		// 		s.mockNATS.EXPECT().
+		// 			Connect(gomock.Any(), gomock.Any()).
+		// 			Return(&nats.Conn{}, nil).
+		// 			Times(1)
+		// 	},
+		// 	overrideJS:  true,
+		// 	expectedErr: "simulated JetStream error",
+		// },
 		{
 			name:     "error enabling Native JetStream",
 			authType: client.NoAuth,
@@ -227,16 +249,6 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
 			s.client.Opts.Auth.AuthType = tc.authType
-
-			originalGetJetStream := client.GetJetStream
-			if tc.overrideJS {
-				defer func() { client.GetJetStream = originalGetJetStream }()
-
-				client.GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
-					return nil, errors.New("simulated JetStream error")
-				}
-			}
-
 			tc.mockSetup()
 
 			err := s.client.Connect()
@@ -248,6 +260,25 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			}
 		})
 	}
+}
+
+func (s *ConnectPublicTestSuite) TestGetJetStreamCalledInConnect() {
+	originalGetJetStream := client.GetJetStream
+	defer func() { client.GetJetStream = originalGetJetStream }()
+
+	client.GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
+		return nil, errors.New("simulated JetStream error")
+	}
+
+	s.mockNATS.EXPECT().
+		Connect(gomock.Any(), gomock.Any()).
+		Return(&nats.Conn{}, nil).
+		Times(1)
+
+	err := s.client.Connect()
+
+	s.Error(err)
+	s.Contains(err.Error(), "simulated JetStream error")
 }
 
 func TestConnectPublicTestSuite(t *testing.T) {

@@ -25,6 +25,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/nats-io/nkeys"
 )
 
 // AuthType defines the different authentication methods supported by the client.
@@ -77,6 +78,8 @@ type Client struct {
 	ExtJS jetstream.JetStream
 	// Opts configuration options used to create the client
 	Opts *Options
+	// KeyPair allows injecting a mock `nkeys.KeyPair` for testing authentication logic.
+	KeyPair nkeys.KeyPair
 }
 
 // StreamConfig extends nats.StreamConfig to include custom settings for an embedded NATS server stream configuration.

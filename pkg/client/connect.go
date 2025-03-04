@@ -58,9 +58,15 @@ func (c *Client) Connect() error {
 			return fmt.Errorf("failed to read nkey seed file: %w", readErr)
 		}
 
-		kp, kpErr := nkeys.FromSeed(seed)
-		if kpErr != nil {
-			return fmt.Errorf("failed to parse nkey seed: %w", kpErr)
+		var kp nkeys.KeyPair
+		if c.KeyPair != nil {
+			kp = c.KeyPair // mocked
+		} else {
+			var kpErr error
+			kp, kpErr = nkeys.FromSeed(seed)
+			if kpErr != nil {
+				return fmt.Errorf("failed to parse nkey seed: %w", kpErr)
+			}
 		}
 
 		pubKey, pubErr := kp.PublicKey()
