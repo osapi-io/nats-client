@@ -28,6 +28,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -72,6 +73,7 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 		name        string
 		authType    client.AuthType
 		mockSetup   func()
+		overrideJS  bool
 		expectedErr string
 		needsNilNC  bool
 	}{
@@ -193,9 +195,17 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			},
 			expectedErr: "error connecting to nats: nats: connection error",
 		},
-		// {
-		//  name: "error enabling External JetStream",
-		// },
+		{
+			name: "error enabling External JetStream",
+			mockSetup: func() {
+				s.mockNATS.EXPECT().
+					Connect(gomock.Any(), gomock.Any()).
+					Return(&nats.Conn{}, nil).
+					Times(1)
+			},
+			overrideJS:  true,
+			expectedErr: "simulated JetStream error",
+		},
 		{
 			name:     "error enabling Native JetStream",
 			authType: client.NoAuth,
@@ -217,6 +227,16 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
 			s.client.Opts.Auth.AuthType = tc.authType
+
+			originalGetJetStream := client.GetJetStream
+			if tc.overrideJS {
+				defer func() { client.GetJetStream = originalGetJetStream }()
+
+				client.GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
+					return nil, errors.New("simulated JetStream error")
+				}
+			}
+
 			tc.mockSetup()
 
 			err := s.client.Connect()

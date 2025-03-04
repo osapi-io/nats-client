@@ -29,6 +29,11 @@ import (
 	"github.com/nats-io/nkeys"
 )
 
+// GetJetStream is a public variable function wrapping jetstream.New.
+var GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
+	return jetstream.New(nc)
+}
+
 // Connect establishes the connection to the NATS server and JetStream context.
 // This method returns an error if there are any issues during connection.
 func (c *Client) Connect() error {
@@ -80,7 +85,7 @@ func (c *Client) Connect() error {
 		return fmt.Errorf("error connecting to nats: %w", err)
 	}
 
-	extJS, err := jetstream.New(nc)
+	extJS, err := GetJetStream(nc)
 	if err != nil {
 		return fmt.Errorf("error enabling jetstream: %w", err)
 	}
