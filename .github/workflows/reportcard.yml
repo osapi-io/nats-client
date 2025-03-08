@@ -1,6 +1,5 @@
 ---
 name: Go Report Card
-
 on:
   push:
     branches: [ "main" ]
