@@ -68,7 +68,7 @@ func (s *JetStreamPublicTestSuite) SetupSubTest() {
 	s.SetupTest()
 }
 
-func (s *JetStreamPublicTestSuite) TestSetupJetStream() {
+func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStream() {
 	tests := []struct {
 		name        string
 		streams     []*client.StreamConfig
@@ -161,7 +161,7 @@ func (s *JetStreamPublicTestSuite) TestSetupJetStream() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			err := s.client.SetupJetStream(s.ctx, tc.streams...)
+			err := s.client.CreateOrUpdateJetStream(s.ctx, tc.streams...)
 
 			if tc.expectedErr == "" {
 				s.NoError(err)

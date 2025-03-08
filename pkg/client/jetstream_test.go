@@ -159,6 +159,6 @@ func (s *JetStreamTestSuite) TestCreateOrUpdateStream() {
 	}
 }
 
-func TestSetupJetStreamTestSuite(t *testing.T) {
+func TestJetStreamTestSuite(t *testing.T) {
 	suite.Run(t, new(JetStreamTestSuite))
 }

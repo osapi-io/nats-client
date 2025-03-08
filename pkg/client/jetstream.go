@@ -29,8 +29,8 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// SetupJetStream configures JetStream streams and consumers.
-func (c *Client) SetupJetStream(ctx context.Context, streamConfigs ...*StreamConfig) error {
+// CreateOrUpdateJetStream configures JetStream streams and consumers.
+func (c *Client) CreateOrUpdateJetStream(ctx context.Context, streamConfigs ...*StreamConfig) error {
 	if len(streamConfigs) == 0 {
 		return fmt.Errorf("jetstream is enabled but no stream configuration was provided")
 	}

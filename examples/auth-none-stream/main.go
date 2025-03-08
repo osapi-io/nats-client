@@ -80,7 +80,7 @@ func main() {
 
 	ctx := context.Background()
 
-	if err := c.SetupJetStream(ctx, streamOpts); err != nil {
+	if err := c.CreateOrUpdateJetStream(ctx, streamOpts); err != nil {
 		logger.Error("failed setting up jetstream", "error", err)
 		os.Exit(1)
 	}
