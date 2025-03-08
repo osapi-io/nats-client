@@ -1,6 +1,7 @@
-# No Authentication
+# NATS Streaming Without Authentication
 
-An example NATS client without Auth.
+This example demonstrates how to interact with NATS by creating streams and
+consumers withouth Auth.
 
 ## Usage
 

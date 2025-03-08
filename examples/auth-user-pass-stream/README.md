@@ -1,6 +1,7 @@
-# Authenticating with a User and Password
+# NATS Streaming with User/Password Authentication
 
-An example NATS client using [User and Password Auth][].
+This example demonstrates how to interact with NATS by creating streams and
+consumers using [User and Password Auth][].
 
 ## Usage
 

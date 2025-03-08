@@ -1,6 +1,7 @@
-# Authenticating with an NKey
+# NATS Streaming with NKEY Authentication
 
-An example NATS client using [NKey Auth][].
+This example demonstrates how to interact with NATS by creating streams and
+consumers using [NKey Auth][].
 
 ## Usage
 
