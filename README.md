@@ -10,6 +10,9 @@ A Go package for connecting to and interacting with a NATS server.
 
 ## Usage
 
+```golang:examples/auth-none-stream/main.go
+```
+
 See the [examples][] section for additional use cases.
 
 ## Testing
