@@ -18,42 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-package main
+package client
 
 import (
-	"log/slog"
-	"os"
-
-	"github.com/osapi-io/nats-client/pkg/client"
+	"github.com/nats-io/nats.go"
 )
 
-const kvBucketName = "responses"
-
-func main() {
-	logger := slog.Default()
-
-	opts := &client.Options{
-		Host: "localhost",
-		Port: 4222,
-		Auth: client.AuthOptions{
-			AuthType: client.NoAuth,
-		},
-	}
-
-	c := client.New(logger, opts)
-
-	if err := c.Connect(); err != nil {
-		logger.Error("failed to connect", "error", err)
-		os.Exit(1)
-	}
-	defer c.NC.Close()
-	logger.Info("connected", "url", c.NC.ConnectedUrl())
-
-	kv, err := c.CreateKVBucket(kvBucketName)
+// CreateKVBucket ensures a KV bucket exists and returns the KeyValue interface.
+func (c *Client) CreateKVBucket(bucketName string) (nats.KeyValue, error) {
+	kv, err := c.NativeJS.CreateKeyValue(&nats.KeyValueConfig{
+		Bucket: bucketName,
+	})
 	if err != nil {
-		logger.Error("failed to create KV store", "error", err)
-		os.Exit(1)
+		return nil, err
 	}
 
-	logger.Info("KV bucket created", "bucket", kv.Bucket())
+	return kv, nil
 }

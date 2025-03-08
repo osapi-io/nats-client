@@ -22,6 +22,7 @@ package mocks
 
 //go:generate go tool github.com/golang/mock/mockgen -destination=./jetstream_native.gen.go -package=mocks github.com/nats-io/nats.go JetStreamContext
 //go:generate go tool github.com/golang/mock/mockgen -destination=./jetstream_ext.gen.go -package=mocks github.com/nats-io/nats.go/jetstream JetStream
+//go:generate go tool github.com/golang/mock/mockgen -destination=./kv.gen.go -package=mocks github.com/nats-io/nats.go KeyValue
 
 //go:generate go tool github.com/golang/mock/mockgen -destination=./nats_connector.gen.go -package=mocks github.com/osapi-io/nats-client/pkg/client NATSConnector
 //go:generate go tool github.com/golang/mock/mockgen -destination=./nkeys.gen.go -package=mocks github.com/nats-io/nkeys KeyPair
