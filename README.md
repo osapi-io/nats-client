@@ -17,6 +17,10 @@ https://github.com/osapi-io/nats-client/blob/328fbaeed5315b5d4a7db6975bdc75c8d65
 
 See the [examples][] section for additional use cases.
 
+## Documentation
+
+See the [generated documentation][] for details on available packages and functions.
+
 ## Testing
 
 Enable [Remote Taskfile][] feature.
@@ -54,5 +58,6 @@ $ task
 The [MIT][] License.
 
 [examples]: examples/
+[generated documentation]: docs/
 [Remote Taskfile]: https://taskfile.dev/experiments/remote-taskfiles/
 [MIT]: LICENSE
