@@ -10,6 +10,8 @@ A Go package for connecting to and interacting with a NATS server.
 
 ## Usage
 
+https://github.com/osapi-io/nats-client/blob/328fbaeed5315b5d4a7db6975bdc75c8d657e567/examples/auth-none-stream/main.go#L21-L87
+
 See the [examples][] section for additional use cases.
 
 ## Testing
