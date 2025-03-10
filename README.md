@@ -58,6 +58,6 @@ $ task
 The [MIT][] License.
 
 [examples]: examples/
-[generated documentation]: docs/
+[generated documentation]: docs/gen/
 [Remote Taskfile]: https://taskfile.dev/experiments/remote-taskfiles/
 [MIT]: LICENSE
