@@ -1,0 +1,9 @@
+{
+  "durable_name": "request-worker",
+  "ack_policy": "explicit",
+  "deliver_policy": "all",
+  "filter_subject": "requests.*",
+  "replay_policy": "instant",
+  "max_deliver": 10,
+  "backoff": [5000000000, 10000000000, 15000000000]
+}
