@@ -7,6 +7,7 @@ package mocks
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 	nats "github.com/nats-io/nats.go"
@@ -402,6 +403,21 @@ func (mr *MockJetStreamMockRecorder) OrderedConsumer(arg0, arg1, arg2 interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OrderedConsumer", reflect.TypeOf((*MockJetStream)(nil).OrderedConsumer), arg0, arg1, arg2)
 }
 
+// PauseConsumer mocks base method.
+func (m *MockJetStream) PauseConsumer(arg0 context.Context, arg1, arg2 string, arg3 time.Time) (*jetstream.ConsumerPauseResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PauseConsumer", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(*jetstream.ConsumerPauseResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PauseConsumer indicates an expected call of PauseConsumer.
+func (mr *MockJetStreamMockRecorder) PauseConsumer(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseConsumer", reflect.TypeOf((*MockJetStream)(nil).PauseConsumer), arg0, arg1, arg2, arg3)
+}
+
 // Publish mocks base method.
 func (m *MockJetStream) Publish(arg0 context.Context, arg1 string, arg2 []byte, arg3 ...jetstream.PublishOpt) (*jetstream.PubAck, error) {
 	m.ctrl.T.Helper()
@@ -508,6 +524,21 @@ func (mr *MockJetStreamMockRecorder) PublishMsgAsync(arg0 interface{}, arg1 ...i
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0}, arg1...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishMsgAsync", reflect.TypeOf((*MockJetStream)(nil).PublishMsgAsync), varargs...)
+}
+
+// ResumeConsumer mocks base method.
+func (m *MockJetStream) ResumeConsumer(arg0 context.Context, arg1, arg2 string) (*jetstream.ConsumerPauseResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResumeConsumer", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*jetstream.ConsumerPauseResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResumeConsumer indicates an expected call of ResumeConsumer.
+func (mr *MockJetStreamMockRecorder) ResumeConsumer(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResumeConsumer", reflect.TypeOf((*MockJetStream)(nil).ResumeConsumer), arg0, arg1, arg2)
 }
 
 // Stream mocks base method.
