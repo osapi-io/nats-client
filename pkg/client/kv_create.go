@@ -25,10 +25,24 @@ import (
 )
 
 // CreateKVBucket ensures a KV bucket exists and returns the KeyValue interface.
-func (c *Client) CreateKVBucket(bucketName string) (nats.KeyValue, error) {
+func (c *Client) CreateKVBucket(
+	bucketName string,
+) (nats.KeyValue, error) {
 	kv, err := c.NativeJS.CreateKeyValue(&nats.KeyValueConfig{
 		Bucket: bucketName,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	return kv, nil
+}
+
+// CreateKVBucketWithConfig ensures a KV bucket exists with the provided configuration and returns the KeyValue interface.
+func (c *Client) CreateKVBucketWithConfig(
+	config *nats.KeyValueConfig,
+) (nats.KeyValue, error) {
+	kv, err := c.NativeJS.CreateKeyValue(config)
 	if err != nil {
 		return nil, err
 	}
