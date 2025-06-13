@@ -27,47 +27,59 @@ import (
 	"strings"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
-// CreateOrUpdateJetStream configures JetStream streams and consumers.
-func (c *Client) CreateOrUpdateJetStream(
+// CreateOrUpdateStreamWithConfig creates or updates a JetStream stream with the provided configuration.
+func (c *Client) CreateOrUpdateStreamWithConfig(
 	ctx context.Context,
-	streamConfigs ...*StreamConfig,
+	streamConfig *nats.StreamConfig,
 ) error {
-	if len(streamConfigs) == 0 {
-		return fmt.Errorf("jetstream is enabled but no stream configuration was provided")
+	c.logger.Info(
+		"creating stream",
+		slog.String("name", streamConfig.Name),
+		slog.String("subjects", strings.Join(streamConfig.Subjects, ", ")),
+	)
+
+	return c.createOrUpdateStream(streamConfig, streamConfig.Name)
+}
+
+// CreateOrUpdateConsumerWithConfig creates or updates a JetStream consumer with the provided configuration.
+func (c *Client) CreateOrUpdateConsumerWithConfig(
+	ctx context.Context,
+	streamName string,
+	consumerConfig jetstream.ConsumerConfig,
+) error {
+	c.logger.Info(
+		"creating consumer",
+		slog.String("durable", consumerConfig.Durable),
+		slog.String("stream", streamName),
+	)
+
+	_, err := c.ExtJS.CreateOrUpdateConsumer(ctx, streamName, consumerConfig)
+	if err != nil {
+		return fmt.Errorf("error creating consumer for stream %s: %w", streamName, err)
 	}
 
-	// For each stream, we provision the stream and then iterate over its consumer
-	// configurations to create or update each consumer.
-	for _, stream := range streamConfigs {
-		streamConfig := stream.StreamConfig
-		c.logger.Info(
-			"creating stream",
-			slog.String("name", stream.Name),
-			slog.String("subjects", strings.Join(stream.Subjects, ", ")),
-		)
+	return nil
+}
 
-		// Use the helper to provision the stream.
-		if err := c.createOrUpdateStream(streamConfig, stream.Name); err != nil {
+// CreateOrUpdateJetStreamWithConfig configures a JetStream stream and its consumers.
+// This is a convenience method that creates both stream and consumers in one call.
+func (c *Client) CreateOrUpdateJetStreamWithConfig(
+	ctx context.Context,
+	streamConfig *nats.StreamConfig,
+	consumerConfigs ...jetstream.ConsumerConfig,
+) error {
+	// Create or update the stream
+	if err := c.CreateOrUpdateStreamWithConfig(ctx, streamConfig); err != nil {
+		return err
+	}
+
+	// Create or update each consumer
+	for _, consumerConfig := range consumerConfigs {
+		if err := c.CreateOrUpdateConsumerWithConfig(ctx, streamConfig.Name, consumerConfig); err != nil {
 			return err
-		}
-
-		// For each consumer configuration, use the extended API to create or update the consumer.
-		for _, consumer := range stream.Consumers {
-			jsConsumerConfig := *consumer.ConsumerConfig
-
-			c.logger.Info(
-				"creating consumer",
-				slog.String("durable", consumer.Durable),
-				slog.String("stream", stream.Name),
-			)
-
-			// Use the extended JetStream API to create or update the consumer.
-			_, err := c.ExtJS.CreateOrUpdateConsumer(ctx, stream.Name, jsConsumerConfig)
-			if err != nil {
-				return fmt.Errorf("error creating consumer for stream %s: %w", stream.Name, err)
-			}
 		}
 	}
 

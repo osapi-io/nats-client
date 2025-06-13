@@ -81,21 +81,3 @@ type Client struct {
 	// KeyPair allows injecting a mock `nkeys.KeyPair` for testing authentication logic.
 	KeyPair nkeys.KeyPair
 }
-
-// StreamConfig extends nats.StreamConfig to include custom settings for an embedded NATS server stream configuration.
-type StreamConfig struct {
-	// StreamConfig embeds nats.StreamConfig, which defines the core stream settings
-	// such as name, subjects, storage type, and replication factor.
-	*nats.StreamConfig
-
-	// Consumers represents the list of consumer configurations associated with this stream.
-	// Each consumer defines how messages from the stream are consumed and acknowledged.
-	Consumers []*ConsumerConfig
-}
-
-// ConsumerConfig extends nats.ConsumerConfig to include custom settings for an embedded NATS server consumer configuration.
-type ConsumerConfig struct {
-	// ConsumerConfig embeds nats.ConsumerConfig, which includes configurations
-	// such as durable name, acknowledgment policy, max deliver attempts, and more.
-	*jetstream.ConsumerConfig
-}

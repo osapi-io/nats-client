@@ -67,56 +67,56 @@ func main() {
 	// Provision the stream and consumer using the native API.
 	// (For example, this creates a stream "jobs" with a consumer named worker_high
 	// that only receives messages matching "jobs.<priority.>" such as "jobs.high.>")
-	streamOpts := &client.StreamConfig{
-		StreamConfig: &nats.StreamConfig{
-			Name:              streamName,
-			Subjects:          []string{"jobs.*.*"},
-			Storage:           nats.FileStorage,
-			Replicas:          1,
-			Retention:         nats.WorkQueuePolicy,
-			Discard:           nats.DiscardNew,
-			MaxMsgs:           20000,
-			MaxMsgsPerSubject: -1,
-			MaxBytes:          256 * 1024 * 1024,  // 256 MiB
-			MaxAge:            7 * 24 * time.Hour, // 7 days
-			Duplicates:        2 * time.Minute,
-			DenyDelete:        false,
-			DenyPurge:         false,
-			AllowRollup:       false,
-			AllowDirect:       true,
-		},
-		Consumers: []*client.ConsumerConfig{
-			{
-				ConsumerConfig: &jetstream.ConsumerConfig{
-					Durable:       consumerName,
-					AckPolicy:     jetstream.AckExplicitPolicy,
-					MaxDeliver:    4,
-					AckWait:       30 * time.Second,
-					FilterSubject: fmt.Sprintf("jobs.%s.>", priority),
-				},
-			},
-		},
+	streamConfig := &nats.StreamConfig{
+		Name:              streamName,
+		Subjects:          []string{"jobs.*.*"},
+		Storage:           nats.FileStorage,
+		Replicas:          1,
+		Retention:         nats.WorkQueuePolicy,
+		Discard:           nats.DiscardNew,
+		MaxMsgs:           20000,
+		MaxMsgsPerSubject: -1,
+		MaxBytes:          256 * 1024 * 1024,  // 256 MiB
+		MaxAge:            7 * 24 * time.Hour, // 7 days
+		Duplicates:        2 * time.Minute,
+		DenyDelete:        false,
+		DenyPurge:         false,
+		AllowRollup:       false,
+		AllowDirect:       true,
+	}
+
+	consumerConfig := jetstream.ConsumerConfig{
+		Durable:       consumerName,
+		AckPolicy:     jetstream.AckExplicitPolicy,
+		MaxDeliver:    4,
+		AckWait:       30 * time.Second,
+		FilterSubject: fmt.Sprintf("jobs.%s.>", priority),
 	}
 
 	// Provision the DLQ stream to capture advisories for consumer max deliveries.
 	// When a consumer reaches its max delivery attempts, NATS publishes an advisory on:
 	//   $JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.jobs.{consumer_name}
-	dlqStreamOpts := &client.StreamConfig{
-		StreamConfig: &nats.StreamConfig{
-			Name:     "jobs_dlq",
-			Subjects: []string{"$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.jobs.*"},
-			Storage:  nats.FileStorage,
-			Replicas: 1,
-			Metadata: map[string]string{
-				"dead_letter_queue": "true",
-			},
+	dlqStreamConfig := &nats.StreamConfig{
+		Name:     "jobs_dlq",
+		Subjects: []string{"$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.jobs.*"},
+		Storage:  nats.FileStorage,
+		Replicas: 1,
+		Metadata: map[string]string{
+			"dead_letter_queue": "true",
 		},
 	}
 
 	ctx := context.Background()
 
-	if err := c.CreateOrUpdateJetStream(ctx, streamOpts, dlqStreamOpts); err != nil {
+	// Create the main stream with consumer
+	if err := c.CreateOrUpdateJetStreamWithConfig(ctx, streamConfig, consumerConfig); err != nil {
 		logger.Error("failed setting up jetstream", "error", err)
+		os.Exit(1)
+	}
+
+	// Create the DLQ stream (no consumers needed)
+	if err := c.CreateOrUpdateStreamWithConfig(ctx, dlqStreamConfig); err != nil {
+		logger.Error("failed setting up DLQ stream", "error", err)
 		os.Exit(1)
 	}
 

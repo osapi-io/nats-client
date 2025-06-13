@@ -68,29 +68,115 @@ func (s *JetStreamPublicTestSuite) SetupSubTest() {
 	s.SetupTest()
 }
 
-func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStream() {
+func (s *JetStreamPublicTestSuite) TestCreateOrUpdateStreamWithConfig() {
 	tests := []struct {
 		name        string
-		streams     []*client.StreamConfig
+		config      *nats.StreamConfig
 		mockSetup   func()
 		expectedErr string
 	}{
 		{
-			name:        "returns error if no stream configs are provided",
-			streams:     []*client.StreamConfig{},
-			mockSetup:   func() {},
-			expectedErr: "jetstream is enabled but no stream configuration was provided",
+			name:   "successfully creates stream",
+			config: &nats.StreamConfig{Name: "test-stream", Subjects: []string{"test.*"}},
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					AddStream(gomock.Any()).
+					Return(nil, nil).
+					Times(1)
+			},
+			expectedErr: "",
 		},
 		{
-			name: "successfully configures streams and consumers",
-			streams: []*client.StreamConfig{
-				{
-					StreamConfig: &nats.StreamConfig{Name: "test-stream"},
-					Consumers: []*client.ConsumerConfig{
-						{ConsumerConfig: &jetstream.ConsumerConfig{Durable: "consumer-1"}},
-						{ConsumerConfig: &jetstream.ConsumerConfig{Durable: "consumer-2"}},
-					},
-				},
+			name:   "error creating stream",
+			config: &nats.StreamConfig{Name: "test-stream"},
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					AddStream(gomock.Any()).
+					Return(nil, errors.New("stream creation failed")).
+					Times(1)
+			},
+			expectedErr: "error creating stream test-stream: stream creation failed",
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			tc.mockSetup()
+
+			err := s.client.CreateOrUpdateStreamWithConfig(s.ctx, tc.config)
+
+			if tc.expectedErr == "" {
+				s.NoError(err)
+			} else {
+				s.EqualError(err, tc.expectedErr)
+			}
+		})
+	}
+}
+
+func (s *JetStreamPublicTestSuite) TestCreateOrUpdateConsumerWithConfig() {
+	tests := []struct {
+		name        string
+		streamName  string
+		config      jetstream.ConsumerConfig
+		mockSetup   func()
+		expectedErr string
+	}{
+		{
+			name:       "successfully creates consumer",
+			streamName: "test-stream",
+			config:     jetstream.ConsumerConfig{Durable: "consumer-1"},
+			mockSetup: func() {
+				s.mockExt.EXPECT().
+					CreateOrUpdateConsumer(gomock.Any(), "test-stream", gomock.Any()).
+					Return(nil, nil).
+					Times(1)
+			},
+			expectedErr: "",
+		},
+		{
+			name:       "error creating consumer",
+			streamName: "test-stream",
+			config:     jetstream.ConsumerConfig{Durable: "consumer-1"},
+			mockSetup: func() {
+				s.mockExt.EXPECT().
+					CreateOrUpdateConsumer(gomock.Any(), "test-stream", gomock.Any()).
+					Return(nil, errors.New("consumer creation failed")).
+					Times(1)
+			},
+			expectedErr: "error creating consumer for stream test-stream: consumer creation failed",
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			tc.mockSetup()
+
+			err := s.client.CreateOrUpdateConsumerWithConfig(s.ctx, tc.streamName, tc.config)
+
+			if tc.expectedErr == "" {
+				s.NoError(err)
+			} else {
+				s.EqualError(err, tc.expectedErr)
+			}
+		})
+	}
+}
+
+func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStreamWithConfig() {
+	tests := []struct {
+		name            string
+		streamConfig    *nats.StreamConfig
+		consumerConfigs []jetstream.ConsumerConfig
+		mockSetup       func()
+		expectedErr     string
+	}{
+		{
+			name:         "successfully creates stream and consumers",
+			streamConfig: &nats.StreamConfig{Name: "test-stream", Subjects: []string{"test.*"}},
+			consumerConfigs: []jetstream.ConsumerConfig{
+				{Durable: "consumer-1"},
+				{Durable: "consumer-2"},
 			},
 			mockSetup: func() {
 				s.mockJS.EXPECT().
@@ -105,19 +191,9 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStream() {
 			expectedErr: "",
 		},
 		{
-			name: "error creating or updating stream",
-			streams: []*client.StreamConfig{
-				{
-					StreamConfig: &nats.StreamConfig{Name: "test-stream"},
-					Consumers: []*client.ConsumerConfig{
-						{
-							ConsumerConfig: &jetstream.ConsumerConfig{
-								Durable: "consumer-1",
-							},
-						},
-					},
-				},
-			},
+			name:            "error creating stream",
+			streamConfig:    &nats.StreamConfig{Name: "test-stream"},
+			consumerConfigs: []jetstream.ConsumerConfig{{Durable: "consumer-1"}},
 			mockSetup: func() {
 				s.mockJS.EXPECT().
 					AddStream(gomock.Any()).
@@ -130,19 +206,9 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStream() {
 			expectedErr: "error creating stream test-stream: stream creation failed",
 		},
 		{
-			name: "error creating consumer",
-			streams: []*client.StreamConfig{
-				{
-					StreamConfig: &nats.StreamConfig{Name: "test-stream"},
-					Consumers: []*client.ConsumerConfig{
-						{
-							ConsumerConfig: &jetstream.ConsumerConfig{
-								Durable: "consumer-1",
-							},
-						},
-					},
-				},
-			},
+			name:            "error creating consumer",
+			streamConfig:    &nats.StreamConfig{Name: "test-stream"},
+			consumerConfigs: []jetstream.ConsumerConfig{{Durable: "consumer-1"}},
 			mockSetup: func() {
 				s.mockJS.EXPECT().
 					AddStream(gomock.Any()).
@@ -161,7 +227,10 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStream() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			err := s.client.CreateOrUpdateJetStream(s.ctx, tc.streams...)
+			err := s.client.CreateOrUpdateJetStreamWithConfig(
+				s.ctx,
+				tc.streamConfig,
+				tc.consumerConfigs...)
 
 			if tc.expectedErr == "" {
 				s.NoError(err)

@@ -51,36 +51,31 @@ func main() {
 	defer c.NC.Close()
 	logger.Info("connected", "url", c.NC.ConnectedUrl())
 
-	streamOpts := &client.StreamConfig{
-		StreamConfig: &nats.StreamConfig{
-			Name:     "STREAM2",
-			Subjects: []string{"stream2.*"},
-			Storage:  nats.FileStorage,
-			Replicas: 1,
+	streamConfig := &nats.StreamConfig{
+		Name:     "STREAM2",
+		Subjects: []string{"stream2.*"},
+		Storage:  nats.FileStorage,
+		Replicas: 1,
+	}
+
+	consumerConfigs := []jetstream.ConsumerConfig{
+		{
+			Durable:    "consumer3",
+			AckPolicy:  jetstream.AckExplicitPolicy,
+			MaxDeliver: 5,
+			AckWait:    30 * time.Second,
 		},
-		Consumers: []*client.ConsumerConfig{
-			{
-				ConsumerConfig: &jetstream.ConsumerConfig{
-					Durable:    "consumer3",
-					AckPolicy:  jetstream.AckExplicitPolicy,
-					MaxDeliver: 5,
-					AckWait:    30 * time.Second,
-				},
-			},
-			{
-				ConsumerConfig: &jetstream.ConsumerConfig{
-					Durable:    "consumer4",
-					AckPolicy:  jetstream.AckExplicitPolicy,
-					MaxDeliver: 5,
-					AckWait:    30 * time.Second,
-				},
-			},
+		{
+			Durable:    "consumer4",
+			AckPolicy:  jetstream.AckExplicitPolicy,
+			MaxDeliver: 5,
+			AckWait:    30 * time.Second,
 		},
 	}
 
 	ctx := context.Background()
 
-	if err := c.CreateOrUpdateJetStream(ctx, streamOpts); err != nil {
+	if err := c.CreateOrUpdateJetStreamWithConfig(ctx, streamConfig, consumerConfigs...); err != nil {
 		logger.Error("failed setting up jetstream", "error", err)
 		os.Exit(1)
 	}

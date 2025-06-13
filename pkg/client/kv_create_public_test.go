@@ -23,6 +23,7 @@ import (
 	"errors"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/nats-io/nats.go"
@@ -102,6 +103,70 @@ func (s *KVCreatePublicTestSuite) TestCreateKVBucket() {
 			tc.mockSetup()
 
 			kv, err := s.client.CreateKVBucket(tc.bucketName)
+
+			if tc.expectedErr == "" {
+				s.NoError(err)
+				s.NotNil(kv)
+			} else {
+				s.EqualError(err, tc.expectedErr)
+			}
+		})
+	}
+}
+
+func (s *KVCreatePublicTestSuite) TestCreateKVBucketWithConfig() {
+	tests := []struct {
+		name        string
+		config      *nats.KeyValueConfig
+		mockSetup   func()
+		expectedErr string
+	}{
+		{
+			name: "successfully creates KV bucket with custom config",
+			config: &nats.KeyValueConfig{
+				Bucket:      "job-responses",
+				Description: "Storage for job responses",
+				TTL:         1 * time.Hour,
+				MaxBytes:    100 * 1024 * 1024,
+				Storage:     nats.FileStorage,
+				Replicas:    1,
+			},
+			mockSetup: func() {
+				expectedConfig := &nats.KeyValueConfig{
+					Bucket:      "job-responses",
+					Description: "Storage for job responses",
+					TTL:         1 * time.Hour,
+					MaxBytes:    100 * 1024 * 1024,
+					Storage:     nats.FileStorage,
+					Replicas:    1,
+				}
+				s.mockJS.EXPECT().
+					CreateKeyValue(expectedConfig).
+					Return(s.mockKV, nil).
+					Times(1)
+			},
+			expectedErr: "",
+		},
+		{
+			name: "error creating KV bucket with config",
+			config: &nats.KeyValueConfig{
+				Bucket: "invalid-bucket",
+			},
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					CreateKeyValue(&nats.KeyValueConfig{Bucket: "invalid-bucket"}).
+					Return(nil, errors.New("invalid bucket configuration")).
+					Times(1)
+			},
+			expectedErr: "invalid bucket configuration",
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			tc.mockSetup()
+
+			kv, err := s.client.CreateKVBucketWithConfig(tc.config)
 
 			if tc.expectedErr == "" {
 				s.NoError(err)
