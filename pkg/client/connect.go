@@ -22,6 +22,7 @@ package client
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/nats-io/nats.go"
@@ -38,6 +39,14 @@ var GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
 // This method returns an error if there are any issues during connection.
 func (c *Client) Connect() error {
 	natsURL := fmt.Sprintf("nats://%s:%d", c.Opts.Host, c.Opts.Port)
+
+	c.logger.Info(
+		"connecting to NATS server",
+		slog.String("url", natsURL),
+		slog.String("auth_type", c.getAuthTypeName()),
+		slog.String("client_name", c.Opts.Name),
+	)
+
 	var nc *nats.Conn
 	var err error
 
@@ -103,5 +112,21 @@ func (c *Client) Connect() error {
 	}
 	c.NativeJS = nativeJS
 
+	c.logger.Info("successfully connected to NATS and enabled JetStream")
+
 	return nil
+}
+
+// getAuthTypeName returns a human-readable string for the auth type
+func (c *Client) getAuthTypeName() string {
+	switch c.Opts.Auth.AuthType {
+	case NoAuth:
+		return "none"
+	case UserPassAuth:
+		return "user_pass"
+	case NKeyAuth:
+		return "nkey"
+	default:
+		return "unknown"
+	}
 }
