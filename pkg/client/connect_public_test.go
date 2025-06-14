@@ -23,6 +23,7 @@ package client_test
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"testing"
 
@@ -49,15 +50,15 @@ func (s *ConnectPublicTestSuite) SetupTest() {
 	s.mockCtrl = gomock.NewController(s.T())
 	s.mockNATS = mocks.NewMockNATSConnector(s.mockCtrl)
 	s.mockJS = new(mocks.MockJetStreamContext)
-	s.client = &client.Client{
-		Opts: &client.Options{
-			Host: "localhost",
-			Port: 4222,
-			Auth: client.AuthOptions{AuthType: client.NoAuth},
-			Name: "test-client",
-		},
-		NC: s.mockNATS,
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	opts := &client.Options{
+		Host: "localhost",
+		Port: 4222,
+		Auth: client.AuthOptions{AuthType: client.NoAuth},
+		Name: "test-client",
 	}
+	s.client = client.New(logger, opts)
+	s.client.NC = s.mockNATS
 }
 
 func (s *ConnectPublicTestSuite) SetupSubTest() {
