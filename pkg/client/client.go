@@ -25,7 +25,10 @@ import (
 )
 
 // New creates a new Client instance using the provided logger and Options.
-func New(logger *slog.Logger, opts *Options) *Client {
+func New(
+	logger *slog.Logger,
+	opts *Options,
+) *Client {
 	return &Client{
 		logger: logger,
 		Opts:   opts,
