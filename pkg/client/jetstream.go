@@ -89,7 +89,10 @@ func (c *Client) CreateOrUpdateJetStreamWithConfig(
 }
 
 // createOrUpdateStream provisions (or creates) a stream using the native JetStream API.
-func (c *Client) createOrUpdateStream(streamConfig *nats.StreamConfig, streamName string) error {
+func (c *Client) createOrUpdateStream(
+	streamConfig *nats.StreamConfig,
+	streamName string,
+) error {
 	_, err := c.NativeJS.AddStream(streamConfig)
 	if err != nil {
 		// Check if the error indicates that the stream already exists.
