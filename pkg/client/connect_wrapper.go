@@ -28,6 +28,8 @@ type NATSConnector interface {
 	Close()
 	ConnectedUrl() string
 	Connect(url string, opts ...nats.Option) (*nats.Conn, error)
+	Subscribe(subject string, handler nats.MsgHandler) (*nats.Subscription, error)
+	QueueSubscribe(subject, queue string, handler nats.MsgHandler) (*nats.Subscription, error)
 }
 
 // NATSConnWrapper is a concrete implementation of NATSConnector, wrapping a *nats.Conn.
@@ -60,4 +62,20 @@ func (n *NATSConnWrapper) Connect(url string, opts ...nats.Option) (*nats.Conn, 
 	}
 	n.Conn = conn
 	return conn, nil
+}
+
+// Subscribe wraps the Subscribe method of nats.Conn.
+func (n *NATSConnWrapper) Subscribe(
+	subject string,
+	handler nats.MsgHandler,
+) (*nats.Subscription, error) {
+	return n.Conn.Subscribe(subject, handler)
+}
+
+// QueueSubscribe wraps the QueueSubscribe method of nats.Conn.
+func (n *NATSConnWrapper) QueueSubscribe(
+	subject, queue string,
+	handler nats.MsgHandler,
+) (*nats.Subscription, error) {
+	return n.Conn.QueueSubscribe(subject, queue, handler)
 }
