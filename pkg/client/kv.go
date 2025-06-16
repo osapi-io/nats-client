@@ -211,3 +211,75 @@ func (c *Client) WatchKV(
 
 	return out, nil
 }
+
+// KVPut stores a value in the specified KV bucket.
+func (c *Client) KVPut(
+	bucket string,
+	key string,
+	value []byte,
+) error {
+	kv, err := c.CreateKVBucket(bucket)
+	if err != nil {
+		return fmt.Errorf("failed to get KV bucket %s: %w", bucket, err)
+	}
+
+	_, err = kv.Put(key, value)
+	if err != nil {
+		return fmt.Errorf("failed to put key %s in bucket %s: %w", key, bucket, err)
+	}
+
+	return nil
+}
+
+// KVGet retrieves a value from the specified KV bucket.
+func (c *Client) KVGet(
+	bucket string,
+	key string,
+) ([]byte, error) {
+	kv, err := c.CreateKVBucket(bucket)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get KV bucket %s: %w", bucket, err)
+	}
+
+	entry, err := kv.Get(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key %s from bucket %s: %w", key, bucket, err)
+	}
+
+	return entry.Value(), nil
+}
+
+// KVDelete removes a key from the specified KV bucket.
+func (c *Client) KVDelete(
+	bucket string,
+	key string,
+) error {
+	kv, err := c.CreateKVBucket(bucket)
+	if err != nil {
+		return fmt.Errorf("failed to get KV bucket %s: %w", bucket, err)
+	}
+
+	err = kv.Delete(key)
+	if err != nil {
+		return fmt.Errorf("failed to delete key %s from bucket %s: %w", key, bucket, err)
+	}
+
+	return nil
+}
+
+// KVKeys returns all keys from the specified KV bucket.
+func (c *Client) KVKeys(
+	bucket string,
+) ([]string, error) {
+	kv, err := c.CreateKVBucket(bucket)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get KV bucket %s: %w", bucket, err)
+	}
+
+	keys, err := kv.Keys()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get keys from bucket %s: %w", bucket, err)
+	}
+
+	return keys, nil
+}

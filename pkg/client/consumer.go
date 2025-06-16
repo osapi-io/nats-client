@@ -119,7 +119,10 @@ func (c *Client) ConsumeMessages(
 }
 
 // processMessage handles individual message processing with proper error handling.
-func (c *Client) processMessage(msg jetstream.Msg, handler JetStreamMessageHandler) error {
+func (c *Client) processMessage(
+	msg jetstream.Msg,
+	handler JetStreamMessageHandler,
+) error {
 	defer func() {
 		if r := recover(); r != nil {
 			c.logger.Error(

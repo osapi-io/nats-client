@@ -473,6 +473,327 @@ func (s *KVCreatePublicTestSuite) TestWatchKV() {
 	}
 }
 
+func (s *KVCreatePublicTestSuite) TestKVPut() {
+	tests := []struct {
+		name        string
+		bucket      string
+		key         string
+		value       []byte
+		mockSetup   func()
+		expectedErr string
+	}{
+		{
+			name:   "successfully puts value in KV bucket",
+			bucket: "test-bucket",
+			key:    "test-key",
+			value:  []byte("test-value"),
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					CreateKeyValue(&nats.KeyValueConfig{Bucket: "test-bucket"}).
+					Return(s.mockKV, nil).
+					Times(1)
+
+				s.mockKV.EXPECT().
+					Put("test-key", []byte("test-value")).
+					Return(uint64(1), nil).
+					Times(1)
+			},
+			expectedErr: "",
+		},
+		{
+			name:   "error creating KV bucket for put",
+			bucket: "bad-bucket",
+			key:    "test-key",
+			value:  []byte("test-value"),
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					CreateKeyValue(&nats.KeyValueConfig{Bucket: "bad-bucket"}).
+					Return(nil, errors.New("bucket creation failed")).
+					Times(1)
+			},
+			expectedErr: "failed to get KV bucket bad-bucket: bucket creation failed",
+		},
+		{
+			name:   "error putting value in KV bucket",
+			bucket: "test-bucket",
+			key:    "bad-key",
+			value:  []byte("test-value"),
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					CreateKeyValue(&nats.KeyValueConfig{Bucket: "test-bucket"}).
+					Return(s.mockKV, nil).
+					Times(1)
+
+				s.mockKV.EXPECT().
+					Put("bad-key", []byte("test-value")).
+					Return(uint64(0), errors.New("put failed")).
+					Times(1)
+			},
+			expectedErr: "failed to put key bad-key in bucket test-bucket: put failed",
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			tc.mockSetup()
+
+			err := s.client.KVPut(tc.bucket, tc.key, tc.value)
+
+			if tc.expectedErr == "" {
+				s.NoError(err)
+			} else {
+				s.EqualError(err, tc.expectedErr)
+			}
+		})
+	}
+}
+
+func (s *KVCreatePublicTestSuite) TestKVGet() {
+	tests := []struct {
+		name         string
+		bucket       string
+		key          string
+		mockSetup    func()
+		expectedData []byte
+		expectedErr  string
+	}{
+		{
+			name:   "successfully gets value from KV bucket",
+			bucket: "test-bucket",
+			key:    "test-key",
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					CreateKeyValue(&nats.KeyValueConfig{Bucket: "test-bucket"}).
+					Return(s.mockKV, nil).
+					Times(1)
+
+				mockEntry := mocks.NewMockKeyValueEntry(s.mockCtrl)
+				mockEntry.EXPECT().
+					Value().
+					Return([]byte("test-value")).
+					Times(1)
+
+				s.mockKV.EXPECT().
+					Get("test-key").
+					Return(mockEntry, nil).
+					Times(1)
+			},
+			expectedData: []byte("test-value"),
+			expectedErr:  "",
+		},
+		{
+			name:   "error creating KV bucket for get",
+			bucket: "bad-bucket",
+			key:    "test-key",
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					CreateKeyValue(&nats.KeyValueConfig{Bucket: "bad-bucket"}).
+					Return(nil, errors.New("bucket creation failed")).
+					Times(1)
+			},
+			expectedData: nil,
+			expectedErr:  "failed to get KV bucket bad-bucket: bucket creation failed",
+		},
+		{
+			name:   "error getting value from KV bucket",
+			bucket: "test-bucket",
+			key:    "missing-key",
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					CreateKeyValue(&nats.KeyValueConfig{Bucket: "test-bucket"}).
+					Return(s.mockKV, nil).
+					Times(1)
+
+				s.mockKV.EXPECT().
+					Get("missing-key").
+					Return(nil, nats.ErrKeyNotFound).
+					Times(1)
+			},
+			expectedData: nil,
+			expectedErr:  "failed to get key missing-key from bucket test-bucket: nats: key not found",
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			tc.mockSetup()
+
+			data, err := s.client.KVGet(tc.bucket, tc.key)
+
+			if tc.expectedErr == "" {
+				s.NoError(err)
+				s.Equal(tc.expectedData, data)
+			} else {
+				s.Error(err)
+				s.Contains(err.Error(), tc.expectedErr)
+				s.Nil(data)
+			}
+		})
+	}
+}
+
+func (s *KVCreatePublicTestSuite) TestKVDelete() {
+	tests := []struct {
+		name        string
+		bucket      string
+		key         string
+		mockSetup   func()
+		expectedErr string
+	}{
+		{
+			name:   "successfully deletes key from KV bucket",
+			bucket: "test-bucket",
+			key:    "test-key",
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					CreateKeyValue(&nats.KeyValueConfig{Bucket: "test-bucket"}).
+					Return(s.mockKV, nil).
+					Times(1)
+
+				s.mockKV.EXPECT().
+					Delete("test-key").
+					Return(nil).
+					Times(1)
+			},
+			expectedErr: "",
+		},
+		{
+			name:   "error creating KV bucket for delete",
+			bucket: "bad-bucket",
+			key:    "test-key",
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					CreateKeyValue(&nats.KeyValueConfig{Bucket: "bad-bucket"}).
+					Return(nil, errors.New("bucket creation failed")).
+					Times(1)
+			},
+			expectedErr: "failed to get KV bucket bad-bucket: bucket creation failed",
+		},
+		{
+			name:   "error deleting key from KV bucket",
+			bucket: "test-bucket",
+			key:    "bad-key",
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					CreateKeyValue(&nats.KeyValueConfig{Bucket: "test-bucket"}).
+					Return(s.mockKV, nil).
+					Times(1)
+
+				s.mockKV.EXPECT().
+					Delete("bad-key").
+					Return(errors.New("delete failed")).
+					Times(1)
+			},
+			expectedErr: "failed to delete key bad-key from bucket test-bucket: delete failed",
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			tc.mockSetup()
+
+			err := s.client.KVDelete(tc.bucket, tc.key)
+
+			if tc.expectedErr == "" {
+				s.NoError(err)
+			} else {
+				s.EqualError(err, tc.expectedErr)
+			}
+		})
+	}
+}
+
+func (s *KVCreatePublicTestSuite) TestKVKeys() {
+	tests := []struct {
+		name         string
+		bucket       string
+		mockSetup    func()
+		expectedKeys []string
+		expectedErr  string
+	}{
+		{
+			name:   "successfully gets keys from KV bucket",
+			bucket: "test-bucket",
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					CreateKeyValue(&nats.KeyValueConfig{Bucket: "test-bucket"}).
+					Return(s.mockKV, nil).
+					Times(1)
+
+				s.mockKV.EXPECT().
+					Keys().
+					Return([]string{"key1", "key2", "key3"}, nil).
+					Times(1)
+			},
+			expectedKeys: []string{"key1", "key2", "key3"},
+			expectedErr:  "",
+		},
+		{
+			name:   "successfully gets empty keys from KV bucket",
+			bucket: "empty-bucket",
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					CreateKeyValue(&nats.KeyValueConfig{Bucket: "empty-bucket"}).
+					Return(s.mockKV, nil).
+					Times(1)
+
+				s.mockKV.EXPECT().
+					Keys().
+					Return([]string{}, nil).
+					Times(1)
+			},
+			expectedKeys: []string{},
+			expectedErr:  "",
+		},
+		{
+			name:   "error creating KV bucket for keys",
+			bucket: "bad-bucket",
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					CreateKeyValue(&nats.KeyValueConfig{Bucket: "bad-bucket"}).
+					Return(nil, errors.New("bucket creation failed")).
+					Times(1)
+			},
+			expectedKeys: nil,
+			expectedErr:  "failed to get KV bucket bad-bucket: bucket creation failed",
+		},
+		{
+			name:   "error getting keys from KV bucket",
+			bucket: "test-bucket",
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					CreateKeyValue(&nats.KeyValueConfig{Bucket: "test-bucket"}).
+					Return(s.mockKV, nil).
+					Times(1)
+
+				s.mockKV.EXPECT().
+					Keys().
+					Return(nil, errors.New("keys failed")).
+					Times(1)
+			},
+			expectedKeys: nil,
+			expectedErr:  "failed to get keys from bucket test-bucket: keys failed",
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			tc.mockSetup()
+
+			keys, err := s.client.KVKeys(tc.bucket)
+
+			if tc.expectedErr == "" {
+				s.NoError(err)
+				s.Equal(tc.expectedKeys, keys)
+			} else {
+				s.Error(err)
+				s.Contains(err.Error(), tc.expectedErr)
+				s.Nil(keys)
+			}
+		})
+	}
+}
+
 func TestKVCreatePublicTestSuite(t *testing.T) {
 	suite.Run(t, new(KVCreatePublicTestSuite))
 }
