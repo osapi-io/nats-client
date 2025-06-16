@@ -96,7 +96,7 @@ func (s *ConsumerPublicTestSuite) TearDownTest() {
 	s.mockCtrl.Finish()
 }
 
-func (s *ConsumerPublicTestSuite) TestConsumeMessages_ConsumerError() {
+func (s *ConsumerPublicTestSuite) TestConsumeMessagesConsumerError() {
 	streamName := "TEST-STREAM"
 	consumerName := "test-consumer"
 	expectedError := errors.New("consumer not found")
@@ -125,7 +125,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages_ConsumerError() {
 	s.Contains(err.Error(), expectedError.Error())
 }
 
-func (s *ConsumerPublicTestSuite) TestConsumeMessages_DefaultOptions() {
+func (s *ConsumerPublicTestSuite) TestConsumeMessagesDefaultOptions() {
 	streamName := "TEST-STREAM"
 	consumerName := "test-consumer"
 	expectedError := errors.New("consumer not found")
@@ -148,7 +148,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages_DefaultOptions() {
 	s.Contains(err.Error(), "failed to get consumer")
 }
 
-func (s *ConsumerPublicTestSuite) TestConsumeMessages_TableDriven() {
+func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 	type testCase struct {
 		name           string
 		setupMocks     func(ctx context.Context)
