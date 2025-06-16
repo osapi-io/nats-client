@@ -38,7 +38,9 @@ type NATSConnWrapper struct {
 }
 
 // JetStream wraps the JetStream method of nats.Conn.
-func (n *NATSConnWrapper) JetStream(opts ...nats.JSOpt) (nats.JetStreamContext, error) {
+func (n *NATSConnWrapper) JetStream(
+	opts ...nats.JSOpt,
+) (nats.JetStreamContext, error) {
 	return n.Conn.JetStream(opts...)
 }
 
@@ -55,7 +57,10 @@ func (n *NATSConnWrapper) ConnectedUrl() string {
 }
 
 // Connect establishes a connection to the NATS server with the given URL and options.
-func (n *NATSConnWrapper) Connect(url string, opts ...nats.Option) (*nats.Conn, error) {
+func (n *NATSConnWrapper) Connect(
+	url string,
+	opts ...nats.Option,
+) (*nats.Conn, error) {
 	conn, err := nats.Connect(url, opts...)
 	if err != nil {
 		return nil, err

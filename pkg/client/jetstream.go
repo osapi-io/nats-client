@@ -113,3 +113,17 @@ func (c *Client) createOrUpdateStream(
 
 	return nil
 }
+
+// GetStreamInfo retrieves information about a JetStream stream.
+func (c *Client) GetStreamInfo(
+	ctx context.Context,
+	streamName string,
+) (*nats.StreamInfo, error) {
+	// Use the native JetStream API to get stream info
+	info, err := c.NativeJS.StreamInfo(streamName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stream info for %s: %w", streamName, err)
+	}
+
+	return info, nil
+}

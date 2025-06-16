@@ -241,6 +241,105 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStreamWithConfig() {
 	}
 }
 
+func (s *JetStreamPublicTestSuite) TestGetStreamInfo() {
+	tests := []struct {
+		name         string
+		streamName   string
+		mockSetup    func()
+		expectedInfo *nats.StreamInfo
+		expectedErr  string
+	}{
+		{
+			name:       "successfully gets stream info",
+			streamName: "TEST-STREAM",
+			mockSetup: func() {
+				expectedInfo := &nats.StreamInfo{
+					Config: nats.StreamConfig{
+						Name:     "TEST-STREAM",
+						Subjects: []string{"test.>"},
+						Storage:  nats.FileStorage,
+					},
+					State: nats.StreamState{
+						Msgs:      10,
+						Bytes:     1024,
+						FirstSeq:  1,
+						LastSeq:   10,
+						Consumers: 2,
+					},
+				}
+				s.mockJS.EXPECT().
+					StreamInfo("TEST-STREAM").
+					Return(expectedInfo, nil).
+					Times(1)
+			},
+			expectedInfo: &nats.StreamInfo{
+				Config: nats.StreamConfig{
+					Name:     "TEST-STREAM",
+					Subjects: []string{"test.>"},
+					Storage:  nats.FileStorage,
+				},
+				State: nats.StreamState{
+					Msgs:      10,
+					Bytes:     1024,
+					FirstSeq:  1,
+					LastSeq:   10,
+					Consumers: 2,
+				},
+			},
+			expectedErr: "",
+		},
+		{
+			name:       "error getting stream info - stream not found",
+			streamName: "MISSING-STREAM",
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					StreamInfo("MISSING-STREAM").
+					Return(nil, errors.New("stream not found")).
+					Times(1)
+			},
+			expectedInfo: nil,
+			expectedErr:  "failed to get stream info for MISSING-STREAM: stream not found",
+		},
+		{
+			name:       "error getting stream info - connection error",
+			streamName: "ERROR-STREAM",
+			mockSetup: func() {
+				s.mockJS.EXPECT().
+					StreamInfo("ERROR-STREAM").
+					Return(nil, errors.New("connection lost")).
+					Times(1)
+			},
+			expectedInfo: nil,
+			expectedErr:  "failed to get stream info for ERROR-STREAM: connection lost",
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			tc.mockSetup()
+
+			info, err := s.client.GetStreamInfo(s.ctx, tc.streamName)
+
+			if tc.expectedErr == "" {
+				s.NoError(err)
+				s.NotNil(info)
+				s.Equal(tc.expectedInfo.Config.Name, info.Config.Name)
+				s.Equal(tc.expectedInfo.Config.Subjects, info.Config.Subjects)
+				s.Equal(tc.expectedInfo.Config.Storage, info.Config.Storage)
+				s.Equal(tc.expectedInfo.State.Msgs, info.State.Msgs)
+				s.Equal(tc.expectedInfo.State.Bytes, info.State.Bytes)
+				s.Equal(tc.expectedInfo.State.FirstSeq, info.State.FirstSeq)
+				s.Equal(tc.expectedInfo.State.LastSeq, info.State.LastSeq)
+				s.Equal(tc.expectedInfo.State.Consumers, info.State.Consumers)
+			} else {
+				s.Error(err)
+				s.Contains(err.Error(), tc.expectedErr)
+				s.Nil(info)
+			}
+		})
+	}
+}
+
 func TestJetStreamPublicTestSuite(t *testing.T) {
 	suite.Run(t, new(JetStreamPublicTestSuite))
 }
