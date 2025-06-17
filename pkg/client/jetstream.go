@@ -35,7 +35,7 @@ func (c *Client) CreateOrUpdateStreamWithConfig(
 	ctx context.Context,
 	streamConfig *nats.StreamConfig,
 ) error {
-	c.logger.Info(
+	c.logger.Debug(
 		"creating stream",
 		slog.String("name", streamConfig.Name),
 		slog.String("subjects", strings.Join(streamConfig.Subjects, ", ")),
@@ -50,7 +50,7 @@ func (c *Client) CreateOrUpdateConsumerWithConfig(
 	streamName string,
 	consumerConfig jetstream.ConsumerConfig,
 ) error {
-	c.logger.Info(
+	c.logger.Debug(
 		"creating consumer",
 		slog.String("durable", consumerConfig.Durable),
 		slog.String("stream", streamName),
@@ -83,7 +83,7 @@ func (c *Client) CreateOrUpdateJetStreamWithConfig(
 		}
 	}
 
-	c.logger.Info("jet stream setup completed successfully")
+	c.logger.Debug("jet stream setup completed successfully")
 
 	return nil
 }
@@ -97,7 +97,7 @@ func (c *Client) createOrUpdateStream(
 	if err != nil {
 		// Check if the error indicates that the stream already exists.
 		if strings.Contains(err.Error(), "already in use") {
-			c.logger.Info(
+			c.logger.Debug(
 				"stream already exists; updating stream",
 				slog.String("stream", streamName),
 			)

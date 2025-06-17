@@ -35,7 +35,7 @@ func (c *Client) KVPutAndPublish(
 	data []byte,
 	notifySubject string,
 ) (uint64, error) {
-	c.logger.Info(
+	c.logger.Debug(
 		"storing item and sending notification",
 		slog.String("kv_bucket", kvBucket),
 		slog.String("key", key),
@@ -60,7 +60,7 @@ func (c *Client) KVPutAndPublish(
 		return 0, fmt.Errorf("failed to send notification: %w", err)
 	}
 
-	c.logger.Info(
+	c.logger.Debug(
 		"item stored and notification sent",
 		slog.String("key", key),
 		slog.Uint64("revision", revision),

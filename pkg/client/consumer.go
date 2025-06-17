@@ -54,7 +54,7 @@ func (c *Client) ConsumeMessages(
 		}
 	}
 
-	c.logger.Info(
+	c.logger.Debug(
 		"starting message consumption",
 		slog.String("stream", streamName),
 		slog.String("consumer", consumerName),
@@ -77,7 +77,7 @@ func (c *Client) ConsumeMessages(
 	for {
 		select {
 		case <-ctx.Done():
-			c.logger.Info("stopping message consumption due to context cancellation")
+			c.logger.Debug("stopping message consumption due to context cancellation")
 			return ctx.Err()
 
 		default:

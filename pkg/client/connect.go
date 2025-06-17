@@ -40,7 +40,7 @@ var GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
 func (c *Client) Connect() error {
 	natsURL := fmt.Sprintf("nats://%s:%d", c.Opts.Host, c.Opts.Port)
 
-	c.logger.Info(
+	c.logger.Debug(
 		"connecting to NATS server",
 		slog.String("url", natsURL),
 		slog.String("auth_type", c.getAuthTypeName()),
@@ -112,7 +112,7 @@ func (c *Client) Connect() error {
 	}
 	c.NativeJS = nativeJS
 
-	c.logger.Info("successfully connected to NATS and enabled JetStream")
+	c.logger.Debug("successfully connected to NATS and enabled JetStream")
 
 	return nil
 }

@@ -34,7 +34,7 @@ import (
 func (c *Client) CreateKVBucket(
 	bucketName string,
 ) (nats.KeyValue, error) {
-	c.logger.Info(
+	c.logger.Debug(
 		"creating KV bucket",
 		slog.String("bucket", bucketName),
 	)
@@ -53,7 +53,7 @@ func (c *Client) CreateKVBucket(
 func (c *Client) CreateKVBucketWithConfig(
 	config *nats.KeyValueConfig,
 ) (nats.KeyValue, error) {
-	c.logger.Info(
+	c.logger.Debug(
 		"creating KV bucket with config",
 		slog.String("bucket", config.Bucket),
 		slog.String("description", config.Description),
@@ -109,7 +109,7 @@ func (c *Client) PublishAndWaitKV(
 	}
 	msg.Header.Set("Request-ID", opts.RequestID)
 
-	c.logger.Info(
+	c.logger.Debug(
 		"publishing request with KV reply",
 		slog.String("request_id", opts.RequestID),
 		slog.String("subject", subject),
@@ -150,7 +150,7 @@ func (c *Client) waitForKVResponse(
 				return nil, fmt.Errorf("failed to get response: %w", err)
 			}
 
-			c.logger.Info(
+			c.logger.Debug(
 				"received KV response",
 				slog.String("key", key),
 				slog.Uint64("revision", entry.Revision()),
@@ -175,7 +175,7 @@ func (c *Client) WatchKV(
 	kv nats.KeyValue,
 	pattern string,
 ) (<-chan nats.KeyValueEntry, error) {
-	c.logger.Info(
+	c.logger.Debug(
 		"creating KV watcher",
 		slog.String("pattern", pattern),
 	)
