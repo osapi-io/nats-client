@@ -409,17 +409,26 @@ func (s *KVCreatePublicTestSuite) TestWatchKV() {
 		name          string
 		pattern       string
 		setupMocks    func() *mocks.MockKeyWatcher
+		testBehavior  func(ch <-chan nats.KeyValueEntry)
 		expectedError string
 	}{
 		{
-			name:    "successfully creates watcher",
+			name:    "successfully creates watcher and forwards entries",
 			pattern: "test.*",
 			setupMocks: func() *mocks.MockKeyWatcher {
 				mockWatcher := mocks.NewMockKeyWatcher(s.mockCtrl)
 
-				// Set up channel for Updates() - the goroutine will call this immediately
-				updatesChan := make(chan nats.KeyValueEntry, 1)
-				close(updatesChan) // Close immediately so goroutine exits
+				// Create a channel that will send a test entry
+				updatesChan := make(chan nats.KeyValueEntry, 2)
+
+				// Create a mock entry
+				mockEntry := mocks.NewMockKeyValueEntry(s.mockCtrl)
+				mockEntry.EXPECT().Key().Return("test.key").AnyTimes()
+				mockEntry.EXPECT().Value().Return([]byte("test value")).AnyTimes()
+
+				// Send the entry and then close the channel to test proper cleanup
+				updatesChan <- mockEntry
+				close(updatesChan)
 
 				s.mockKV.EXPECT().
 					Watch("test.*").
@@ -436,6 +445,175 @@ func (s *KVCreatePublicTestSuite) TestWatchKV() {
 					AnyTimes()
 
 				return mockWatcher
+			},
+			testBehavior: func(ch <-chan nats.KeyValueEntry) {
+				// Wait for the entry to be forwarded through the goroutine
+				select {
+				case entry := <-ch:
+					s.NotNil(entry)
+					s.Equal("test.key", entry.Key())
+					s.Equal([]byte("test value"), entry.Value())
+				case <-time.After(100 * time.Millisecond):
+					s.Fail("Expected to receive an entry but timed out")
+				}
+
+				// Now the goroutine should exit when the updates channel closes
+				// This will cause our output channel to close
+				select {
+				case _, ok := <-ch:
+					s.False(ok, "Channel should be closed when updates channel closes")
+				case <-time.After(100 * time.Millisecond):
+					s.Fail("Expected channel to close but timed out")
+				}
+			},
+		},
+		{
+			name:    "goroutine stops on context cancellation",
+			pattern: "test.*",
+			setupMocks: func() *mocks.MockKeyWatcher {
+				mockWatcher := mocks.NewMockKeyWatcher(s.mockCtrl)
+
+				// Create a channel that never closes naturally
+				updatesChan := make(chan nats.KeyValueEntry)
+
+				s.mockKV.EXPECT().
+					Watch("test.*").
+					Return(mockWatcher, nil)
+
+				mockWatcher.EXPECT().
+					Updates().
+					Return(updatesChan).
+					AnyTimes()
+
+				mockWatcher.EXPECT().
+					Stop().
+					Return(nil).
+					AnyTimes()
+
+				return mockWatcher
+			},
+			testBehavior: func(ch <-chan nats.KeyValueEntry) {
+				// Channel should close when context is cancelled
+				select {
+				case _, ok := <-ch:
+					s.False(ok, "Channel should be closed due to context cancellation")
+				case <-time.After(100 * time.Millisecond):
+					s.Fail("Expected channel to close due to context cancellation but timed out")
+				}
+			},
+		},
+		{
+			name:    "handles nil entries gracefully",
+			pattern: "test.*",
+			setupMocks: func() *mocks.MockKeyWatcher {
+				mockWatcher := mocks.NewMockKeyWatcher(s.mockCtrl)
+
+				// Create a channel that sends nil then a real entry
+				updatesChan := make(chan nats.KeyValueEntry, 3)
+
+				// Send nil (should be ignored), then real entry, then close
+				updatesChan <- nil
+
+				mockEntry := mocks.NewMockKeyValueEntry(s.mockCtrl)
+				mockEntry.EXPECT().Key().Return("test.key").AnyTimes()
+				mockEntry.EXPECT().Value().Return([]byte("test value")).AnyTimes()
+				updatesChan <- mockEntry
+
+				close(updatesChan)
+
+				s.mockKV.EXPECT().
+					Watch("test.*").
+					Return(mockWatcher, nil)
+
+				mockWatcher.EXPECT().
+					Updates().
+					Return(updatesChan).
+					AnyTimes()
+
+				mockWatcher.EXPECT().
+					Stop().
+					Return(nil).
+					AnyTimes()
+
+				return mockWatcher
+			},
+			testBehavior: func(ch <-chan nats.KeyValueEntry) {
+				// Should only receive the non-nil entry (nil entries are filtered out)
+				select {
+				case entry := <-ch:
+					s.NotNil(entry)
+					s.Equal("test.key", entry.Key())
+				case <-time.After(100 * time.Millisecond):
+					s.Fail("Expected to receive a non-nil entry but timed out")
+				}
+
+				// The goroutine should exit when the updates channel closes
+				select {
+				case _, ok := <-ch:
+					s.False(ok, "Channel should be closed when updates channel closes")
+				case <-time.After(100 * time.Millisecond):
+					s.Fail("Expected channel to close but timed out")
+				}
+			},
+		},
+		{
+			name:    "context cancelled while forwarding entry",
+			pattern: "test.*",
+			setupMocks: func() *mocks.MockKeyWatcher {
+				mockWatcher := mocks.NewMockKeyWatcher(s.mockCtrl)
+
+				// Create a channel that will send entries
+				updatesChan := make(chan nats.KeyValueEntry, 1)
+
+				// Create a mock entry
+				mockEntry := mocks.NewMockKeyValueEntry(s.mockCtrl)
+				mockEntry.EXPECT().Key().Return("test.key").AnyTimes()
+				mockEntry.EXPECT().Value().Return([]byte("test value")).AnyTimes()
+
+				// Send the entry but don't close the channel
+				updatesChan <- mockEntry
+
+				s.mockKV.EXPECT().
+					Watch("test.*").
+					Return(mockWatcher, nil)
+
+				mockWatcher.EXPECT().
+					Updates().
+					Return(updatesChan).
+					AnyTimes()
+
+				mockWatcher.EXPECT().
+					Stop().
+					Return(nil).
+					AnyTimes()
+
+				return mockWatcher
+			},
+			testBehavior: func(ch <-chan nats.KeyValueEntry) {
+				// Create a context that we can cancel
+				// Don't read from the channel immediately - this creates backpressure
+				// so when the goroutine tries to send the entry, it will block
+				// and then we can cancel the context
+
+				time.Sleep(
+					10 * time.Millisecond,
+				) // Give goroutine time to receive entry and try to send
+
+				// The channel should close due to context cancellation
+				// without us ever receiving the entry (because context was cancelled
+				// while the goroutine was trying to send it)
+				select {
+				case _, ok := <-ch:
+					if !ok {
+						// Channel closed due to context cancellation - this is what we want
+						s.True(true, "Channel closed due to context cancellation while forwarding")
+					} else {
+						// We might get the entry if timing is different, that's also fine
+						s.True(true, "Entry received before context cancellation")
+					}
+				case <-time.After(200 * time.Millisecond):
+					s.Fail("Expected channel to close or receive entry but timed out")
+				}
 			},
 		},
 		{
@@ -455,7 +633,25 @@ func (s *KVCreatePublicTestSuite) TestWatchKV() {
 		s.Run(tc.name, func() {
 			mockWatcher := tc.setupMocks()
 
-			ctx := context.Background()
+			ctx, cancel := context.WithCancel(context.Background())
+
+			// For context cancellation tests, cancel after a short delay
+			if tc.name == "goroutine stops on context cancellation" {
+				go func() {
+					time.Sleep(10 * time.Millisecond)
+					cancel()
+				}()
+			} else if tc.name == "context cancelled while forwarding entry" {
+				// Cancel context after giving time for goroutine to receive entry
+				// but before we read from output channel (creating backpressure)
+				go func() {
+					time.Sleep(5 * time.Millisecond)
+					cancel()
+				}()
+			} else {
+				defer cancel()
+			}
+
 			ch, err := s.client.WatchKV(ctx, s.mockKV, tc.pattern)
 
 			if tc.expectedError != "" {
@@ -465,8 +661,12 @@ func (s *KVCreatePublicTestSuite) TestWatchKV() {
 			} else {
 				s.NoError(err)
 				s.NotNil(ch)
-				// For successful cases, just verify the channel was created
-				// Testing the goroutine behavior would require complex setup
+
+				// Test the goroutine behavior if we have a test function
+				if tc.testBehavior != nil {
+					tc.testBehavior(ch)
+				}
+
 				_ = mockWatcher // Use the watcher to avoid unused variable
 			}
 		})

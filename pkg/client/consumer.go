@@ -122,7 +122,7 @@ func (c *Client) ConsumeMessages(
 func (c *Client) processMessage(
 	msg jetstream.Msg,
 	handler JetStreamMessageHandler,
-) error {
+) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			c.logger.Error(
@@ -130,6 +130,7 @@ func (c *Client) processMessage(
 				slog.Any("panic", r),
 				slog.String("subject", msg.Subject()),
 			)
+			err = fmt.Errorf("handler panicked: %v", r)
 		}
 	}()
 
