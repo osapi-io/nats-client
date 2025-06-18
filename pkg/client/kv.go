@@ -197,7 +197,11 @@ func (c *Client) WatchKV(
 			select {
 			case <-ctx.Done():
 				return
-			case entry := <-watcher.Updates():
+			case entry, ok := <-watcher.Updates():
+				if !ok {
+					// Channel is closed, exit the goroutine
+					return
+				}
 				if entry != nil {
 					select {
 					case out <- entry:

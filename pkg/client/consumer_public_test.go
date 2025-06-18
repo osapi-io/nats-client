@@ -329,23 +329,28 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 		{
 			name: "handler_panic_recovery",
 			setupMocks: func(ctx context.Context) {
-				msgCh := NewMessageChannel()
-				mockMsg := mocks.NewMockMsg(s.mockCtrl)
-
 				s.mockExt.EXPECT().
 					Consumer(ctx, "TEST-STREAM", "test-consumer").
 					Return(s.mockConsumer, nil)
 
-				// Setup fetch expectations - first call returns a message, subsequent calls timeout
-				firstCall := true
+				// Setup to return multiple messages that will cause panics
+				callCount := 0
 				s.mockConsumer.EXPECT().
 					Fetch(1).
 					DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
-						if firstCall {
-							firstCall = false
+						callCount++
+						if callCount <= 3 {
+							// Return messages that will cause panics in handler
+							msgCh := NewMessageChannel()
+							mockMsg := mocks.NewMockMsg(s.mockCtrl)
+
 							s.mockMessageBatch.EXPECT().
 								Messages().
-								Return(msgCh.Messages())
+								Return(msgCh.Messages()).
+								Times(1)
+
+							mockMsg.EXPECT().Subject().Return("test.subject").AnyTimes()
+							// No Ack expected when handler panics
 
 							go func() {
 								msgCh.Send(mockMsg)
@@ -354,17 +359,15 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 
 							return s.mockMessageBatch, nil
 						}
+						// Then timeout to keep loop going until context cancellation
 						return nil, errors.New("nats: timeout")
 					}).
 					AnyTimes()
-
-				mockMsg.EXPECT().Subject().Return("test.subject").AnyTimes()
-				// No Ack expected when handler panics
 			},
 			handler: func(msg jetstream.Msg) error {
 				panic("handler panic")
 			},
-			contextTimeout: 100 * time.Millisecond,
+			contextTimeout: 200 * time.Millisecond, // Longer timeout to allow multiple panic recoveries
 		},
 		{
 			name: "exact_timeout_error_handling",
@@ -391,37 +394,51 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 					Consumer(ctx, "TEST-STREAM", "test-consumer").
 					Return(s.mockConsumer, nil)
 
-				// Return a non-timeout error to trigger logging
+				// Return a non-timeout error several times to trigger logging, then timeout
+				callCount := 0
 				s.mockConsumer.EXPECT().
 					Fetch(1).
-					Return(nil, errors.New("connection lost")).
+					DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+						callCount++
+						if callCount <= 3 {
+							// Return non-timeout error multiple times to ensure logging path is hit
+							return nil, errors.New("connection lost")
+						}
+						// Then return timeout errors to keep the loop going
+						return nil, errors.New("nats: timeout")
+					}).
 					AnyTimes()
 			},
 			handler: func(msg jetstream.Msg) error {
 				return nil
 			},
-			contextTimeout: 100 * time.Millisecond,
+			contextTimeout: 200 * time.Millisecond, // Longer timeout to allow error logging
 		},
 		{
 			name: "message_processing_error_with_logging",
 			setupMocks: func(ctx context.Context) {
-				msgCh := NewMessageChannel()
-				mockMsg := mocks.NewMockMsg(s.mockCtrl)
-
 				s.mockExt.EXPECT().
 					Consumer(ctx, "TEST-STREAM", "test-consumer").
 					Return(s.mockConsumer, nil)
 
-				// Setup fetch expectations - first call returns a message, subsequent calls timeout
-				firstCall := true
+				// Setup to return multiple messages with processing errors
+				callCount := 0
 				s.mockConsumer.EXPECT().
 					Fetch(1).
 					DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
-						if firstCall {
-							firstCall = false
+						callCount++
+						if callCount <= 3 {
+							// Return messages that will cause processing errors
+							msgCh := NewMessageChannel()
+							mockMsg := mocks.NewMockMsg(s.mockCtrl)
+
 							s.mockMessageBatch.EXPECT().
 								Messages().
-								Return(msgCh.Messages())
+								Return(msgCh.Messages()).
+								Times(1)
+
+							mockMsg.EXPECT().Subject().Return("test.subject").AnyTimes()
+							// No Ack expected when handler returns error
 
 							go func() {
 								msgCh.Send(mockMsg)
@@ -430,38 +447,41 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 
 							return s.mockMessageBatch, nil
 						}
+						// Then timeout to keep loop going until context cancellation
 						return nil, errors.New("nats: timeout")
 					}).
 					AnyTimes()
-
-				mockMsg.EXPECT().Subject().Return("test.subject").AnyTimes()
-				// No Ack expected when handler returns error
 			},
 			handler: func(msg jetstream.Msg) error {
 				return errors.New("processing failed")
 			},
-			contextTimeout: 100 * time.Millisecond,
+			contextTimeout: 200 * time.Millisecond, // Longer timeout to allow multiple error logs
 		},
 		{
 			name: "ack_error_with_logging",
 			setupMocks: func(ctx context.Context) {
-				msgCh := NewMessageChannel()
-				mockMsg := mocks.NewMockMsg(s.mockCtrl)
-
 				s.mockExt.EXPECT().
 					Consumer(ctx, "TEST-STREAM", "test-consumer").
 					Return(s.mockConsumer, nil)
 
-				// Setup fetch expectations - first call returns a message, subsequent calls timeout
-				firstCall := true
+				// Setup to return multiple messages with ack errors
+				callCount := 0
 				s.mockConsumer.EXPECT().
 					Fetch(1).
 					DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
-						if firstCall {
-							firstCall = false
+						callCount++
+						if callCount <= 3 {
+							// Return messages that will cause ack errors
+							msgCh := NewMessageChannel()
+							mockMsg := mocks.NewMockMsg(s.mockCtrl)
+
 							s.mockMessageBatch.EXPECT().
 								Messages().
-								Return(msgCh.Messages())
+								Return(msgCh.Messages()).
+								Times(1)
+
+							mockMsg.EXPECT().Subject().Return("test.subject").AnyTimes()
+							mockMsg.EXPECT().Ack().Return(errors.New("ack failed")).Times(1)
 
 							go func() {
 								msgCh.Send(mockMsg)
@@ -470,17 +490,15 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 
 							return s.mockMessageBatch, nil
 						}
+						// Then timeout to keep loop going until context cancellation
 						return nil, errors.New("nats: timeout")
 					}).
 					AnyTimes()
-
-				mockMsg.EXPECT().Subject().Return("test.subject").AnyTimes()
-				mockMsg.EXPECT().Ack().Return(errors.New("ack failed")).MaxTimes(1)
 			},
 			handler: func(msg jetstream.Msg) error {
 				return nil
 			},
-			contextTimeout: 100 * time.Millisecond,
+			contextTimeout: 200 * time.Millisecond, // Longer timeout to allow multiple error logs
 		},
 	}
 
@@ -509,6 +527,178 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			}
 		})
 	}
+}
+
+// Simple test to verify error logging paths are hit
+func (s *ConsumerPublicTestSuite) TestConsumerErrorPaths() {
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	// Test 1: Non-timeout fetch error
+	s.mockExt.EXPECT().
+		Consumer(ctx, "TEST-STREAM", "test-consumer").
+		Return(s.mockConsumer, nil)
+
+	// Return non-timeout error exactly once to hit the logging path
+	s.mockConsumer.EXPECT().
+		Fetch(1).
+		Return(nil, errors.New("connection lost")).
+		Times(1)
+
+	// Then timeout errors
+	s.mockConsumer.EXPECT().
+		Fetch(1).
+		Return(nil, errors.New("nats: timeout")).
+		AnyTimes()
+
+	handler := func(msg jetstream.Msg) error {
+		return nil
+	}
+
+	err := s.client.ConsumeMessages(ctx, "TEST-STREAM", "test-consumer", handler, nil)
+	s.Error(err) // Should error due to context timeout
+}
+
+// Focused test to hit the message processing error logging
+func (s *ConsumerPublicTestSuite) TestMessageProcessingErrorLogging() {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	s.mockExt.EXPECT().
+		Consumer(ctx, "TEST-STREAM", "test-consumer").
+		Return(s.mockConsumer, nil)
+
+	// Create a test that will DEFINITELY return a message that causes an error
+	mockMsg := mocks.NewMockMsg(s.mockCtrl)
+	mockMsg.EXPECT().Subject().Return("test.subject").AnyTimes()
+	// No Ack() expectation since processing will fail
+
+	msgCh := NewMessageChannel()
+	s.mockMessageBatch.EXPECT().
+		Messages().
+		Return(msgCh.Messages()).
+		Times(1)
+
+	// First fetch returns a message that will cause handler to fail
+	s.mockConsumer.EXPECT().
+		Fetch(1).
+		DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+			// Send message and close immediately
+			go func() {
+				msgCh.Send(mockMsg)
+				msgCh.Close()
+			}()
+			return s.mockMessageBatch, nil
+		}).
+		Times(1)
+
+	// Subsequent fetches timeout to let context expire
+	s.mockConsumer.EXPECT().
+		Fetch(1).
+		Return(nil, errors.New("nats: timeout")).
+		AnyTimes()
+
+	// Handler that ALWAYS returns an error
+	handler := func(msg jetstream.Msg) error {
+		return errors.New("processing always fails")
+	}
+
+	err := s.client.ConsumeMessages(ctx, "TEST-STREAM", "test-consumer", handler, nil)
+	s.Error(err) // Should error due to context timeout
+}
+
+// Focused test to hit the ack error logging
+func (s *ConsumerPublicTestSuite) TestAckErrorLogging() {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	s.mockExt.EXPECT().
+		Consumer(ctx, "TEST-STREAM", "test-consumer").
+		Return(s.mockConsumer, nil)
+
+	// Create a test that will return a message that processes successfully but ack fails
+	mockMsg := mocks.NewMockMsg(s.mockCtrl)
+	mockMsg.EXPECT().Subject().Return("test.subject").AnyTimes()
+	mockMsg.EXPECT().Ack().Return(errors.New("ack failed")).Times(1)
+
+	msgCh := NewMessageChannel()
+	s.mockMessageBatch.EXPECT().
+		Messages().
+		Return(msgCh.Messages()).
+		Times(1)
+
+	// First fetch returns a message
+	s.mockConsumer.EXPECT().
+		Fetch(1).
+		DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+			go func() {
+				msgCh.Send(mockMsg)
+				msgCh.Close()
+			}()
+			return s.mockMessageBatch, nil
+		}).
+		Times(1)
+
+	// Subsequent fetches timeout
+	s.mockConsumer.EXPECT().
+		Fetch(1).
+		Return(nil, errors.New("nats: timeout")).
+		AnyTimes()
+
+	// Handler that succeeds (so ack gets called)
+	handler := func(msg jetstream.Msg) error {
+		return nil // Success, so ack will be called
+	}
+
+	err := s.client.ConsumeMessages(ctx, "TEST-STREAM", "test-consumer", handler, nil)
+	s.Error(err) // Should error due to context timeout
+}
+
+// Focused test to hit the panic recovery logging
+func (s *ConsumerPublicTestSuite) TestPanicRecoveryLogging() {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	s.mockExt.EXPECT().
+		Consumer(ctx, "TEST-STREAM", "test-consumer").
+		Return(s.mockConsumer, nil)
+
+	// Create a test that will return a message that causes handler to panic
+	mockMsg := mocks.NewMockMsg(s.mockCtrl)
+	mockMsg.EXPECT().Subject().Return("test.subject").AnyTimes()
+	// No Ack() expectation since handler will panic
+
+	msgCh := NewMessageChannel()
+	s.mockMessageBatch.EXPECT().
+		Messages().
+		Return(msgCh.Messages()).
+		Times(1)
+
+	// First fetch returns a message
+	s.mockConsumer.EXPECT().
+		Fetch(1).
+		DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+			go func() {
+				msgCh.Send(mockMsg)
+				msgCh.Close()
+			}()
+			return s.mockMessageBatch, nil
+		}).
+		Times(1)
+
+	// Subsequent fetches timeout
+	s.mockConsumer.EXPECT().
+		Fetch(1).
+		Return(nil, errors.New("nats: timeout")).
+		AnyTimes()
+
+	// Handler that ALWAYS panics
+	handler := func(msg jetstream.Msg) error {
+		panic("test panic for coverage")
+	}
+
+	err := s.client.ConsumeMessages(ctx, "TEST-STREAM", "test-consumer", handler, nil)
+	s.Error(err) // Should error due to context timeout
 }
 
 func TestConsumerPublicTestSuite(t *testing.T) {
