@@ -340,6 +340,83 @@ func (s *JetStreamPublicTestSuite) TestGetStreamInfo() {
 	}
 }
 
+func (s *JetStreamPublicTestSuite) TestPublish() {
+	tests := []struct {
+		name        string
+		subject     string
+		data        []byte
+		mockSetup   func()
+		expectedErr string
+	}{
+		{
+			name:    "successfully publishes message",
+			subject: "test.subject",
+			data:    []byte("test message"),
+			mockSetup: func() {
+				s.mockExt.EXPECT().
+					Publish(gomock.Any(), "test.subject", []byte("test message")).
+					Return(nil, nil).
+					Times(1)
+			},
+			expectedErr: "",
+		},
+		{
+			name:    "publishes empty message",
+			subject: "test.empty",
+			data:    []byte(""),
+			mockSetup: func() {
+				s.mockExt.EXPECT().
+					Publish(gomock.Any(), "test.empty", []byte("")).
+					Return(nil, nil).
+					Times(1)
+			},
+			expectedErr: "",
+		},
+		{
+			name:    "error publishing message",
+			subject: "test.error",
+			data:    []byte("test message"),
+			mockSetup: func() {
+				s.mockExt.EXPECT().
+					Publish(gomock.Any(), "test.error", []byte("test message")).
+					Return(nil, errors.New("publish failed")).
+					Times(1)
+			},
+			expectedErr: "failed to publish message to test.error: publish failed",
+		},
+		{
+			name:        "jetstream not initialized",
+			subject:     "test.noinit",
+			data:        []byte("test message"),
+			mockSetup:   func() {},
+			expectedErr: "JetStream not initialized: call Connect() first",
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			tc.mockSetup()
+
+			// For the "jetstream not initialized" test, set ExtJS to nil
+			if tc.name == "jetstream not initialized" {
+				originalExtJS := s.client.ExtJS
+				s.client.ExtJS = nil
+				defer func() {
+					s.client.ExtJS = originalExtJS
+				}()
+			}
+
+			err := s.client.Publish(s.ctx, tc.subject, tc.data)
+
+			if tc.expectedErr == "" {
+				s.NoError(err)
+			} else {
+				s.EqualError(err, tc.expectedErr)
+			}
+		})
+	}
+}
+
 func TestJetStreamPublicTestSuite(t *testing.T) {
 	suite.Run(t, new(JetStreamPublicTestSuite))
 }
