@@ -127,3 +127,27 @@ func (c *Client) GetStreamInfo(
 
 	return info, nil
 }
+
+// Publish publishes a message to a JetStream subject.
+func (c *Client) Publish(
+	ctx context.Context,
+	subject string,
+	data []byte,
+) error {
+	c.logger.Debug(
+		"publishing message",
+		slog.String("subject", subject),
+		slog.Int("data_size", len(data)),
+	)
+
+	if c.ExtJS == nil {
+		return fmt.Errorf("JetStream not initialized: call Connect() first")
+	}
+
+	_, err := c.ExtJS.Publish(ctx, subject, data)
+	if err != nil {
+		return fmt.Errorf("failed to publish message to %s: %w", subject, err)
+	}
+
+	return nil
+}
