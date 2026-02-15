@@ -56,7 +56,7 @@ var GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
 ```
 
 <a name="AuthOptions"></a>
-## type AuthOptions
+## type [AuthOptions](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/types.go#L57-L67>)
 
 AuthOptions holds authentication\-related settings for connecting to NATS.
 
@@ -75,7 +75,7 @@ type AuthOptions struct {
 ```
 
 <a name="AuthType"></a>
-## type AuthType
+## type [AuthType](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/types.go#L32>)
 
 AuthType defines the different authentication methods supported by the client.
 
@@ -97,7 +97,7 @@ const (
 ```
 
 <a name="Client"></a>
-## type Client
+## type [Client](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/types.go#L70-L83>)
 
 Client provides an implementation for interacting with an embedded NATS server.
 
@@ -119,7 +119,7 @@ type Client struct {
 ```
 
 <a name="New"></a>
-### func New
+### func [New](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/client.go#L30-L33>)
 
 ```go
 func New(logger *slog.Logger, opts *Options) *Client
@@ -128,7 +128,7 @@ func New(logger *slog.Logger, opts *Options) *Client
 New creates a new Client instance using the provided logger and Options.
 
 <a name="Client.Connect"></a>
-### func \(\*Client\) Connect
+### func \(\*Client\) [Connect](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connect.go#L40>)
 
 ```go
 func (c *Client) Connect() error
@@ -137,7 +137,7 @@ func (c *Client) Connect() error
 Connect establishes the connection to the NATS server and JetStream context. This method returns an error if there are any issues during connection.
 
 <a name="Client.ConsumeMessages"></a>
-### func \(\*Client\) ConsumeMessages
+### func \(\*Client\) [ConsumeMessages](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/consumer.go#L44-L50>)
 
 ```go
 func (c *Client) ConsumeMessages(ctx context.Context, streamName string, consumerName string, handler JetStreamMessageHandler, opts *ConsumeOptions) error
@@ -146,7 +146,7 @@ func (c *Client) ConsumeMessages(ctx context.Context, streamName string, consume
 ConsumeMessages subscribes to a JetStream consumer and processes messages with the provided handler. This provides a clean abstraction for message consumption with proper context handling.
 
 <a name="Client.CreateKVBucket"></a>
-### func \(\*Client\) CreateKVBucket
+### func \(\*Client\) [CreateKVBucket](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L34-L36>)
 
 ```go
 func (c *Client) CreateKVBucket(bucketName string) (nats.KeyValue, error)
@@ -155,7 +155,7 @@ func (c *Client) CreateKVBucket(bucketName string) (nats.KeyValue, error)
 CreateKVBucket ensures a KV bucket exists and returns the KeyValue interface.
 
 <a name="Client.CreateKVBucketWithConfig"></a>
-### func \(\*Client\) CreateKVBucketWithConfig
+### func \(\*Client\) [CreateKVBucketWithConfig](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L53-L55>)
 
 ```go
 func (c *Client) CreateKVBucketWithConfig(config *nats.KeyValueConfig) (nats.KeyValue, error)
@@ -164,7 +164,7 @@ func (c *Client) CreateKVBucketWithConfig(config *nats.KeyValueConfig) (nats.Key
 CreateKVBucketWithConfig ensures a KV bucket exists with the provided configuration and returns the KeyValue interface.
 
 <a name="Client.CreateOrUpdateConsumerWithConfig"></a>
-### func \(\*Client\) CreateOrUpdateConsumerWithConfig
+### func \(\*Client\) [CreateOrUpdateConsumerWithConfig](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L48-L52>)
 
 ```go
 func (c *Client) CreateOrUpdateConsumerWithConfig(ctx context.Context, streamName string, consumerConfig jetstream.ConsumerConfig) error
@@ -173,7 +173,7 @@ func (c *Client) CreateOrUpdateConsumerWithConfig(ctx context.Context, streamNam
 CreateOrUpdateConsumerWithConfig creates or updates a JetStream consumer with the provided configuration.
 
 <a name="Client.CreateOrUpdateJetStreamWithConfig"></a>
-### func \(\*Client\) CreateOrUpdateJetStreamWithConfig
+### func \(\*Client\) [CreateOrUpdateJetStreamWithConfig](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L69-L73>)
 
 ```go
 func (c *Client) CreateOrUpdateJetStreamWithConfig(ctx context.Context, streamConfig *nats.StreamConfig, consumerConfigs ...jetstream.ConsumerConfig) error
@@ -182,7 +182,7 @@ func (c *Client) CreateOrUpdateJetStreamWithConfig(ctx context.Context, streamCo
 CreateOrUpdateJetStreamWithConfig configures a JetStream stream and its consumers. This is a convenience method that creates both stream and consumers in one call.
 
 <a name="Client.CreateOrUpdateStreamWithConfig"></a>
-### func \(\*Client\) CreateOrUpdateStreamWithConfig
+### func \(\*Client\) [CreateOrUpdateStreamWithConfig](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L34-L37>)
 
 ```go
 func (c *Client) CreateOrUpdateStreamWithConfig(_ context.Context, streamConfig *nats.StreamConfig) error
@@ -191,7 +191,7 @@ func (c *Client) CreateOrUpdateStreamWithConfig(_ context.Context, streamConfig 
 CreateOrUpdateStreamWithConfig creates or updates a JetStream stream with the provided configuration.
 
 <a name="Client.GetStreamInfo"></a>
-### func \(\*Client\) GetStreamInfo
+### func \(\*Client\) [GetStreamInfo](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L118-L121>)
 
 ```go
 func (c *Client) GetStreamInfo(_ context.Context, streamName string) (*nats.StreamInfo, error)
@@ -200,7 +200,7 @@ func (c *Client) GetStreamInfo(_ context.Context, streamName string) (*nats.Stre
 GetStreamInfo retrieves information about a JetStream stream.
 
 <a name="Client.KVDelete"></a>
-### func \(\*Client\) KVDelete
+### func \(\*Client\) [KVDelete](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L257-L260>)
 
 ```go
 func (c *Client) KVDelete(bucket string, key string) error
@@ -209,7 +209,7 @@ func (c *Client) KVDelete(bucket string, key string) error
 KVDelete removes a key from the specified KV bucket.
 
 <a name="Client.KVGet"></a>
-### func \(\*Client\) KVGet
+### func \(\*Client\) [KVGet](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L239-L242>)
 
 ```go
 func (c *Client) KVGet(bucket string, key string) ([]byte, error)
@@ -218,7 +218,7 @@ func (c *Client) KVGet(bucket string, key string) ([]byte, error)
 KVGet retrieves a value from the specified KV bucket.
 
 <a name="Client.KVKeys"></a>
-### func \(\*Client\) KVKeys
+### func \(\*Client\) [KVKeys](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L275-L277>)
 
 ```go
 func (c *Client) KVKeys(bucket string) ([]string, error)
@@ -227,7 +227,7 @@ func (c *Client) KVKeys(bucket string) ([]string, error)
 KVKeys returns all keys from the specified KV bucket.
 
 <a name="Client.KVPut"></a>
-### func \(\*Client\) KVPut
+### func \(\*Client\) [KVPut](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L220-L224>)
 
 ```go
 func (c *Client) KVPut(bucket string, key string, value []byte) error
@@ -236,7 +236,7 @@ func (c *Client) KVPut(bucket string, key string, value []byte) error
 KVPut stores a value in the specified KV bucket.
 
 <a name="Client.KVPutAndPublish"></a>
-### func \(\*Client\) KVPutAndPublish
+### func \(\*Client\) [KVPutAndPublish](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv_stream.go#L31-L37>)
 
 ```go
 func (c *Client) KVPutAndPublish(ctx context.Context, kvBucket string, key string, data []byte, notifySubject string) (uint64, error)
@@ -245,7 +245,7 @@ func (c *Client) KVPutAndPublish(ctx context.Context, kvBucket string, key strin
 KVPutAndPublish implements the pattern of storing data in KV and sending a notification via stream. This is useful for workflow systems where you want persistent storage \+ event notification.
 
 <a name="Client.Publish"></a>
-### func \(\*Client\) Publish
+### func \(\*Client\) [Publish](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L132-L136>)
 
 ```go
 func (c *Client) Publish(ctx context.Context, subject string, data []byte) error
@@ -254,7 +254,7 @@ func (c *Client) Publish(ctx context.Context, subject string, data []byte) error
 Publish publishes a message to a JetStream subject.
 
 <a name="Client.PublishAndWaitKV"></a>
-### func \(\*Client\) PublishAndWaitKV
+### func \(\*Client\) [PublishAndWaitKV](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L82-L88>)
 
 ```go
 func (c *Client) PublishAndWaitKV(ctx context.Context, subject string, data []byte, kvBucket nats.KeyValue, opts *RequestReplyOptions) ([]byte, error)
@@ -263,7 +263,7 @@ func (c *Client) PublishAndWaitKV(ctx context.Context, subject string, data []by
 PublishAndWaitKV publishes a message and waits for a response in a KV bucket. This implements an async request/reply pattern using KV for response storage.
 
 <a name="Client.WatchKV"></a>
-### func \(\*Client\) WatchKV
+### func \(\*Client\) [WatchKV](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L173-L177>)
 
 ```go
 func (c *Client) WatchKV(ctx context.Context, kv nats.KeyValue, pattern string) (<-chan nats.KeyValueEntry, error)
@@ -274,7 +274,7 @@ WatchKV watches a KV bucket for responses matching a pattern. This is useful for
 Note: Test coverage for this function is intentionally limited to error paths and setup logic. The goroutine's event forwarding logic is not covered due to the complexity of testing async behavior without introducing flaky tests.
 
 <a name="ConsumeOptions"></a>
-## type ConsumeOptions
+## type [ConsumeOptions](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/consumer.go#L35-L40>)
 
 ConsumeOptions configures message consumption behavior.
 
@@ -288,7 +288,7 @@ type ConsumeOptions struct {
 ```
 
 <a name="JetStreamMessageHandler"></a>
-## type JetStreamMessageHandler
+## type [JetStreamMessageHandler](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/consumer.go#L32>)
 
 JetStreamMessageHandler defines the signature for JetStream message handling functions.
 
@@ -297,7 +297,7 @@ type JetStreamMessageHandler func(msg jetstream.Msg) error
 ```
 
 <a name="NATSConnWrapper"></a>
-## type NATSConnWrapper
+## type [NATSConnWrapper](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connect_wrapper.go#L36-L38>)
 
 NATSConnWrapper is a concrete implementation of NATSConnector, wrapping a \*nats.Conn.
 
@@ -308,7 +308,7 @@ type NATSConnWrapper struct {
 ```
 
 <a name="NATSConnWrapper.Close"></a>
-### func \(\*NATSConnWrapper\) Close
+### func \(\*NATSConnWrapper\) [Close](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connect_wrapper.go#L48>)
 
 ```go
 func (n *NATSConnWrapper) Close()
@@ -317,7 +317,7 @@ func (n *NATSConnWrapper) Close()
 Close wraps the Close method of nats.Conn.
 
 <a name="NATSConnWrapper.Connect"></a>
-### func \(\*NATSConnWrapper\) Connect
+### func \(\*NATSConnWrapper\) [Connect](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connect_wrapper.go#L60-L63>)
 
 ```go
 func (n *NATSConnWrapper) Connect(url string, opts ...nats.Option) (*nats.Conn, error)
@@ -326,7 +326,7 @@ func (n *NATSConnWrapper) Connect(url string, opts ...nats.Option) (*nats.Conn, 
 Connect establishes a connection to the NATS server with the given URL and options.
 
 <a name="NATSConnWrapper.ConnectedUrl"></a>
-### func \(\*NATSConnWrapper\) ConnectedUrl
+### func \(\*NATSConnWrapper\) [ConnectedUrl](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connect_wrapper.go#L55>)
 
 ```go
 func (n *NATSConnWrapper) ConnectedUrl() string
@@ -335,7 +335,7 @@ func (n *NATSConnWrapper) ConnectedUrl() string
 ConnectedUrl wraps the ConnectedUrl method of nats.Conn.
 
 <a name="NATSConnWrapper.JetStream"></a>
-### func \(\*NATSConnWrapper\) JetStream
+### func \(\*NATSConnWrapper\) [JetStream](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connect_wrapper.go#L41-L43>)
 
 ```go
 func (n *NATSConnWrapper) JetStream(opts ...nats.JSOpt) (nats.JetStreamContext, error)
@@ -344,7 +344,7 @@ func (n *NATSConnWrapper) JetStream(opts ...nats.JSOpt) (nats.JetStreamContext, 
 JetStream wraps the JetStream method of nats.Conn.
 
 <a name="NATSConnWrapper.QueueSubscribe"></a>
-### func \(\*NATSConnWrapper\) QueueSubscribe
+### func \(\*NATSConnWrapper\) [QueueSubscribe](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connect_wrapper.go#L81-L84>)
 
 ```go
 func (n *NATSConnWrapper) QueueSubscribe(subject, queue string, handler nats.MsgHandler) (*nats.Subscription, error)
@@ -353,7 +353,7 @@ func (n *NATSConnWrapper) QueueSubscribe(subject, queue string, handler nats.Msg
 QueueSubscribe wraps the QueueSubscribe method of nats.Conn.
 
 <a name="NATSConnWrapper.Subscribe"></a>
-### func \(\*NATSConnWrapper\) Subscribe
+### func \(\*NATSConnWrapper\) [Subscribe](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connect_wrapper.go#L73-L76>)
 
 ```go
 func (n *NATSConnWrapper) Subscribe(subject string, handler nats.MsgHandler) (*nats.Subscription, error)
@@ -362,7 +362,7 @@ func (n *NATSConnWrapper) Subscribe(subject string, handler nats.MsgHandler) (*n
 Subscribe wraps the Subscribe method of nats.Conn.
 
 <a name="NATSConnector"></a>
-## type NATSConnector
+## type [NATSConnector](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connect_wrapper.go#L26-L33>)
 
 NATSConnector defines an interface for managing a NATS connection.
 
@@ -378,7 +378,7 @@ type NATSConnector interface {
 ```
 
 <a name="Options"></a>
-## type Options
+## type [Options](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/types.go#L45-L54>)
 
 Options holds the configuration for connecting to a NATS server, including connection details and authentication settings.
 
@@ -396,7 +396,7 @@ type Options struct {
 ```
 
 <a name="RequestReplyOptions"></a>
-## type RequestReplyOptions
+## type [RequestReplyOptions](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L71-L78>)
 
 RequestReplyOptions configures request/reply behavior.
 

@@ -486,6 +486,20 @@ func (mr *MockKeyWatcherMockRecorder) Context() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Context", reflect.TypeOf((*MockKeyWatcher)(nil).Context))
 }
 
+// Error mocks base method.
+func (m *MockKeyWatcher) Error() <-chan error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Error")
+	ret0, _ := ret[0].(<-chan error)
+	return ret0
+}
+
+// Error indicates an expected call of Error.
+func (mr *MockKeyWatcherMockRecorder) Error() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Error", reflect.TypeOf((*MockKeyWatcher)(nil).Error))
+}
+
 // Stop mocks base method.
 func (m *MockKeyWatcher) Stop() error {
 	m.ctrl.T.Helper()
