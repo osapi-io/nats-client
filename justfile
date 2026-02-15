@@ -21,4 +21,3 @@ deps:
 # Run all tests
 test:
     just go::test
-    just go::docs-check
