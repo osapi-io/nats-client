@@ -267,7 +267,7 @@ func (s *ConnectPublicTestSuite) TestGetJetStreamCalledInConnect() {
 	originalGetJetStream := client.GetJetStream
 	defer func() { client.GetJetStream = originalGetJetStream }()
 
-	client.GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
+	client.GetJetStream = func(_ *nats.Conn) (jetstream.JetStream, error) {
 		return nil, errors.New("simulated JetStream error")
 	}
 
