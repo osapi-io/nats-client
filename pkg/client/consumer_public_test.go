@@ -160,7 +160,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 
 	testCases := []testCase{
 		{
-			name: "successful_message_processing_with_ack",
+			name: "successful message processing with ack",
 			setupMocks: func(ctx context.Context) {
 				msgCh := NewMessageChannel()
 				mockMsg := mocks.NewMockMsg(s.mockCtrl)
@@ -206,7 +206,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			contextTimeout: 100 * time.Millisecond,
 		},
 		{
-			name: "message_processing_error_no_ack",
+			name: "message processing error no ack",
 			setupMocks: func(ctx context.Context) {
 				msgCh := NewMessageChannel()
 				mockMsg := mocks.NewMockMsg(s.mockCtrl)
@@ -247,7 +247,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			contextTimeout: 100 * time.Millisecond,
 		},
 		{
-			name: "ack_error_handling",
+			name: "ack error handling",
 			setupMocks: func(ctx context.Context) {
 				msgCh := NewMessageChannel()
 				mockMsg := mocks.NewMockMsg(s.mockCtrl)
@@ -287,7 +287,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			contextTimeout: 100 * time.Millisecond,
 		},
 		{
-			name: "fetch_error_non_timeout",
+			name: "fetch error non timeout",
 			setupMocks: func(ctx context.Context) {
 				s.mockExt.EXPECT().
 					Consumer(ctx, "TEST-STREAM", "test-consumer").
@@ -305,7 +305,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			contextTimeout: 100 * time.Millisecond,
 		},
 		{
-			name: "context_cancellation_during_fetch",
+			name: "context cancellation during fetch",
 			setupMocks: func(ctx context.Context) {
 				s.mockExt.EXPECT().
 					Consumer(ctx, "TEST-STREAM", "test-consumer").
@@ -327,7 +327,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			expectedError:  "context",
 		},
 		{
-			name: "handler_panic_recovery",
+			name: "handler panic recovery",
 			setupMocks: func(ctx context.Context) {
 				s.mockExt.EXPECT().
 					Consumer(ctx, "TEST-STREAM", "test-consumer").
@@ -370,7 +370,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			contextTimeout: 200 * time.Millisecond, // Longer timeout to allow multiple panic recoveries
 		},
 		{
-			name: "exact_timeout_error_handling",
+			name: "exact timeout error handling",
 			setupMocks: func(ctx context.Context) {
 				s.mockExt.EXPECT().
 					Consumer(ctx, "TEST-STREAM", "test-consumer").
@@ -388,7 +388,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			contextTimeout: 100 * time.Millisecond,
 		},
 		{
-			name: "non_timeout_fetch_error_with_logging",
+			name: "non timeout fetch error with logging",
 			setupMocks: func(ctx context.Context) {
 				s.mockExt.EXPECT().
 					Consumer(ctx, "TEST-STREAM", "test-consumer").
@@ -415,7 +415,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			contextTimeout: 200 * time.Millisecond, // Longer timeout to allow error logging
 		},
 		{
-			name: "message_processing_error_with_logging",
+			name: "message processing error with logging",
 			setupMocks: func(ctx context.Context) {
 				s.mockExt.EXPECT().
 					Consumer(ctx, "TEST-STREAM", "test-consumer").
@@ -458,7 +458,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			contextTimeout: 200 * time.Millisecond, // Longer timeout to allow multiple error logs
 		},
 		{
-			name: "ack_error_with_logging",
+			name: "ack error with logging",
 			setupMocks: func(ctx context.Context) {
 				s.mockExt.EXPECT().
 					Consumer(ctx, "TEST-STREAM", "test-consumer").
