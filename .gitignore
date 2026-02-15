@@ -1,8 +1,6 @@
-cobertura.xml
-cover.out
+.coverage/
 dist/
 .envrc
+.just/
 .nats/jetstream/
-result.xml
 test/vendor/
-.task/
