@@ -355,26 +355,27 @@ func (s *KVCreatePublicTestSuite) TestPublishAndWaitKV() {
 			var opts *client.RequestReplyOptions
 
 			// Handle special test cases
-			if tc.name == "nil options uses defaults" {
+			switch tc.name {
+			case "nil options uses defaults":
 				opts = nil // Test nil options path
-			} else if tc.name == "empty RequestID gets generated" {
+			case "empty RequestID gets generated":
 				opts = &client.RequestReplyOptions{
 					Timeout:      100 * time.Millisecond,
 					PollInterval: 10 * time.Millisecond,
 					// RequestID left empty to test generation
 				}
-			} else {
+			default:
 				opts = &client.RequestReplyOptions{
 					RequestID:    tc.requestID,
 					Timeout:      100 * time.Millisecond,
 					PollInterval: 10 * time.Millisecond,
 				}
 
-				// Handle timeout and cancellation test cases
-				if tc.name == "timeout waiting for response" {
+				switch tc.name {
+				case "timeout waiting for response":
 					// Use a very short timeout to trigger timeout quickly
 					opts.Timeout = 20 * time.Millisecond
-				} else if tc.name == "context cancelled during wait" {
+				case "context cancelled during wait":
 					// Create a context that gets cancelled immediately
 					var cancel context.CancelFunc
 					ctx, cancel = context.WithCancel(ctx)
@@ -636,19 +637,20 @@ func (s *KVCreatePublicTestSuite) TestWatchKV() {
 			ctx, cancel := context.WithCancel(context.Background())
 
 			// For context cancellation tests, cancel after a short delay
-			if tc.name == "goroutine stops on context cancellation" {
+			switch tc.name {
+			case "goroutine stops on context cancellation":
 				go func() {
 					time.Sleep(10 * time.Millisecond)
 					cancel()
 				}()
-			} else if tc.name == "context cancelled while forwarding entry" {
+			case "context cancelled while forwarding entry":
 				// Cancel context after giving time for goroutine to receive entry
 				// but before we read from output channel (creating backpressure)
 				go func() {
 					time.Sleep(5 * time.Millisecond)
 					cancel()
 				}()
-			} else {
+			default:
 				defer cancel()
 			}
 

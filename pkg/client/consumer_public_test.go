@@ -101,7 +101,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessagesConsumerError() {
 	consumerName := "test-consumer"
 	expectedError := errors.New("consumer not found")
 
-	handler := func(msg jetstream.Msg) error {
+	handler := func(_ jetstream.Msg) error {
 		return nil
 	}
 
@@ -130,7 +130,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessagesDefaultOptions() {
 	consumerName := "test-consumer"
 	expectedError := errors.New("consumer not found")
 
-	handler := func(msg jetstream.Msg) error {
+	handler := func(_ jetstream.Msg) error {
 		return nil
 	}
 
@@ -173,7 +173,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				firstCall := true
 				s.mockConsumer.EXPECT().
 					Fetch(1).
-					DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+					DoAndReturn(func(_ int, _ ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
 						if firstCall {
 							firstCall = false
 							s.mockMessageBatch.EXPECT().
@@ -196,7 +196,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				mockMsg.EXPECT().Subject().Return("test.subject").AnyTimes()
 				mockMsg.EXPECT().Ack().Return(nil)
 			},
-			handler: func(msg jetstream.Msg) error {
+			handler: func(_ jetstream.Msg) error {
 				return nil
 			},
 			opts: &client.ConsumeOptions{
@@ -219,7 +219,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				firstCall := true
 				s.mockConsumer.EXPECT().
 					Fetch(1).
-					DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+					DoAndReturn(func(_ int, _ ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
 						if firstCall {
 							firstCall = false
 							s.mockMessageBatch.EXPECT().
@@ -240,7 +240,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				mockMsg.EXPECT().Subject().Return("test.subject").AnyTimes()
 				// No Ack() call expected when handler returns error
 			},
-			handler: func(msg jetstream.Msg) error {
+			handler: func(_ jetstream.Msg) error {
 				return errors.New("processing error")
 			},
 			opts:           &client.ConsumeOptions{MaxInFlight: 10},
@@ -260,7 +260,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				firstCall := true
 				s.mockConsumer.EXPECT().
 					Fetch(1).
-					DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+					DoAndReturn(func(_ int, _ ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
 						if firstCall {
 							firstCall = false
 							s.mockMessageBatch.EXPECT().
@@ -281,7 +281,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				mockMsg.EXPECT().Subject().Return("test.subject").AnyTimes()
 				mockMsg.EXPECT().Ack().Return(errors.New("ack failed")).MaxTimes(1)
 			},
-			handler: func(msg jetstream.Msg) error {
+			handler: func(_ jetstream.Msg) error {
 				return nil
 			},
 			contextTimeout: 100 * time.Millisecond,
@@ -299,7 +299,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 					Return(nil, errors.New("connection error")).
 					AnyTimes()
 			},
-			handler: func(msg jetstream.Msg) error {
+			handler: func(_ jetstream.Msg) error {
 				return nil
 			},
 			contextTimeout: 100 * time.Millisecond,
@@ -314,13 +314,13 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				// Block on fetch until context is cancelled
 				s.mockConsumer.EXPECT().
 					Fetch(1).
-					DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+					DoAndReturn(func(_ int, _ ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
 						<-ctx.Done()
 						return nil, ctx.Err()
 					}).
 					MaxTimes(1)
 			},
-			handler: func(msg jetstream.Msg) error {
+			handler: func(_ jetstream.Msg) error {
 				return nil
 			},
 			contextTimeout: 50 * time.Millisecond,
@@ -337,7 +337,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				callCount := 0
 				s.mockConsumer.EXPECT().
 					Fetch(1).
-					DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+					DoAndReturn(func(_ int, _ ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
 						callCount++
 						if callCount <= 3 {
 							// Return messages that will cause panics in handler
@@ -364,7 +364,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 					}).
 					AnyTimes()
 			},
-			handler: func(msg jetstream.Msg) error {
+			handler: func(_ jetstream.Msg) error {
 				panic("handler panic")
 			},
 			contextTimeout: 200 * time.Millisecond, // Longer timeout to allow multiple panic recoveries
@@ -382,7 +382,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 					Return(nil, errors.New("nats: timeout")).
 					AnyTimes()
 			},
-			handler: func(msg jetstream.Msg) error {
+			handler: func(_ jetstream.Msg) error {
 				return nil
 			},
 			contextTimeout: 100 * time.Millisecond,
@@ -398,7 +398,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				callCount := 0
 				s.mockConsumer.EXPECT().
 					Fetch(1).
-					DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+					DoAndReturn(func(_ int, _ ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
 						callCount++
 						if callCount <= 3 {
 							// Return non-timeout error multiple times to ensure logging path is hit
@@ -409,7 +409,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 					}).
 					AnyTimes()
 			},
-			handler: func(msg jetstream.Msg) error {
+			handler: func(_ jetstream.Msg) error {
 				return nil
 			},
 			contextTimeout: 200 * time.Millisecond, // Longer timeout to allow error logging
@@ -425,7 +425,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				callCount := 0
 				s.mockConsumer.EXPECT().
 					Fetch(1).
-					DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+					DoAndReturn(func(_ int, _ ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
 						callCount++
 						if callCount <= 3 {
 							// Return messages that will cause processing errors
@@ -452,7 +452,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 					}).
 					AnyTimes()
 			},
-			handler: func(msg jetstream.Msg) error {
+			handler: func(_ jetstream.Msg) error {
 				return errors.New("processing failed")
 			},
 			contextTimeout: 200 * time.Millisecond, // Longer timeout to allow multiple error logs
@@ -468,7 +468,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				callCount := 0
 				s.mockConsumer.EXPECT().
 					Fetch(1).
-					DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+					DoAndReturn(func(_ int, _ ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
 						callCount++
 						if callCount <= 3 {
 							// Return messages that will cause ack errors
@@ -495,7 +495,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 					}).
 					AnyTimes()
 			},
-			handler: func(msg jetstream.Msg) error {
+			handler: func(_ jetstream.Msg) error {
 				return nil
 			},
 			contextTimeout: 200 * time.Millisecond, // Longer timeout to allow multiple error logs
@@ -551,7 +551,7 @@ func (s *ConsumerPublicTestSuite) TestConsumerErrorPaths() {
 		Return(nil, errors.New("nats: timeout")).
 		AnyTimes()
 
-	handler := func(msg jetstream.Msg) error {
+	handler := func(_ jetstream.Msg) error {
 		return nil
 	}
 
@@ -582,7 +582,7 @@ func (s *ConsumerPublicTestSuite) TestMessageProcessingErrorLogging() {
 	// First fetch returns a message that will cause handler to fail
 	s.mockConsumer.EXPECT().
 		Fetch(1).
-		DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+		DoAndReturn(func(_ int, _ ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
 			// Send message and close immediately
 			go func() {
 				msgCh.Send(mockMsg)
@@ -599,7 +599,7 @@ func (s *ConsumerPublicTestSuite) TestMessageProcessingErrorLogging() {
 		AnyTimes()
 
 	// Handler that ALWAYS returns an error
-	handler := func(msg jetstream.Msg) error {
+	handler := func(_ jetstream.Msg) error {
 		return errors.New("processing always fails")
 	}
 
@@ -630,7 +630,7 @@ func (s *ConsumerPublicTestSuite) TestAckErrorLogging() {
 	// First fetch returns a message
 	s.mockConsumer.EXPECT().
 		Fetch(1).
-		DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+		DoAndReturn(func(_ int, _ ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
 			go func() {
 				msgCh.Send(mockMsg)
 				msgCh.Close()
@@ -646,7 +646,7 @@ func (s *ConsumerPublicTestSuite) TestAckErrorLogging() {
 		AnyTimes()
 
 	// Handler that succeeds (so ack gets called)
-	handler := func(msg jetstream.Msg) error {
+	handler := func(_ jetstream.Msg) error {
 		return nil // Success, so ack will be called
 	}
 
@@ -677,7 +677,7 @@ func (s *ConsumerPublicTestSuite) TestPanicRecoveryLogging() {
 	// First fetch returns a message
 	s.mockConsumer.EXPECT().
 		Fetch(1).
-		DoAndReturn(func(n int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+		DoAndReturn(func(_ int, _ ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
 			go func() {
 				msgCh.Send(mockMsg)
 				msgCh.Close()
@@ -693,7 +693,7 @@ func (s *ConsumerPublicTestSuite) TestPanicRecoveryLogging() {
 		AnyTimes()
 
 	// Handler that ALWAYS panics
-	handler := func(msg jetstream.Msg) error {
+	handler := func(_ jetstream.Msg) error {
 		panic("test panic for coverage")
 	}
 

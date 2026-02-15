@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+// Package client provides a NATS JetStream client with connection management,
+// KV stores, KV-backed streams, and consumer helpers.
 package client
 
 import (

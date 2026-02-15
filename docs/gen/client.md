@@ -6,6 +6,8 @@
 import "github.com/osapi-io/nats-client/pkg/client"
 ```
 
+Package client provides a NATS JetStream client with connection management, KV stores, KV\-backed streams, and consumer helpers.
+
 ## Index
 
 - [Variables](<#variables>)
@@ -14,17 +16,33 @@ import "github.com/osapi-io/nats-client/pkg/client"
 - [type Client](<#Client>)
   - [func New\(logger \*slog.Logger, opts \*Options\) \*Client](<#New>)
   - [func \(c \*Client\) Connect\(\) error](<#Client.Connect>)
+  - [func \(c \*Client\) ConsumeMessages\(ctx context.Context, streamName string, consumerName string, handler JetStreamMessageHandler, opts \*ConsumeOptions\) error](<#Client.ConsumeMessages>)
   - [func \(c \*Client\) CreateKVBucket\(bucketName string\) \(nats.KeyValue, error\)](<#Client.CreateKVBucket>)
-  - [func \(c \*Client\) CreateOrUpdateJetStream\(ctx context.Context, streamConfigs ...\*StreamConfig\) error](<#Client.CreateOrUpdateJetStream>)
-- [type ConsumerConfig](<#ConsumerConfig>)
+  - [func \(c \*Client\) CreateKVBucketWithConfig\(config \*nats.KeyValueConfig\) \(nats.KeyValue, error\)](<#Client.CreateKVBucketWithConfig>)
+  - [func \(c \*Client\) CreateOrUpdateConsumerWithConfig\(ctx context.Context, streamName string, consumerConfig jetstream.ConsumerConfig\) error](<#Client.CreateOrUpdateConsumerWithConfig>)
+  - [func \(c \*Client\) CreateOrUpdateJetStreamWithConfig\(ctx context.Context, streamConfig \*nats.StreamConfig, consumerConfigs ...jetstream.ConsumerConfig\) error](<#Client.CreateOrUpdateJetStreamWithConfig>)
+  - [func \(c \*Client\) CreateOrUpdateStreamWithConfig\(\_ context.Context, streamConfig \*nats.StreamConfig\) error](<#Client.CreateOrUpdateStreamWithConfig>)
+  - [func \(c \*Client\) GetStreamInfo\(\_ context.Context, streamName string\) \(\*nats.StreamInfo, error\)](<#Client.GetStreamInfo>)
+  - [func \(c \*Client\) KVDelete\(bucket string, key string\) error](<#Client.KVDelete>)
+  - [func \(c \*Client\) KVGet\(bucket string, key string\) \(\[\]byte, error\)](<#Client.KVGet>)
+  - [func \(c \*Client\) KVKeys\(bucket string\) \(\[\]string, error\)](<#Client.KVKeys>)
+  - [func \(c \*Client\) KVPut\(bucket string, key string, value \[\]byte\) error](<#Client.KVPut>)
+  - [func \(c \*Client\) KVPutAndPublish\(ctx context.Context, kvBucket string, key string, data \[\]byte, notifySubject string\) \(uint64, error\)](<#Client.KVPutAndPublish>)
+  - [func \(c \*Client\) Publish\(ctx context.Context, subject string, data \[\]byte\) error](<#Client.Publish>)
+  - [func \(c \*Client\) PublishAndWaitKV\(ctx context.Context, subject string, data \[\]byte, kvBucket nats.KeyValue, opts \*RequestReplyOptions\) \(\[\]byte, error\)](<#Client.PublishAndWaitKV>)
+  - [func \(c \*Client\) WatchKV\(ctx context.Context, kv nats.KeyValue, pattern string\) \(\<\-chan nats.KeyValueEntry, error\)](<#Client.WatchKV>)
+- [type ConsumeOptions](<#ConsumeOptions>)
+- [type JetStreamMessageHandler](<#JetStreamMessageHandler>)
 - [type NATSConnWrapper](<#NATSConnWrapper>)
   - [func \(n \*NATSConnWrapper\) Close\(\)](<#NATSConnWrapper.Close>)
   - [func \(n \*NATSConnWrapper\) Connect\(url string, opts ...nats.Option\) \(\*nats.Conn, error\)](<#NATSConnWrapper.Connect>)
   - [func \(n \*NATSConnWrapper\) ConnectedUrl\(\) string](<#NATSConnWrapper.ConnectedUrl>)
   - [func \(n \*NATSConnWrapper\) JetStream\(opts ...nats.JSOpt\) \(nats.JetStreamContext, error\)](<#NATSConnWrapper.JetStream>)
+  - [func \(n \*NATSConnWrapper\) QueueSubscribe\(subject, queue string, handler nats.MsgHandler\) \(\*nats.Subscription, error\)](<#NATSConnWrapper.QueueSubscribe>)
+  - [func \(n \*NATSConnWrapper\) Subscribe\(subject string, handler nats.MsgHandler\) \(\*nats.Subscription, error\)](<#NATSConnWrapper.Subscribe>)
 - [type NATSConnector](<#NATSConnector>)
 - [type Options](<#Options>)
-- [type StreamConfig](<#StreamConfig>)
+- [type RequestReplyOptions](<#RequestReplyOptions>)
 
 
 ## Variables
@@ -118,6 +136,15 @@ func (c *Client) Connect() error
 
 Connect establishes the connection to the NATS server and JetStream context. This method returns an error if there are any issues during connection.
 
+<a name="Client.ConsumeMessages"></a>
+### func \(\*Client\) ConsumeMessages
+
+```go
+func (c *Client) ConsumeMessages(ctx context.Context, streamName string, consumerName string, handler JetStreamMessageHandler, opts *ConsumeOptions) error
+```
+
+ConsumeMessages subscribes to a JetStream consumer and processes messages with the provided handler. This provides a clean abstraction for message consumption with proper context handling.
+
 <a name="Client.CreateKVBucket"></a>
 ### func \(\*Client\) CreateKVBucket
 
@@ -127,26 +154,146 @@ func (c *Client) CreateKVBucket(bucketName string) (nats.KeyValue, error)
 
 CreateKVBucket ensures a KV bucket exists and returns the KeyValue interface.
 
-<a name="Client.CreateOrUpdateJetStream"></a>
-### func \(\*Client\) CreateOrUpdateJetStream
+<a name="Client.CreateKVBucketWithConfig"></a>
+### func \(\*Client\) CreateKVBucketWithConfig
 
 ```go
-func (c *Client) CreateOrUpdateJetStream(ctx context.Context, streamConfigs ...*StreamConfig) error
+func (c *Client) CreateKVBucketWithConfig(config *nats.KeyValueConfig) (nats.KeyValue, error)
 ```
 
-CreateOrUpdateJetStream configures JetStream streams and consumers.
+CreateKVBucketWithConfig ensures a KV bucket exists with the provided configuration and returns the KeyValue interface.
 
-<a name="ConsumerConfig"></a>
-## type ConsumerConfig
-
-ConsumerConfig extends nats.ConsumerConfig to include custom settings for an embedded NATS server consumer configuration.
+<a name="Client.CreateOrUpdateConsumerWithConfig"></a>
+### func \(\*Client\) CreateOrUpdateConsumerWithConfig
 
 ```go
-type ConsumerConfig struct {
-    // ConsumerConfig embeds nats.ConsumerConfig, which includes configurations
-    // such as durable name, acknowledgment policy, max deliver attempts, and more.
-    *jetstream.ConsumerConfig
+func (c *Client) CreateOrUpdateConsumerWithConfig(ctx context.Context, streamName string, consumerConfig jetstream.ConsumerConfig) error
+```
+
+CreateOrUpdateConsumerWithConfig creates or updates a JetStream consumer with the provided configuration.
+
+<a name="Client.CreateOrUpdateJetStreamWithConfig"></a>
+### func \(\*Client\) CreateOrUpdateJetStreamWithConfig
+
+```go
+func (c *Client) CreateOrUpdateJetStreamWithConfig(ctx context.Context, streamConfig *nats.StreamConfig, consumerConfigs ...jetstream.ConsumerConfig) error
+```
+
+CreateOrUpdateJetStreamWithConfig configures a JetStream stream and its consumers. This is a convenience method that creates both stream and consumers in one call.
+
+<a name="Client.CreateOrUpdateStreamWithConfig"></a>
+### func \(\*Client\) CreateOrUpdateStreamWithConfig
+
+```go
+func (c *Client) CreateOrUpdateStreamWithConfig(_ context.Context, streamConfig *nats.StreamConfig) error
+```
+
+CreateOrUpdateStreamWithConfig creates or updates a JetStream stream with the provided configuration.
+
+<a name="Client.GetStreamInfo"></a>
+### func \(\*Client\) GetStreamInfo
+
+```go
+func (c *Client) GetStreamInfo(_ context.Context, streamName string) (*nats.StreamInfo, error)
+```
+
+GetStreamInfo retrieves information about a JetStream stream.
+
+<a name="Client.KVDelete"></a>
+### func \(\*Client\) KVDelete
+
+```go
+func (c *Client) KVDelete(bucket string, key string) error
+```
+
+KVDelete removes a key from the specified KV bucket.
+
+<a name="Client.KVGet"></a>
+### func \(\*Client\) KVGet
+
+```go
+func (c *Client) KVGet(bucket string, key string) ([]byte, error)
+```
+
+KVGet retrieves a value from the specified KV bucket.
+
+<a name="Client.KVKeys"></a>
+### func \(\*Client\) KVKeys
+
+```go
+func (c *Client) KVKeys(bucket string) ([]string, error)
+```
+
+KVKeys returns all keys from the specified KV bucket.
+
+<a name="Client.KVPut"></a>
+### func \(\*Client\) KVPut
+
+```go
+func (c *Client) KVPut(bucket string, key string, value []byte) error
+```
+
+KVPut stores a value in the specified KV bucket.
+
+<a name="Client.KVPutAndPublish"></a>
+### func \(\*Client\) KVPutAndPublish
+
+```go
+func (c *Client) KVPutAndPublish(ctx context.Context, kvBucket string, key string, data []byte, notifySubject string) (uint64, error)
+```
+
+KVPutAndPublish implements the pattern of storing data in KV and sending a notification via stream. This is useful for workflow systems where you want persistent storage \+ event notification.
+
+<a name="Client.Publish"></a>
+### func \(\*Client\) Publish
+
+```go
+func (c *Client) Publish(ctx context.Context, subject string, data []byte) error
+```
+
+Publish publishes a message to a JetStream subject.
+
+<a name="Client.PublishAndWaitKV"></a>
+### func \(\*Client\) PublishAndWaitKV
+
+```go
+func (c *Client) PublishAndWaitKV(ctx context.Context, subject string, data []byte, kvBucket nats.KeyValue, opts *RequestReplyOptions) ([]byte, error)
+```
+
+PublishAndWaitKV publishes a message and waits for a response in a KV bucket. This implements an async request/reply pattern using KV for response storage.
+
+<a name="Client.WatchKV"></a>
+### func \(\*Client\) WatchKV
+
+```go
+func (c *Client) WatchKV(ctx context.Context, kv nats.KeyValue, pattern string) (<-chan nats.KeyValueEntry, error)
+```
+
+WatchKV watches a KV bucket for responses matching a pattern. This is useful for collecting responses from multiple workers.
+
+Note: Test coverage for this function is intentionally limited to error paths and setup logic. The goroutine's event forwarding logic is not covered due to the complexity of testing async behavior without introducing flaky tests.
+
+<a name="ConsumeOptions"></a>
+## type ConsumeOptions
+
+ConsumeOptions configures message consumption behavior.
+
+```go
+type ConsumeOptions struct {
+    // QueueGroup for load balancing across multiple consumers (optional)
+    QueueGroup string
+    // MaxInFlight limits the number of unacknowledged messages
+    MaxInFlight int
 }
+```
+
+<a name="JetStreamMessageHandler"></a>
+## type JetStreamMessageHandler
+
+JetStreamMessageHandler defines the signature for JetStream message handling functions.
+
+```go
+type JetStreamMessageHandler func(msg jetstream.Msg) error
 ```
 
 <a name="NATSConnWrapper"></a>
@@ -196,6 +343,24 @@ func (n *NATSConnWrapper) JetStream(opts ...nats.JSOpt) (nats.JetStreamContext, 
 
 JetStream wraps the JetStream method of nats.Conn.
 
+<a name="NATSConnWrapper.QueueSubscribe"></a>
+### func \(\*NATSConnWrapper\) QueueSubscribe
+
+```go
+func (n *NATSConnWrapper) QueueSubscribe(subject, queue string, handler nats.MsgHandler) (*nats.Subscription, error)
+```
+
+QueueSubscribe wraps the QueueSubscribe method of nats.Conn.
+
+<a name="NATSConnWrapper.Subscribe"></a>
+### func \(\*NATSConnWrapper\) Subscribe
+
+```go
+func (n *NATSConnWrapper) Subscribe(subject string, handler nats.MsgHandler) (*nats.Subscription, error)
+```
+
+Subscribe wraps the Subscribe method of nats.Conn.
+
 <a name="NATSConnector"></a>
 ## type NATSConnector
 
@@ -207,6 +372,8 @@ type NATSConnector interface {
     Close()
     ConnectedUrl() string
     Connect(url string, opts ...nats.Option) (*nats.Conn, error)
+    Subscribe(subject string, handler nats.MsgHandler) (*nats.Subscription, error)
+    QueueSubscribe(subject, queue string, handler nats.MsgHandler) (*nats.Subscription, error)
 }
 ```
 
@@ -228,20 +395,19 @@ type Options struct {
 }
 ```
 
-<a name="StreamConfig"></a>
-## type StreamConfig
+<a name="RequestReplyOptions"></a>
+## type RequestReplyOptions
 
-StreamConfig extends nats.StreamConfig to include custom settings for an embedded NATS server stream configuration.
+RequestReplyOptions configures request/reply behavior.
 
 ```go
-type StreamConfig struct {
-    // StreamConfig embeds nats.StreamConfig, which defines the core stream settings
-    // such as name, subjects, storage type, and replication factor.
-    *nats.StreamConfig
-
-    // Consumers represents the list of consumer configurations associated with this stream.
-    // Each consumer defines how messages from the stream are consumed and acknowledged.
-    Consumers []*ConsumerConfig
+type RequestReplyOptions struct {
+    // RequestID to use (default: generated UUID)
+    RequestID string
+    // Timeout for waiting for response (default: 30s)
+    Timeout time.Duration
+    // PollInterval for checking KV store (default: 100ms)
+    PollInterval time.Duration
 }
 ```
 
