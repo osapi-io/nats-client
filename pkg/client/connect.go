@@ -83,10 +83,6 @@ func (c *Client) Connect() error {
 			return fmt.Errorf("failed to get public key from nkey: %w", pubErr)
 		}
 
-		// This code isn't covered in unit tests because the signing function inside
-		// nats.Nkey() is only executed when the client attempts to authenticate with
-		// a live NATS server. Since unit tests don't spin up a real server, this
-		// callback is never triggered during testing.
 		opts = append(opts, nats.Nkey(pubKey, func(nonce []byte) ([]byte, error) {
 			return kp.Sign(nonce)
 		}))

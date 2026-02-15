@@ -132,6 +132,52 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			expectedErr: "",
 		},
 		{
+			name:     "NKeyAuth signing callback invokes KeyPair Sign",
+			authType: client.NKeyAuth,
+			mockSetup: func() {
+				mockKP := mocks.NewMockKeyPair(s.mockCtrl)
+				mockKP.EXPECT().
+					PublicKey().
+					Return("test-pub-key", nil).
+					Times(1)
+				mockKP.EXPECT().
+					Sign([]byte("test-nonce")).
+					Return([]byte("signed-data"), nil).
+					Times(1)
+
+				s.client.KeyPair = mockKP
+
+				tempDir := s.T().TempDir()
+				tempFile := fmt.Sprintf("%s/test.nkey", tempDir)
+
+				validSeed := []byte("SUAJT6TKTZNOL3IR2G6FTLZOKM2YSJVD7BL4TUSZCAMHISXNN2DHHXTS4Q")
+				err := os.WriteFile(tempFile, validSeed, 0o644)
+				require.NoError(s.T(), err)
+
+				s.client.Opts.Auth.NKeyFile = tempFile
+
+				s.mockNATS.EXPECT().
+					Connect(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ string, opts ...nats.Option) (*nats.Conn, error) {
+						natsOpts := &nats.Options{}
+						for _, opt := range opts {
+							err := opt(natsOpts)
+							require.NoError(s.T(), err)
+						}
+						sig, sigErr := natsOpts.SignatureCB([]byte("test-nonce"))
+						require.NoError(s.T(), sigErr)
+						require.Equal(s.T(), []byte("signed-data"), sig)
+						return &nats.Conn{}, nil
+					}).
+					Times(1)
+				s.mockNATS.EXPECT().
+					JetStream(gomock.Any()).
+					Return(s.mockJS, nil).
+					Times(1)
+			},
+			expectedErr: "",
+		},
+		{
 			name:     "fails to read NKey file",
 			authType: client.NKeyAuth,
 			mockSetup: func() {
