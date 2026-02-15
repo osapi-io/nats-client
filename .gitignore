@@ -1,6 +1,5 @@
 .coverage/
 dist/
-.envrc
 .just/
 .nats/jetstream/
 test/vendor/
