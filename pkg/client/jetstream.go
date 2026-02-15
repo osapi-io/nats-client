@@ -32,7 +32,7 @@ import (
 
 // CreateOrUpdateStreamWithConfig creates or updates a JetStream stream with the provided configuration.
 func (c *Client) CreateOrUpdateStreamWithConfig(
-	ctx context.Context,
+	_ context.Context,
 	streamConfig *nats.StreamConfig,
 ) error {
 	c.logger.Debug(
@@ -116,7 +116,7 @@ func (c *Client) createOrUpdateStream(
 
 // GetStreamInfo retrieves information about a JetStream stream.
 func (c *Client) GetStreamInfo(
-	ctx context.Context,
+	_ context.Context,
 	streamName string,
 ) (*nats.StreamInfo, error) {
 	// Use the native JetStream API to get stream info
