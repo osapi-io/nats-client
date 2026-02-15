@@ -21,36 +21,36 @@ See the [examples][] section for additional use cases.
 
 See the [generated documentation][] for details on available packages and functions.
 
-## Testing
+## Development
 
-Enable [Remote Taskfile][] feature.
+Fetch shared justfiles:
 
 ```bash
-export TASK_X_REMOTE_TASKFILES=1
+just fetch
 ```
 
 Install dependencies:
 
 ```bash
-$ task go:deps
+just deps
 ```
 
-To execute tests:
+Run all tests:
 
 ```bash
-$ task go:test
+just test
 ```
 
 Auto format code:
 
 ```bash
-$ task go:fmt
+just go::fmt
 ```
 
-List helpful targets:
+List available recipes:
 
 ```bash
-$ task
+just --list
 ```
 
 ## License
@@ -59,5 +59,4 @@ The [MIT][] License.
 
 [examples]: examples/
 [generated documentation]: docs/gen/
-[Remote Taskfile]: https://taskfile.dev/experiments/remote-taskfiles/
 [MIT]: LICENSE
