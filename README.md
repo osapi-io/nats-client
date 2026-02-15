@@ -23,37 +23,11 @@ See the [examples][] section for additional use cases.
 
 See the [generated documentation][] for details on available packages and functions.
 
-## Development
+## Contributing
 
-Fetch shared justfiles:
-
-```bash
-just fetch
-```
-
-Install dependencies:
-
-```bash
-just deps
-```
-
-Run all tests:
-
-```bash
-just test
-```
-
-Auto format code:
-
-```bash
-just go::fmt
-```
-
-List available recipes:
-
-```bash
-just --list
-```
+See the [Development](docs/development.md) guide for prerequisites, setup,
+and conventions. See the [Contributing](docs/contributing.md) guide before
+submitting a PR.
 
 ## License
 

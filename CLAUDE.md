@@ -6,18 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Go client library for NATS JetStream providing connection management, JetStream contexts, KV stores, KV-backed streams, and consumer helpers. Used by osapi-io projects (linked via `replace` in consuming project's `go.mod`).
 
-## Development Commands
+## Development Reference
+
+For setup, prerequisites, and contributing guidelines:
+
+- @docs/development.md - Prerequisites, setup, code style, testing, commits
+- @docs/contributing.md - PR workflow and contribution guidelines
+
+## Quick Reference
 
 ```bash
-just fetch             # Fetch shared justfiles (run once or to update)
-just deps              # Install all dependencies (bats)
-just test              # Run all tests (lint + unit + coverage + bats)
-just go::unit          # Run unit tests only
-just go::vet           # Run golangci-lint
-just go::fmt           # Auto-format (gofumpt + golines)
-just go::fmt-check     # Check formatting without modifying
-just go::unit-cov      # Generate coverage report
-go test -run TestName -v ./pkg/client/...  # Run a single test
+just fetch / just deps / just test / just go::unit / just go::vet / just go::fmt
 ```
 
 ## Package Structure
