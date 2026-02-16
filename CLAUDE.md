@@ -62,10 +62,21 @@ func FunctionName(
 
 golangci-lint with: errcheck, errname, goimports, govet, prealloc, predeclared, revive, staticcheck. Generated files (`*.gen.go`, `*.pb.go`) are excluded from formatting.
 
+### Branching
+
+See @docs/development.md#branching for full conventions.
+
+When committing changes via `/commit`, create a feature branch first if
+currently on `main`. Branch names use the pattern `type/short-description`
+(e.g., `feat/add-dns-retry`, `fix/memory-leak`, `docs/update-readme`).
+
 ### Commit Messages
+
+See @docs/development.md#commit-messages for full conventions.
 
 Follow [Conventional Commits](https://www.conventionalcommits.org/) with the
 50/72 rule. Format: `type(scope): description`.
 
 When committing via Claude Code, end with:
+- `🤖 Generated with [Claude Code](https://claude.ai/code)`
 - `Co-Authored-By: Claude <noreply@anthropic.com>`
