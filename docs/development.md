@@ -66,6 +66,21 @@ go test -run TestName -v ./pkg/client/...  # Run a single test
 - Use `testify/suite` with table-driven patterns.
 - Use `golang/mock` for mocking interfaces.
 
+## Branching
+
+All changes should be developed on feature branches. Create a branch from
+`main` using the naming convention `type/short-description`, where `type`
+matches the [Conventional Commits][] type:
+
+- `feat/add-retry-logic`
+- `fix/null-pointer-crash`
+- `docs/update-api-reference`
+- `refactor/simplify-handler`
+- `chore/update-dependencies`
+
+When using Claude Code's `/commit` command, a branch will be created
+automatically if you are on `main`.
+
 ## Commit messages
 
 Follow [Conventional Commits][] with the 50/72 rule:
