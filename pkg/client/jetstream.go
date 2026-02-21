@@ -24,10 +24,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // CreateOrUpdateStreamWithConfig creates or updates a JetStream stream with the provided configuration.
@@ -129,6 +132,8 @@ func (c *Client) GetStreamInfo(
 }
 
 // Publish publishes a message to a JetStream subject.
+// If the context carries an OpenTelemetry span, the trace context is
+// automatically propagated via NATS message headers.
 func (c *Client) Publish(
 	ctx context.Context,
 	subject string,
@@ -144,7 +149,14 @@ func (c *Client) Publish(
 		return fmt.Errorf("JetStream not initialized: call Connect() first")
 	}
 
-	_, err := c.ExtJS.Publish(ctx, subject, data)
+	msg := &nats.Msg{
+		Subject: subject,
+		Data:    data,
+		Header:  nats.Header{},
+	}
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(http.Header(msg.Header)))
+
+	_, err := c.ExtJS.PublishMsg(ctx, msg)
 	if err != nil {
 		return fmt.Errorf("failed to publish message to %s: %w", subject, err)
 	}
