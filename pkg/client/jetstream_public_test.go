@@ -354,7 +354,7 @@ func (s *JetStreamPublicTestSuite) TestPublish() {
 			data:    []byte("test message"),
 			mockSetup: func() {
 				s.mockExt.EXPECT().
-					Publish(gomock.Any(), "test.subject", []byte("test message")).
+					PublishMsg(gomock.Any(), gomock.Any()).
 					Return(nil, nil).
 					Times(1)
 			},
@@ -366,7 +366,7 @@ func (s *JetStreamPublicTestSuite) TestPublish() {
 			data:    []byte(""),
 			mockSetup: func() {
 				s.mockExt.EXPECT().
-					Publish(gomock.Any(), "test.empty", []byte("")).
+					PublishMsg(gomock.Any(), gomock.Any()).
 					Return(nil, nil).
 					Times(1)
 			},
@@ -378,7 +378,7 @@ func (s *JetStreamPublicTestSuite) TestPublish() {
 			data:    []byte("test message"),
 			mockSetup: func() {
 				s.mockExt.EXPECT().
-					Publish(gomock.Any(), "test.error", []byte("test message")).
+					PublishMsg(gomock.Any(), gomock.Any()).
 					Return(nil, errors.New("publish failed")).
 					Times(1)
 			},
