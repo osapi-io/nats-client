@@ -21,6 +21,8 @@ Package client provides a NATS JetStream client with connection management, KV s
   - [func \(c \*Client\) CreateKVBucketWithConfig\(config \*nats.KeyValueConfig\) \(nats.KeyValue, error\)](<#Client.CreateKVBucketWithConfig>)
   - [func \(c \*Client\) CreateOrUpdateConsumerWithConfig\(ctx context.Context, streamName string, consumerConfig jetstream.ConsumerConfig\) error](<#Client.CreateOrUpdateConsumerWithConfig>)
   - [func \(c \*Client\) CreateOrUpdateJetStreamWithConfig\(ctx context.Context, streamConfig \*nats.StreamConfig, consumerConfigs ...jetstream.ConsumerConfig\) error](<#Client.CreateOrUpdateJetStreamWithConfig>)
+  - [func \(c \*Client\) CreateOrUpdateKVBucket\(ctx context.Context, bucketName string\) \(jetstream.KeyValue, error\)](<#Client.CreateOrUpdateKVBucket>)
+  - [func \(c \*Client\) CreateOrUpdateKVBucketWithConfig\(ctx context.Context, config jetstream.KeyValueConfig\) \(jetstream.KeyValue, error\)](<#Client.CreateOrUpdateKVBucketWithConfig>)
   - [func \(c \*Client\) CreateOrUpdateStreamWithConfig\(\_ context.Context, streamConfig \*nats.StreamConfig\) error](<#Client.CreateOrUpdateStreamWithConfig>)
   - [func \(c \*Client\) GetStreamInfo\(\_ context.Context, streamName string\) \(\*nats.StreamInfo, error\)](<#Client.GetStreamInfo>)
   - [func \(c \*Client\) KVDelete\(bucket string, key string\) error](<#Client.KVDelete>)
@@ -146,25 +148,25 @@ func (c *Client) ConsumeMessages(ctx context.Context, streamName string, consume
 ConsumeMessages subscribes to a JetStream consumer and processes messages with the provided handler. This provides a clean abstraction for message consumption with proper context handling.
 
 <a name="Client.CreateKVBucket"></a>
-### func \(\*Client\) [CreateKVBucket](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L34-L36>)
+### func \(\*Client\) [CreateKVBucket](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L37-L39>)
 
 ```go
 func (c *Client) CreateKVBucket(bucketName string) (nats.KeyValue, error)
 ```
 
-CreateKVBucket ensures a KV bucket exists and returns the KeyValue interface.
+CreateKVBucket creates a KV bucket and returns the KeyValue interface. If the bucket already exists with different config, this may return an error. For idempotent create\-or\-update behavior, use CreateOrUpdateKVBucket instead.
 
 <a name="Client.CreateKVBucketWithConfig"></a>
-### func \(\*Client\) [CreateKVBucketWithConfig](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L53-L55>)
+### func \(\*Client\) [CreateKVBucketWithConfig](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L59-L61>)
 
 ```go
 func (c *Client) CreateKVBucketWithConfig(config *nats.KeyValueConfig) (nats.KeyValue, error)
 ```
 
-CreateKVBucketWithConfig ensures a KV bucket exists with the provided configuration and returns the KeyValue interface.
+CreateKVBucketWithConfig creates a KV bucket with the provided configuration and returns the KeyValue interface. If the bucket already exists with different config, this may return an error. For idempotent create\-or\-update behavior, use CreateOrUpdateKVBucketWithConfig instead.
 
 <a name="Client.CreateOrUpdateConsumerWithConfig"></a>
-### func \(\*Client\) [CreateOrUpdateConsumerWithConfig](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L48-L52>)
+### func \(\*Client\) [CreateOrUpdateConsumerWithConfig](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L51-L55>)
 
 ```go
 func (c *Client) CreateOrUpdateConsumerWithConfig(ctx context.Context, streamName string, consumerConfig jetstream.ConsumerConfig) error
@@ -173,7 +175,7 @@ func (c *Client) CreateOrUpdateConsumerWithConfig(ctx context.Context, streamNam
 CreateOrUpdateConsumerWithConfig creates or updates a JetStream consumer with the provided configuration.
 
 <a name="Client.CreateOrUpdateJetStreamWithConfig"></a>
-### func \(\*Client\) [CreateOrUpdateJetStreamWithConfig](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L69-L73>)
+### func \(\*Client\) [CreateOrUpdateJetStreamWithConfig](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L72-L76>)
 
 ```go
 func (c *Client) CreateOrUpdateJetStreamWithConfig(ctx context.Context, streamConfig *nats.StreamConfig, consumerConfigs ...jetstream.ConsumerConfig) error
@@ -181,8 +183,26 @@ func (c *Client) CreateOrUpdateJetStreamWithConfig(ctx context.Context, streamCo
 
 CreateOrUpdateJetStreamWithConfig configures a JetStream stream and its consumers. This is a convenience method that creates both stream and consumers in one call.
 
+<a name="Client.CreateOrUpdateKVBucket"></a>
+### func \(\*Client\) [CreateOrUpdateKVBucket](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L78-L81>)
+
+```go
+func (c *Client) CreateOrUpdateKVBucket(ctx context.Context, bucketName string) (jetstream.KeyValue, error)
+```
+
+CreateOrUpdateKVBucket creates or updates a KV bucket using the jetstream API, which natively supports upsert semantics. Returns the jetstream.KeyValue interface.
+
+<a name="Client.CreateOrUpdateKVBucketWithConfig"></a>
+### func \(\*Client\) [CreateOrUpdateKVBucketWithConfig](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L90-L93>)
+
+```go
+func (c *Client) CreateOrUpdateKVBucketWithConfig(ctx context.Context, config jetstream.KeyValueConfig) (jetstream.KeyValue, error)
+```
+
+CreateOrUpdateKVBucketWithConfig creates or updates a KV bucket with the provided configuration using the jetstream API. Unlike CreateKVBucketWithConfig, this uses native upsert semantics and does not require a fallback hack for existing buckets.
+
 <a name="Client.CreateOrUpdateStreamWithConfig"></a>
-### func \(\*Client\) [CreateOrUpdateStreamWithConfig](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L34-L37>)
+### func \(\*Client\) [CreateOrUpdateStreamWithConfig](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L37-L40>)
 
 ```go
 func (c *Client) CreateOrUpdateStreamWithConfig(_ context.Context, streamConfig *nats.StreamConfig) error
@@ -191,7 +211,7 @@ func (c *Client) CreateOrUpdateStreamWithConfig(_ context.Context, streamConfig 
 CreateOrUpdateStreamWithConfig creates or updates a JetStream stream with the provided configuration.
 
 <a name="Client.GetStreamInfo"></a>
-### func \(\*Client\) [GetStreamInfo](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L118-L121>)
+### func \(\*Client\) [GetStreamInfo](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L121-L124>)
 
 ```go
 func (c *Client) GetStreamInfo(_ context.Context, streamName string) (*nats.StreamInfo, error)
@@ -200,7 +220,7 @@ func (c *Client) GetStreamInfo(_ context.Context, streamName string) (*nats.Stre
 GetStreamInfo retrieves information about a JetStream stream.
 
 <a name="Client.KVDelete"></a>
-### func \(\*Client\) [KVDelete](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L257-L260>)
+### func \(\*Client\) [KVDelete](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L294-L297>)
 
 ```go
 func (c *Client) KVDelete(bucket string, key string) error
@@ -209,7 +229,7 @@ func (c *Client) KVDelete(bucket string, key string) error
 KVDelete removes a key from the specified KV bucket.
 
 <a name="Client.KVGet"></a>
-### func \(\*Client\) [KVGet](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L239-L242>)
+### func \(\*Client\) [KVGet](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L276-L279>)
 
 ```go
 func (c *Client) KVGet(bucket string, key string) ([]byte, error)
@@ -218,7 +238,7 @@ func (c *Client) KVGet(bucket string, key string) ([]byte, error)
 KVGet retrieves a value from the specified KV bucket.
 
 <a name="Client.KVKeys"></a>
-### func \(\*Client\) [KVKeys](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L275-L277>)
+### func \(\*Client\) [KVKeys](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L312-L314>)
 
 ```go
 func (c *Client) KVKeys(bucket string) ([]string, error)
@@ -227,7 +247,7 @@ func (c *Client) KVKeys(bucket string) ([]string, error)
 KVKeys returns all keys from the specified KV bucket.
 
 <a name="Client.KVPut"></a>
-### func \(\*Client\) [KVPut](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L220-L224>)
+### func \(\*Client\) [KVPut](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L257-L261>)
 
 ```go
 func (c *Client) KVPut(bucket string, key string, value []byte) error
@@ -245,16 +265,16 @@ func (c *Client) KVPutAndPublish(ctx context.Context, kvBucket string, key strin
 KVPutAndPublish implements the pattern of storing data in KV and sending a notification via stream. This is useful for workflow systems where you want persistent storage \+ event notification.
 
 <a name="Client.Publish"></a>
-### func \(\*Client\) [Publish](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L132-L136>)
+### func \(\*Client\) [Publish](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L137-L141>)
 
 ```go
 func (c *Client) Publish(ctx context.Context, subject string, data []byte) error
 ```
 
-Publish publishes a message to a JetStream subject.
+Publish publishes a message to a JetStream subject. If the context carries an OpenTelemetry span, the trace context is automatically propagated via NATS message headers.
 
 <a name="Client.PublishAndWaitKV"></a>
-### func \(\*Client\) [PublishAndWaitKV](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L82-L88>)
+### func \(\*Client\) [PublishAndWaitKV](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L119-L125>)
 
 ```go
 func (c *Client) PublishAndWaitKV(ctx context.Context, subject string, data []byte, kvBucket nats.KeyValue, opts *RequestReplyOptions) ([]byte, error)
@@ -263,7 +283,7 @@ func (c *Client) PublishAndWaitKV(ctx context.Context, subject string, data []by
 PublishAndWaitKV publishes a message and waits for a response in a KV bucket. This implements an async request/reply pattern using KV for response storage.
 
 <a name="Client.WatchKV"></a>
-### func \(\*Client\) [WatchKV](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L173-L177>)
+### func \(\*Client\) [WatchKV](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L210-L214>)
 
 ```go
 func (c *Client) WatchKV(ctx context.Context, kv nats.KeyValue, pattern string) (<-chan nats.KeyValueEntry, error)
@@ -396,7 +416,7 @@ type Options struct {
 ```
 
 <a name="RequestReplyOptions"></a>
-## type [RequestReplyOptions](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L71-L78>)
+## type [RequestReplyOptions](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L108-L115>)
 
 RequestReplyOptions configures request/reply behavior.
 

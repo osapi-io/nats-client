@@ -28,9 +28,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
-// CreateKVBucket ensures a KV bucket exists and returns the KeyValue interface.
+// CreateKVBucket creates a KV bucket and returns the KeyValue interface.
+// If the bucket already exists with different config, this may return an error.
+// For idempotent create-or-update behavior, use CreateOrUpdateKVBucket instead.
 func (c *Client) CreateKVBucket(
 	bucketName string,
 ) (nats.KeyValue, error) {
@@ -49,7 +52,10 @@ func (c *Client) CreateKVBucket(
 	return kv, nil
 }
 
-// CreateKVBucketWithConfig ensures a KV bucket exists with the provided configuration and returns the KeyValue interface.
+// CreateKVBucketWithConfig creates a KV bucket with the provided configuration
+// and returns the KeyValue interface. If the bucket already exists with different
+// config, this may return an error.
+// For idempotent create-or-update behavior, use CreateOrUpdateKVBucketWithConfig instead.
 func (c *Client) CreateKVBucketWithConfig(
 	config *nats.KeyValueConfig,
 ) (nats.KeyValue, error) {
@@ -62,6 +68,37 @@ func (c *Client) CreateKVBucketWithConfig(
 	kv, err := c.NativeJS.CreateKeyValue(config)
 	if err != nil {
 		return nil, err
+	}
+
+	return kv, nil
+}
+
+// CreateOrUpdateKVBucket creates or updates a KV bucket using the jetstream API,
+// which natively supports upsert semantics. Returns the jetstream.KeyValue interface.
+func (c *Client) CreateOrUpdateKVBucket(
+	ctx context.Context,
+	bucketName string,
+) (jetstream.KeyValue, error) {
+	return c.CreateOrUpdateKVBucketWithConfig(ctx, jetstream.KeyValueConfig{
+		Bucket: bucketName,
+	})
+}
+
+// CreateOrUpdateKVBucketWithConfig creates or updates a KV bucket with the provided
+// configuration using the jetstream API. Unlike CreateKVBucketWithConfig, this uses
+// native upsert semantics and does not require a fallback hack for existing buckets.
+func (c *Client) CreateOrUpdateKVBucketWithConfig(
+	ctx context.Context,
+	config jetstream.KeyValueConfig,
+) (jetstream.KeyValue, error) {
+	c.logger.Debug(
+		"creating/updating KV bucket",
+		slog.String("bucket", config.Bucket),
+	)
+
+	kv, err := c.ExtJS.CreateOrUpdateKeyValue(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create/update KV bucket %s: %w", config.Bucket, err)
 	}
 
 	return kv, nil
