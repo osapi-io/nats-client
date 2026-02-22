@@ -28,6 +28,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/osapi-io/nats-client/pkg/client"
@@ -37,11 +38,12 @@ import (
 type KVCreatePublicTestSuite struct {
 	suite.Suite
 
-	mockCtrl *gomock.Controller
-	mockJS   *mocks.MockJetStreamContext
-	mockExt  *mocks.MockJetStream
-	mockKV   *mocks.MockKeyValue
-	client   *client.Client
+	mockCtrl        *gomock.Controller
+	mockJS          *mocks.MockJetStreamContext
+	mockExt         *mocks.MockJetStream
+	mockKV          *mocks.MockKeyValue
+	mockJetstreamKV *mocks.MockJetstreamKeyValue
+	client          *client.Client
 }
 
 func (s *KVCreatePublicTestSuite) SetupTest() {
@@ -49,6 +51,7 @@ func (s *KVCreatePublicTestSuite) SetupTest() {
 	s.mockJS = mocks.NewMockJetStreamContext(s.mockCtrl)
 	s.mockExt = mocks.NewMockJetStream(s.mockCtrl)
 	s.mockKV = mocks.NewMockKeyValue(s.mockCtrl)
+	s.mockJetstreamKV = mocks.NewMockJetstreamKeyValue(s.mockCtrl)
 	s.client = client.New(slog.Default(), &client.Options{
 		Host: "localhost",
 		Port: 4222,
@@ -168,6 +171,117 @@ func (s *KVCreatePublicTestSuite) TestCreateKVBucketWithConfig() {
 			tc.mockSetup()
 
 			kv, err := s.client.CreateKVBucketWithConfig(tc.config)
+
+			if tc.expectedErr == "" {
+				s.NoError(err)
+				s.NotNil(kv)
+			} else {
+				s.EqualError(err, tc.expectedErr)
+			}
+		})
+	}
+}
+
+func (s *KVCreatePublicTestSuite) TestCreateOrUpdateKVBucket() {
+	tests := []struct {
+		name        string
+		bucketName  string
+		mockSetup   func()
+		expectedErr string
+	}{
+		{
+			name:       "successfully creates KV bucket",
+			bucketName: "responses",
+			mockSetup: func() {
+				s.mockExt.EXPECT().
+					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "responses"}).
+					Return(s.mockJetstreamKV, nil).
+					Times(1)
+			},
+			expectedErr: "",
+		},
+		{
+			name:       "error creating KV bucket",
+			bucketName: "responses",
+			mockSetup: func() {
+				s.mockExt.EXPECT().
+					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "responses"}).
+					Return(nil, errors.New("kv creation failed")).
+					Times(1)
+			},
+			expectedErr: "failed to create/update KV bucket responses: kv creation failed",
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			tc.mockSetup()
+
+			kv, err := s.client.CreateOrUpdateKVBucket(context.Background(), tc.bucketName)
+
+			if tc.expectedErr == "" {
+				s.NoError(err)
+				s.NotNil(kv)
+			} else {
+				s.EqualError(err, tc.expectedErr)
+			}
+		})
+	}
+}
+
+func (s *KVCreatePublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
+	tests := []struct {
+		name        string
+		config      jetstream.KeyValueConfig
+		mockSetup   func()
+		expectedErr string
+	}{
+		{
+			name: "successfully creates KV bucket with custom config",
+			config: jetstream.KeyValueConfig{
+				Bucket:      "job-responses",
+				Description: "Storage for job responses",
+				TTL:         1 * time.Hour,
+				MaxBytes:    100 * 1024 * 1024,
+				Storage:     jetstream.FileStorage,
+				Replicas:    1,
+			},
+			mockSetup: func() {
+				expectedConfig := jetstream.KeyValueConfig{
+					Bucket:      "job-responses",
+					Description: "Storage for job responses",
+					TTL:         1 * time.Hour,
+					MaxBytes:    100 * 1024 * 1024,
+					Storage:     jetstream.FileStorage,
+					Replicas:    1,
+				}
+				s.mockExt.EXPECT().
+					CreateOrUpdateKeyValue(gomock.Any(), expectedConfig).
+					Return(s.mockJetstreamKV, nil).
+					Times(1)
+			},
+			expectedErr: "",
+		},
+		{
+			name: "error creating KV bucket with config",
+			config: jetstream.KeyValueConfig{
+				Bucket: "invalid-bucket",
+			},
+			mockSetup: func() {
+				s.mockExt.EXPECT().
+					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "invalid-bucket"}).
+					Return(nil, errors.New("invalid bucket configuration")).
+					Times(1)
+			},
+			expectedErr: "failed to create/update KV bucket invalid-bucket: invalid bucket configuration",
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			tc.mockSetup()
+
+			kv, err := s.client.CreateOrUpdateKVBucketWithConfig(context.Background(), tc.config)
 
 			if tc.expectedErr == "" {
 				s.NoError(err)
