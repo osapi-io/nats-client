@@ -31,48 +31,6 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-// CreateKVBucket creates a KV bucket and returns the KeyValue interface.
-// If the bucket already exists with different config, this may return an error.
-// For idempotent create-or-update behavior, use CreateOrUpdateKVBucket instead.
-func (c *Client) CreateKVBucket(
-	bucketName string,
-) (nats.KeyValue, error) {
-	c.logger.Debug(
-		"creating KV bucket",
-		slog.String("bucket", bucketName),
-	)
-
-	kv, err := c.NativeJS.CreateKeyValue(&nats.KeyValueConfig{
-		Bucket: bucketName,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return kv, nil
-}
-
-// CreateKVBucketWithConfig creates a KV bucket with the provided configuration
-// and returns the KeyValue interface. If the bucket already exists with different
-// config, this may return an error.
-// For idempotent create-or-update behavior, use CreateOrUpdateKVBucketWithConfig instead.
-func (c *Client) CreateKVBucketWithConfig(
-	config *nats.KeyValueConfig,
-) (nats.KeyValue, error) {
-	c.logger.Debug(
-		"creating KV bucket with config",
-		slog.String("bucket", config.Bucket),
-		slog.String("description", config.Description),
-	)
-
-	kv, err := c.NativeJS.CreateKeyValue(config)
-	if err != nil {
-		return nil, err
-	}
-
-	return kv, nil
-}
-
 // CreateOrUpdateKVBucket creates or updates a KV bucket using the jetstream API,
 // which natively supports upsert semantics. Returns the jetstream.KeyValue interface.
 func (c *Client) CreateOrUpdateKVBucket(
@@ -85,8 +43,8 @@ func (c *Client) CreateOrUpdateKVBucket(
 }
 
 // CreateOrUpdateKVBucketWithConfig creates or updates a KV bucket with the provided
-// configuration using the jetstream API. Unlike CreateKVBucketWithConfig, this uses
-// native upsert semantics and does not require a fallback hack for existing buckets.
+// configuration using the jetstream API. This uses native upsert semantics and
+// does not require a fallback hack for existing buckets.
 func (c *Client) CreateOrUpdateKVBucketWithConfig(
 	ctx context.Context,
 	config jetstream.KeyValueConfig,
@@ -120,7 +78,7 @@ func (c *Client) PublishAndWaitKV(
 	ctx context.Context,
 	subject string,
 	data []byte,
-	kvBucket nats.KeyValue,
+	kvBucket jetstream.KeyValue,
 	opts *RequestReplyOptions,
 ) ([]byte, error) {
 	if opts == nil {
@@ -167,7 +125,7 @@ func (c *Client) PublishAndWaitKV(
 // waitForKVResponse polls a KV bucket for a response.
 func (c *Client) waitForKVResponse(
 	ctx context.Context,
-	kv nats.KeyValue,
+	kv jetstream.KeyValue,
 	key string,
 	pollInterval time.Duration,
 ) ([]byte, error) {
@@ -179,9 +137,9 @@ func (c *Client) waitForKVResponse(
 		case <-ctx.Done():
 			return nil, fmt.Errorf("timeout waiting for response: %w", ctx.Err())
 		case <-ticker.C:
-			entry, err := kv.Get(key)
+			entry, err := kv.Get(ctx, key)
 			if err != nil {
-				if err == nats.ErrKeyNotFound {
+				if err == jetstream.ErrKeyNotFound {
 					continue // Not ready yet
 				}
 				return nil, fmt.Errorf("failed to get response: %w", err)
@@ -192,9 +150,6 @@ func (c *Client) waitForKVResponse(
 				slog.String("key", key),
 				slog.Uint64("revision", entry.Revision()),
 			)
-
-			// Optionally delete the response after reading
-			// _ = kv.Delete(ctx, key)
 
 			return entry.Value(), nil
 		}
@@ -209,20 +164,20 @@ func (c *Client) waitForKVResponse(
 // the complexity of testing async behavior without introducing flaky tests.
 func (c *Client) WatchKV(
 	ctx context.Context,
-	kv nats.KeyValue,
+	kv jetstream.KeyValue,
 	pattern string,
-) (<-chan nats.KeyValueEntry, error) {
+) (<-chan jetstream.KeyValueEntry, error) {
 	c.logger.Debug(
 		"creating KV watcher",
 		slog.String("pattern", pattern),
 	)
 
-	watcher, err := kv.Watch(pattern)
+	watcher, err := kv.Watch(ctx, pattern)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
 	}
 
-	out := make(chan nats.KeyValueEntry)
+	out := make(chan jetstream.KeyValueEntry)
 
 	go func() {
 		defer close(out)
@@ -259,12 +214,12 @@ func (c *Client) KVPut(
 	key string,
 	value []byte,
 ) error {
-	kv, err := c.CreateKVBucket(bucket)
+	kv, err := c.CreateOrUpdateKVBucket(context.Background(), bucket)
 	if err != nil {
 		return fmt.Errorf("failed to get KV bucket %s: %w", bucket, err)
 	}
 
-	_, err = kv.Put(key, value)
+	_, err = kv.Put(context.Background(), key, value)
 	if err != nil {
 		return fmt.Errorf("failed to put key %s in bucket %s: %w", key, bucket, err)
 	}
@@ -277,12 +232,12 @@ func (c *Client) KVGet(
 	bucket string,
 	key string,
 ) ([]byte, error) {
-	kv, err := c.CreateKVBucket(bucket)
+	kv, err := c.CreateOrUpdateKVBucket(context.Background(), bucket)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get KV bucket %s: %w", bucket, err)
 	}
 
-	entry, err := kv.Get(key)
+	entry, err := kv.Get(context.Background(), key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get key %s from bucket %s: %w", key, bucket, err)
 	}
@@ -295,12 +250,12 @@ func (c *Client) KVDelete(
 	bucket string,
 	key string,
 ) error {
-	kv, err := c.CreateKVBucket(bucket)
+	kv, err := c.CreateOrUpdateKVBucket(context.Background(), bucket)
 	if err != nil {
 		return fmt.Errorf("failed to get KV bucket %s: %w", bucket, err)
 	}
 
-	err = kv.Delete(key)
+	err = kv.Delete(context.Background(), key)
 	if err != nil {
 		return fmt.Errorf("failed to delete key %s from bucket %s: %w", key, bucket, err)
 	}
@@ -312,15 +267,20 @@ func (c *Client) KVDelete(
 func (c *Client) KVKeys(
 	bucket string,
 ) ([]string, error) {
-	kv, err := c.CreateKVBucket(bucket)
+	kv, err := c.CreateOrUpdateKVBucket(context.Background(), bucket)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get KV bucket %s: %w", bucket, err)
 	}
 
-	keys, err := kv.Keys()
+	keys, err := kv.ListKeys(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get keys from bucket %s: %w", bucket, err)
 	}
 
-	return keys, nil
+	var result []string
+	for key := range keys.Keys() {
+		result = append(result, key)
+	}
+
+	return result, nil
 }

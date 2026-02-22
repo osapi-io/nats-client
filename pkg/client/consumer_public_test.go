@@ -62,7 +62,6 @@ type ConsumerPublicTestSuite struct {
 	suite.Suite
 
 	mockCtrl         *gomock.Controller
-	mockJS           *mocks.MockJetStreamContext
 	mockExt          *mocks.MockJetStream
 	mockConsumer     *mocks.MockConsumer
 	mockNC           *mocks.MockNATSConnector
@@ -73,7 +72,6 @@ type ConsumerPublicTestSuite struct {
 
 func (s *ConsumerPublicTestSuite) SetupTest() {
 	s.mockCtrl = gomock.NewController(s.T())
-	s.mockJS = mocks.NewMockJetStreamContext(s.mockCtrl)
 	s.mockExt = mocks.NewMockJetStream(s.mockCtrl)
 	s.mockConsumer = mocks.NewMockConsumer(s.mockCtrl)
 	s.mockNC = mocks.NewMockNATSConnector(s.mockCtrl)
@@ -88,7 +86,6 @@ func (s *ConsumerPublicTestSuite) SetupTest() {
 		},
 	})
 	s.client.NC = s.mockNC
-	s.client.NativeJS = s.mockJS
 	s.client.ExtJS = s.mockExt
 }
 

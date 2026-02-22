@@ -13,9 +13,8 @@
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, EXPRESS OR IMPLIED,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
 package client_test
@@ -42,14 +41,12 @@ type ConnectPublicTestSuite struct {
 
 	mockCtrl *gomock.Controller
 	mockNATS *mocks.MockNATSConnector
-	mockJS   *mocks.MockJetStreamContext
 	client   *client.Client
 }
 
 func (s *ConnectPublicTestSuite) SetupTest() {
 	s.mockCtrl = gomock.NewController(s.T())
 	s.mockNATS = mocks.NewMockNATSConnector(s.mockCtrl)
-	s.mockJS = new(mocks.MockJetStreamContext)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	opts := &client.Options{
 		Host: "localhost",
@@ -85,10 +82,6 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 					Connect(gomock.Any(), gomock.Any()).
 					Return(&nats.Conn{}, nil).
 					Times(1)
-				s.mockNATS.EXPECT().
-					JetStream(gomock.Any()).
-					Return(s.mockJS, nil).
-					Times(1)
 			},
 			expectedErr: "",
 		},
@@ -99,10 +92,6 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 				s.mockNATS.EXPECT().
 					Connect(gomock.Any(), gomock.Any()).
 					Return(&nats.Conn{}, nil).
-					Times(1)
-				s.mockNATS.EXPECT().
-					JetStream(gomock.Any()).
-					Return(s.mockJS, nil).
 					Times(1)
 			},
 			expectedErr: "",
@@ -123,10 +112,6 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 				s.mockNATS.EXPECT().
 					Connect(gomock.Any(), gomock.Any()).
 					Return(&nats.Conn{}, nil).
-					Times(1)
-				s.mockNATS.EXPECT().
-					JetStream(gomock.Any()).
-					Return(s.mockJS, nil).
 					Times(1)
 			},
 			expectedErr: "",
@@ -170,10 +155,6 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 						return &nats.Conn{}, nil
 					}).
 					Times(1)
-				s.mockNATS.EXPECT().
-					JetStream(gomock.Any()).
-					Return(s.mockJS, nil).
-					Times(1)
 			},
 			expectedErr: "",
 		},
@@ -182,9 +163,6 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			authType: client.NKeyAuth,
 			mockSetup: func() {
 				s.client.Opts.Auth.NKeyFile = "/invalid/path"
-				s.mockNATS.EXPECT().
-					JetStream().
-					Times(0)
 			},
 			expectedErr: "failed to read nkey seed file",
 		},
@@ -199,9 +177,6 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 				require.NoError(s.T(), err)
 
 				s.client.Opts.Auth.NKeyFile = tempFile
-				s.mockNATS.EXPECT().
-					JetStream().
-					Times(0)
 			},
 			expectedErr: "failed to parse nkey seed",
 		},
@@ -223,10 +198,6 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 				require.NoError(s.T(), err)
 
 				s.client.Opts.Auth.NKeyFile = tempFile
-
-				s.mockNATS.EXPECT().
-					JetStream().
-					Times(0)
 			},
 			expectedErr: "failed to parse nkey seed",
 		},
@@ -264,19 +235,8 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			},
 			expectedErr: "error connecting to nats: nats: connection error",
 		},
-		// {
-		// 	name: "error enabling External JetStream",
-		// 	mockSetup: func() {
-		// 		s.mockNATS.EXPECT().
-		// 			Connect(gomock.Any(), gomock.Any()).
-		// 			Return(&nats.Conn{}, nil).
-		// 			Times(1)
-		// 	},
-		// 	overrideJS:  true,
-		// 	expectedErr: "simulated JetStream error",
-		// },
 		{
-			name:     "error enabling Native JetStream",
+			name:     "error enabling JetStream",
 			authType: client.NoAuth,
 			mockSetup: func() {
 				s.mockNATS.EXPECT().
@@ -284,12 +244,14 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 					Return(&nats.Conn{}, nil).
 					Times(1)
 
-				s.mockNATS.EXPECT().
-					JetStream(gomock.Any()).
-					Return(nil, errors.New("error enabling native jetstream")).
-					Times(1)
+				// Override GetJetStream to simulate an error
+				originalGetJetStream := client.GetJetStream
+				client.GetJetStream = func(_ *nats.Conn) (jetstream.JetStream, error) {
+					return nil, errors.New("error enabling jetstream")
+				}
+				s.T().Cleanup(func() { client.GetJetStream = originalGetJetStream })
 			},
-			expectedErr: "error enabling native jetstream",
+			expectedErr: "error enabling jetstream",
 		},
 	}
 
@@ -297,6 +259,15 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 		s.Run(tc.name, func() {
 			s.client.Opts.Auth.AuthType = tc.authType
 			tc.mockSetup()
+
+			// For successful connect tests, mock GetJetStream to avoid nil *nats.Conn panic
+			if tc.expectedErr == "" {
+				originalGetJetStream := client.GetJetStream
+				client.GetJetStream = func(_ *nats.Conn) (jetstream.JetStream, error) {
+					return mocks.NewMockJetStream(s.mockCtrl), nil
+				}
+				defer func() { client.GetJetStream = originalGetJetStream }()
+			}
 
 			err := s.client.Connect()
 
@@ -307,6 +278,13 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			}
 		})
 	}
+}
+
+func (s *ConnectPublicTestSuite) TestGetJetStreamDefault() {
+	js, err := client.GetJetStream(&nats.Conn{})
+
+	s.NoError(err)
+	s.NotNil(js)
 }
 
 func (s *ConnectPublicTestSuite) TestGetJetStreamCalledInConnect() {

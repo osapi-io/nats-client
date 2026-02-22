@@ -102,12 +102,6 @@ func (c *Client) Connect() error {
 	}
 	c.ExtJS = extJS
 
-	nativeJS, err := c.NC.JetStream()
-	if err != nil {
-		return fmt.Errorf("error enabling native jetstream: %w", err)
-	}
-	c.NativeJS = nativeJS
-
 	c.logger.Debug("successfully connected to NATS and enabled JetStream")
 
 	return nil

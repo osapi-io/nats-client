@@ -35,8 +35,8 @@ import (
 
 // CreateOrUpdateStreamWithConfig creates or updates a JetStream stream with the provided configuration.
 func (c *Client) CreateOrUpdateStreamWithConfig(
-	_ context.Context,
-	streamConfig *nats.StreamConfig,
+	ctx context.Context,
+	streamConfig jetstream.StreamConfig,
 ) error {
 	c.logger.Debug(
 		"creating stream",
@@ -44,7 +44,12 @@ func (c *Client) CreateOrUpdateStreamWithConfig(
 		slog.String("subjects", strings.Join(streamConfig.Subjects, ", ")),
 	)
 
-	return c.createOrUpdateStream(streamConfig, streamConfig.Name)
+	_, err := c.ExtJS.CreateOrUpdateStream(ctx, streamConfig)
+	if err != nil {
+		return fmt.Errorf("error creating/updating stream %s: %w", streamConfig.Name, err)
+	}
+
+	return nil
 }
 
 // CreateOrUpdateConsumerWithConfig creates or updates a JetStream consumer with the provided configuration.
@@ -71,7 +76,7 @@ func (c *Client) CreateOrUpdateConsumerWithConfig(
 // This is a convenience method that creates both stream and consumers in one call.
 func (c *Client) CreateOrUpdateJetStreamWithConfig(
 	ctx context.Context,
-	streamConfig *nats.StreamConfig,
+	streamConfig jetstream.StreamConfig,
 	consumerConfigs ...jetstream.ConsumerConfig,
 ) error {
 	// Create or update the stream
@@ -91,39 +96,17 @@ func (c *Client) CreateOrUpdateJetStreamWithConfig(
 	return nil
 }
 
-// createOrUpdateStream provisions (or creates) a stream using the native JetStream API.
-func (c *Client) createOrUpdateStream(
-	streamConfig *nats.StreamConfig,
-	streamName string,
-) error {
-	_, err := c.NativeJS.AddStream(streamConfig)
-	if err != nil {
-		// Check if the error indicates that the stream already exists.
-		if strings.Contains(err.Error(), "already in use") {
-			c.logger.Debug(
-				"stream already exists; updating stream",
-				slog.String("stream", streamName),
-			)
-
-			_, err = c.NativeJS.UpdateStream(streamConfig)
-			if err != nil {
-				return fmt.Errorf("error updating stream %s: %w", streamName, err)
-			}
-		} else {
-			return fmt.Errorf("error creating stream %s: %w", streamName, err)
-		}
-	}
-
-	return nil
-}
-
 // GetStreamInfo retrieves information about a JetStream stream.
 func (c *Client) GetStreamInfo(
-	_ context.Context,
+	ctx context.Context,
 	streamName string,
-) (*nats.StreamInfo, error) {
-	// Use the native JetStream API to get stream info
-	info, err := c.NativeJS.StreamInfo(streamName)
+) (*jetstream.StreamInfo, error) {
+	stream, err := c.ExtJS.Stream(ctx, streamName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stream %s: %w", streamName, err)
+	}
+
+	info, err := stream.Info(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get stream info for %s: %w", streamName, err)
 	}
