@@ -43,13 +43,13 @@ func (c *Client) KVPutAndPublish(
 	)
 
 	// Get the KV bucket
-	kv, err := c.CreateKVBucket(kvBucket)
+	kv, err := c.CreateOrUpdateKVBucket(ctx, kvBucket)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get KV bucket '%s': %w", kvBucket, err)
 	}
 
 	// Store in KV
-	revision, err := kv.Put(key, data)
+	revision, err := kv.Put(ctx, key, data)
 	if err != nil {
 		return 0, fmt.Errorf("failed to store data in KV: %w", err)
 	}

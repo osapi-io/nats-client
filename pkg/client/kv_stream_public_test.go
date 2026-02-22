@@ -13,9 +13,8 @@
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, EXPRESS OR IMPLIED,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
 package client_test
@@ -27,7 +26,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/osapi-io/nats-client/pkg/client"
@@ -38,7 +37,6 @@ type KVStreamPublicTestSuite struct {
 	suite.Suite
 
 	mockCtrl *gomock.Controller
-	mockJS   *mocks.MockJetStreamContext
 	mockExt  *mocks.MockJetStream
 	mockKV   *mocks.MockKeyValue
 	client   *client.Client
@@ -46,7 +44,6 @@ type KVStreamPublicTestSuite struct {
 
 func (s *KVStreamPublicTestSuite) SetupTest() {
 	s.mockCtrl = gomock.NewController(s.T())
-	s.mockJS = mocks.NewMockJetStreamContext(s.mockCtrl)
 	s.mockExt = mocks.NewMockJetStream(s.mockCtrl)
 	s.mockKV = mocks.NewMockKeyValue(s.mockCtrl)
 	s.client = client.New(slog.Default(), &client.Options{
@@ -56,7 +53,6 @@ func (s *KVStreamPublicTestSuite) SetupTest() {
 			AuthType: client.NoAuth,
 		},
 	})
-	s.client.NativeJS = s.mockJS
 	s.client.ExtJS = s.mockExt
 }
 
@@ -83,13 +79,13 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 			notifySubject: "notify.subject",
 			mockSetup: func() {
 				// Mock KV bucket retrieval
-				s.mockJS.EXPECT().
-					CreateKeyValue(&nats.KeyValueConfig{Bucket: "test-bucket"}).
+				s.mockExt.EXPECT().
+					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "test-bucket"}).
 					Return(s.mockKV, nil)
 
 				// Mock KV put
 				s.mockKV.EXPECT().
-					Put("test-key", []byte(`{"test": "data"}`)).
+					Put(gomock.Any(), "test-key", []byte(`{"test": "data"}`)).
 					Return(uint64(42), nil)
 
 				// Mock stream publish
@@ -106,11 +102,11 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 			data:          []byte(`{"test": "data"}`),
 			notifySubject: "notify.subject",
 			mockSetup: func() {
-				s.mockJS.EXPECT().
-					CreateKeyValue(&nats.KeyValueConfig{Bucket: "bad-bucket"}).
+				s.mockExt.EXPECT().
+					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "bad-bucket"}).
 					Return(nil, errors.New("bucket not found"))
 			},
-			expectedError: "failed to get KV bucket 'bad-bucket': bucket not found",
+			expectedError: "failed to get KV bucket 'bad-bucket': failed to create/update KV bucket bad-bucket: bucket not found",
 		},
 		{
 			name:          "error storing in KV",
@@ -120,13 +116,13 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 			notifySubject: "notify.subject",
 			mockSetup: func() {
 				// KV bucket retrieval succeeds
-				s.mockJS.EXPECT().
-					CreateKeyValue(&nats.KeyValueConfig{Bucket: "test-bucket"}).
+				s.mockExt.EXPECT().
+					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "test-bucket"}).
 					Return(s.mockKV, nil)
 
 				// KV put fails
 				s.mockKV.EXPECT().
-					Put("test-key", []byte(`{"test": "data"}`)).
+					Put(gomock.Any(), "test-key", []byte(`{"test": "data"}`)).
 					Return(uint64(0), errors.New("put failed"))
 			},
 			expectedError: "failed to store data in KV: put failed",
@@ -139,12 +135,12 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 			notifySubject: "notify.subject",
 			mockSetup: func() {
 				// KV operations succeed
-				s.mockJS.EXPECT().
-					CreateKeyValue(&nats.KeyValueConfig{Bucket: "test-bucket"}).
+				s.mockExt.EXPECT().
+					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "test-bucket"}).
 					Return(s.mockKV, nil)
 
 				s.mockKV.EXPECT().
-					Put("test-key", []byte(`{"test": "data"}`)).
+					Put(gomock.Any(), "test-key", []byte(`{"test": "data"}`)).
 					Return(uint64(42), nil)
 
 				// Publish fails
@@ -161,12 +157,12 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 			data:          []byte{},
 			notifySubject: "notify.empty",
 			mockSetup: func() {
-				s.mockJS.EXPECT().
-					CreateKeyValue(&nats.KeyValueConfig{Bucket: "test-bucket"}).
+				s.mockExt.EXPECT().
+					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "test-bucket"}).
 					Return(s.mockKV, nil)
 
 				s.mockKV.EXPECT().
-					Put("empty-key", []byte{}).
+					Put(gomock.Any(), "empty-key", []byte{}).
 					Return(uint64(1), nil)
 
 				s.mockExt.EXPECT().
@@ -182,12 +178,12 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 			data:          nil,
 			notifySubject: "notify.nil",
 			mockSetup: func() {
-				s.mockJS.EXPECT().
-					CreateKeyValue(&nats.KeyValueConfig{Bucket: "test-bucket"}).
+				s.mockExt.EXPECT().
+					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "test-bucket"}).
 					Return(s.mockKV, nil)
 
 				s.mockKV.EXPECT().
-					Put("nil-key", nil).
+					Put(gomock.Any(), "nil-key", nil).
 					Return(uint64(2), nil)
 
 				s.mockExt.EXPECT().

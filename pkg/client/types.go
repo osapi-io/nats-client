@@ -23,7 +23,6 @@ package client
 import (
 	"log/slog"
 
-	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/nats-io/nkeys"
 )
@@ -72,8 +71,6 @@ type Client struct {
 
 	// NC underlying connection.
 	NC NATSConnector
-	// NativeJS is the native JetStream context used for provisioning streams and consumers.
-	NativeJS nats.JetStreamContext
 	// ExtJS is the extended JetStream API for high-level operations (e.g. retrieving streams/consumers).
 	ExtJS jetstream.JetStream
 	// Opts configuration options used to create the client

@@ -26,7 +26,6 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/suite"
 
@@ -38,7 +37,6 @@ type JetStreamPublicTestSuite struct {
 	suite.Suite
 
 	mockCtrl *gomock.Controller
-	mockJS   *mocks.MockJetStreamContext
 	mockExt  *mocks.MockJetStream
 	client   *client.Client
 	ctx      context.Context
@@ -46,7 +44,6 @@ type JetStreamPublicTestSuite struct {
 
 func (s *JetStreamPublicTestSuite) SetupTest() {
 	s.mockCtrl = gomock.NewController(s.T())
-	s.mockJS = mocks.NewMockJetStreamContext(s.mockCtrl)
 	s.mockExt = mocks.NewMockJetStream(s.mockCtrl)
 	s.client = client.New(slog.Default(), &client.Options{
 		Host: "localhost",
@@ -55,7 +52,6 @@ func (s *JetStreamPublicTestSuite) SetupTest() {
 			AuthType: client.NoAuth,
 		},
 	})
-	s.client.NativeJS = s.mockJS
 	s.client.ExtJS = s.mockExt
 	s.ctx = context.Background()
 }
@@ -71,16 +67,16 @@ func (s *JetStreamPublicTestSuite) SetupSubTest() {
 func (s *JetStreamPublicTestSuite) TestCreateOrUpdateStreamWithConfig() {
 	tests := []struct {
 		name        string
-		config      *nats.StreamConfig
+		config      jetstream.StreamConfig
 		mockSetup   func()
 		expectedErr string
 	}{
 		{
 			name:   "successfully creates stream",
-			config: &nats.StreamConfig{Name: "test-stream", Subjects: []string{"test.*"}},
+			config: jetstream.StreamConfig{Name: "test-stream", Subjects: []string{"test.*"}},
 			mockSetup: func() {
-				s.mockJS.EXPECT().
-					AddStream(gomock.Any()).
+				s.mockExt.EXPECT().
+					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
 					Return(nil, nil).
 					Times(1)
 			},
@@ -88,14 +84,14 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateStreamWithConfig() {
 		},
 		{
 			name:   "error creating stream",
-			config: &nats.StreamConfig{Name: "test-stream"},
+			config: jetstream.StreamConfig{Name: "test-stream"},
 			mockSetup: func() {
-				s.mockJS.EXPECT().
-					AddStream(gomock.Any()).
+				s.mockExt.EXPECT().
+					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
 					Return(nil, errors.New("stream creation failed")).
 					Times(1)
 			},
-			expectedErr: "error creating stream test-stream: stream creation failed",
+			expectedErr: "error creating/updating stream test-stream: stream creation failed",
 		},
 	}
 
@@ -166,21 +162,21 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateConsumerWithConfig() {
 func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStreamWithConfig() {
 	tests := []struct {
 		name            string
-		streamConfig    *nats.StreamConfig
+		streamConfig    jetstream.StreamConfig
 		consumerConfigs []jetstream.ConsumerConfig
 		mockSetup       func()
 		expectedErr     string
 	}{
 		{
 			name:         "successfully creates stream and consumers",
-			streamConfig: &nats.StreamConfig{Name: "test-stream", Subjects: []string{"test.*"}},
+			streamConfig: jetstream.StreamConfig{Name: "test-stream", Subjects: []string{"test.*"}},
 			consumerConfigs: []jetstream.ConsumerConfig{
 				{Durable: "consumer-1"},
 				{Durable: "consumer-2"},
 			},
 			mockSetup: func() {
-				s.mockJS.EXPECT().
-					AddStream(gomock.Any()).
+				s.mockExt.EXPECT().
+					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
 					Return(nil, nil).
 					Times(1)
 				s.mockExt.EXPECT().
@@ -192,26 +188,26 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStreamWithConfig() {
 		},
 		{
 			name:            "error creating stream",
-			streamConfig:    &nats.StreamConfig{Name: "test-stream"},
+			streamConfig:    jetstream.StreamConfig{Name: "test-stream"},
 			consumerConfigs: []jetstream.ConsumerConfig{{Durable: "consumer-1"}},
 			mockSetup: func() {
-				s.mockJS.EXPECT().
-					AddStream(gomock.Any()).
+				s.mockExt.EXPECT().
+					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
 					Return(nil, errors.New("stream creation failed")).
 					Times(1)
 				s.mockExt.EXPECT().
 					CreateOrUpdateConsumer(gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(0)
 			},
-			expectedErr: "error creating stream test-stream: stream creation failed",
+			expectedErr: "error creating/updating stream test-stream: stream creation failed",
 		},
 		{
 			name:            "error creating consumer",
-			streamConfig:    &nats.StreamConfig{Name: "test-stream"},
+			streamConfig:    jetstream.StreamConfig{Name: "test-stream"},
 			consumerConfigs: []jetstream.ConsumerConfig{{Durable: "consumer-1"}},
 			mockSetup: func() {
-				s.mockJS.EXPECT().
-					AddStream(gomock.Any()).
+				s.mockExt.EXPECT().
+					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
 					Return(nil, nil).
 					Times(1)
 				s.mockExt.EXPECT().
@@ -246,20 +242,20 @@ func (s *JetStreamPublicTestSuite) TestGetStreamInfo() {
 		name         string
 		streamName   string
 		mockSetup    func()
-		expectedInfo *nats.StreamInfo
+		expectedInfo *jetstream.StreamInfo
 		expectedErr  string
 	}{
 		{
 			name:       "successfully gets stream info",
 			streamName: "TEST-STREAM",
 			mockSetup: func() {
-				expectedInfo := &nats.StreamInfo{
-					Config: nats.StreamConfig{
+				expectedInfo := &jetstream.StreamInfo{
+					Config: jetstream.StreamConfig{
 						Name:     "TEST-STREAM",
 						Subjects: []string{"test.>"},
-						Storage:  nats.FileStorage,
+						Storage:  jetstream.FileStorage,
 					},
-					State: nats.StreamState{
+					State: jetstream.StreamState{
 						Msgs:      10,
 						Bytes:     1024,
 						FirstSeq:  1,
@@ -267,18 +263,23 @@ func (s *JetStreamPublicTestSuite) TestGetStreamInfo() {
 						Consumers: 2,
 					},
 				}
-				s.mockJS.EXPECT().
-					StreamInfo("TEST-STREAM").
+				mockStream := mocks.NewMockStream(s.mockCtrl)
+				s.mockExt.EXPECT().
+					Stream(gomock.Any(), "TEST-STREAM").
+					Return(mockStream, nil).
+					Times(1)
+				mockStream.EXPECT().
+					Info(gomock.Any()).
 					Return(expectedInfo, nil).
 					Times(1)
 			},
-			expectedInfo: &nats.StreamInfo{
-				Config: nats.StreamConfig{
+			expectedInfo: &jetstream.StreamInfo{
+				Config: jetstream.StreamConfig{
 					Name:     "TEST-STREAM",
 					Subjects: []string{"test.>"},
-					Storage:  nats.FileStorage,
+					Storage:  jetstream.FileStorage,
 				},
-				State: nats.StreamState{
+				State: jetstream.StreamState{
 					Msgs:      10,
 					Bytes:     1024,
 					FirstSeq:  1,
@@ -289,23 +290,28 @@ func (s *JetStreamPublicTestSuite) TestGetStreamInfo() {
 			expectedErr: "",
 		},
 		{
-			name:       "error getting stream info - stream not found",
+			name:       "error getting stream - stream not found",
 			streamName: "MISSING-STREAM",
 			mockSetup: func() {
-				s.mockJS.EXPECT().
-					StreamInfo("MISSING-STREAM").
+				s.mockExt.EXPECT().
+					Stream(gomock.Any(), "MISSING-STREAM").
 					Return(nil, errors.New("stream not found")).
 					Times(1)
 			},
 			expectedInfo: nil,
-			expectedErr:  "failed to get stream info for MISSING-STREAM: stream not found",
+			expectedErr:  "failed to get stream MISSING-STREAM: stream not found",
 		},
 		{
 			name:       "error getting stream info - connection error",
 			streamName: "ERROR-STREAM",
 			mockSetup: func() {
-				s.mockJS.EXPECT().
-					StreamInfo("ERROR-STREAM").
+				mockStream := mocks.NewMockStream(s.mockCtrl)
+				s.mockExt.EXPECT().
+					Stream(gomock.Any(), "ERROR-STREAM").
+					Return(mockStream, nil).
+					Times(1)
+				mockStream.EXPECT().
+					Info(gomock.Any()).
 					Return(nil, errors.New("connection lost")).
 					Times(1)
 			},
