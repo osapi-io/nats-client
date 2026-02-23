@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.6.0
-	github.com/nats-io/nats.go v1.48.0
+	github.com/nats-io/nats.go v1.49.0
 	github.com/nats-io/nkeys v0.4.15
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.40.0
