@@ -55,5 +55,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger.Info("KV bucket created", "bucket", kv.Bucket())
+	logger.Info("kv bucket created", "bucket", kv.Bucket())
 }

@@ -395,7 +395,7 @@ func (s *JetStreamPublicTestSuite) TestPublish() {
 			subject:     "test.noinit",
 			data:        []byte("test message"),
 			mockSetup:   func() {},
-			expectedErr: "JetStream not initialized: call Connect() first",
+			expectedErr: "jetstream not initialized: call Connect() first",
 		},
 	}
 
