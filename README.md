@@ -13,26 +13,50 @@
 
 A Go package for connecting to and interacting with a NATS server.
 
-## Usage
+## 📦 Install
 
-https://github.com/osapi-io/nats-client/blob/328fbaeed5315b5d4a7db6975bdc75c8d657e567/examples/auth-none-stream/main.go#L21-L87
+```bash
+go get github.com/osapi-io/nats-client
+```
 
-See the [examples][] section for additional use cases.
+## ✨ Features
 
-## Documentation
+See the [client docs](docs/client/README.md) for quick start, authentication,
+and per-feature reference.
 
-See the [generated documentation][] for details on available packages and functions.
+| Feature               | Description                                              | Docs                                       | Source                                                  |
+| --------------------- | -------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------- |
+| Connection management | Connect to NATS with configurable options and auth modes | [docs](docs/client/connection.md)          | [`connect.go`](pkg/client/connect.go)                   |
+| JetStream             | Create and manage JetStream streams                      | [docs](docs/client/jetstream.md)           | [`jetstream.go`](pkg/client/jetstream.go)               |
+| Key-Value stores      | CRUD operations on NATS KV buckets                       | [docs](docs/client/kv.md)                  | [`kv.go`](pkg/client/kv.go)                             |
+| KV-backed streams     | KV storage with stream notifications                     | [docs](docs/client/kv-stream.md)           | [`kv_stream.go`](pkg/client/kv_stream.go)               |
+| Consumer helpers      | JetStream consumer message processing                    | [docs](docs/client/consumer.md)            | [`consumer.go`](pkg/client/consumer.go)                 |
 
-## Contributing
+## 📋 Examples
+
+Each example is a standalone Go program you can read and run.
+
+| Example                                                    | What it shows                                      |
+| ---------------------------------------------------------- | -------------------------------------------------- |
+| [auth-none-stream](examples/auth-none-stream/main.go)     | Stream publish/subscribe without authentication    |
+| [auth-none-kv](examples/auth-none-kv/main.go)             | KV store operations without authentication         |
+| [auth-user-pass-stream](examples/auth-user-pass-stream/main.go) | Stream with username/password authentication |
+| [auth-nkeys-stream](examples/auth-nkeys-stream/main.go)   | Stream with NKey authentication                    |
+| [workqueue-stream](examples/workqueue-stream/main.go)     | Work queue pattern with consumer groups            |
+
+## 📖 Documentation
+
+See the [generated documentation][] for package-level API details.
+
+## 🤝 Contributing
 
 See the [Development](docs/development.md) guide for prerequisites, setup,
 and conventions. See the [Contributing](docs/contributing.md) guide before
 submitting a PR.
 
-## License
+## 📄 License
 
 The [MIT][] License.
 
-[examples]: examples/
 [generated documentation]: docs/gen/
 [MIT]: LICENSE
