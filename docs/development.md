@@ -67,6 +67,10 @@ go test -run TestName -v ./pkg/client/...  # Run a single test
 - Internal tests: `*_test.go` in same package (`package client`) for private
   functions.
 - Use `testify/suite` with table-driven patterns.
+- **One suite method per function under test.** All scenarios for a function
+  (success, error codes, transport failures, nil responses) belong as rows in
+  a single table — never split into separate `TestFoo`, `TestFooError`,
+  `TestFooNilResponse` methods.
 - Use `golang/mock` for mocking interfaces.
 
 ## Branching
