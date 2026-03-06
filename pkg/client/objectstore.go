@@ -42,7 +42,11 @@ func (c *Client) CreateOrUpdateObjectStore(
 
 	os, err := c.ExtJS.CreateOrUpdateObjectStore(ctx, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create/update Object Store bucket %s: %w", cfg.Bucket, err)
+		return nil, fmt.Errorf(
+			"failed to create/update Object Store bucket %s: %w",
+			cfg.Bucket,
+			err,
+		)
 	}
 
 	return os, nil
