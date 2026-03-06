@@ -27,6 +27,7 @@ if err := c.Connect(); err != nil {
 | [`Key-Value`](kv.md)                          | CRUD operations on NATS KV buckets           | `kv.go`            |
 | [`KV-Backed Streams`](kv-stream.md)           | KV storage with stream notifications         | `kv_stream.go`     |
 | [`Consumer`](consumer.md)                     | JetStream consumer message processing        | `consumer.go`      |
+| [`Object Store`](objectstore.md)              | Large blob storage with automatic chunking   | `objectstore.go`   |
 
 ## Authentication
 

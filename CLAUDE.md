@@ -28,6 +28,7 @@ just fetch / just deps / just test / just go::unit / just go::vet / just go::fmt
   - `kv.go` - Key-value store operations
   - `kv_stream.go` - KV-backed stream operations
   - `consumer.go` - JetStream consumer helpers
+  - `objectstore.go` - Object Store operations (large blob storage)
   - `types.go` - Shared types and interfaces
   - `mocks/` - Generated mock implementations
 
