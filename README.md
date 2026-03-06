@@ -31,6 +31,7 @@ and per-feature reference.
 | Key-Value stores      | CRUD operations on NATS KV buckets                       | [docs](docs/client/kv.md)                  | [`kv.go`](pkg/client/kv.go)                             |
 | KV-backed streams     | KV storage with stream notifications                     | [docs](docs/client/kv-stream.md)           | [`kv_stream.go`](pkg/client/kv_stream.go)               |
 | Consumer helpers      | JetStream consumer message processing                    | [docs](docs/client/consumer.md)            | [`consumer.go`](pkg/client/consumer.go)                 |
+| Object Store          | Large blob storage with automatic chunking               | [docs](docs/client/objectstore.md)         | [`objectstore.go`](pkg/client/objectstore.go)           |
 
 ## 📋 Examples
 
