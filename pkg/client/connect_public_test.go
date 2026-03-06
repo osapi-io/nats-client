@@ -280,30 +280,52 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 	}
 }
 
-func (s *ConnectPublicTestSuite) TestGetJetStreamDefault() {
-	js, err := client.GetJetStream(&nats.Conn{})
+func (s *ConnectPublicTestSuite) TestGetJetStream() {
+	tests := []struct {
+		name        string
+		mockSetup   func()
+		assert      func()
+		expectedErr string
+	}{
+		{
+			name:      "returns JetStream with default implementation",
+			mockSetup: func() {},
+			assert: func() {
+				js, err := client.GetJetStream(&nats.Conn{})
 
-	s.NoError(err)
-	s.NotNil(js)
-}
+				s.NoError(err)
+				s.NotNil(js)
+			},
+		},
+		{
+			name: "error propagates when called in Connect",
+			mockSetup: func() {
+				originalGetJetStream := client.GetJetStream
+				client.GetJetStream = func(_ *nats.Conn) (jetstream.JetStream, error) {
+					return nil, errors.New("simulated JetStream error")
+				}
+				s.T().Cleanup(func() { client.GetJetStream = originalGetJetStream })
 
-func (s *ConnectPublicTestSuite) TestGetJetStreamCalledInConnect() {
-	originalGetJetStream := client.GetJetStream
-	defer func() { client.GetJetStream = originalGetJetStream }()
+				s.mockNATS.EXPECT().
+					Connect(gomock.Any(), gomock.Any()).
+					Return(&nats.Conn{}, nil).
+					Times(1)
+			},
+			assert: func() {
+				err := s.client.Connect()
 
-	client.GetJetStream = func(_ *nats.Conn) (jetstream.JetStream, error) {
-		return nil, errors.New("simulated JetStream error")
+				s.Error(err)
+				s.Contains(err.Error(), "simulated JetStream error")
+			},
+		},
 	}
 
-	s.mockNATS.EXPECT().
-		Connect(gomock.Any(), gomock.Any()).
-		Return(&nats.Conn{}, nil).
-		Times(1)
-
-	err := s.client.Connect()
-
-	s.Error(err)
-	s.Contains(err.Error(), "simulated JetStream error")
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			tc.mockSetup()
+			tc.assert()
+		})
+	}
 }
 
 func TestConnectPublicTestSuite(t *testing.T) {

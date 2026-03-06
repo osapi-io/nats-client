@@ -34,7 +34,7 @@ import (
 	"github.com/osapi-io/nats-client/pkg/client/mocks"
 )
 
-type KVCreatePublicTestSuite struct {
+type KVPublicTestSuite struct {
 	suite.Suite
 
 	mockCtrl *gomock.Controller
@@ -43,7 +43,7 @@ type KVCreatePublicTestSuite struct {
 	client   *client.Client
 }
 
-func (s *KVCreatePublicTestSuite) SetupTest() {
+func (s *KVPublicTestSuite) SetupTest() {
 	s.mockCtrl = gomock.NewController(s.T())
 	s.mockExt = mocks.NewMockJetStream(s.mockCtrl)
 	s.mockKV = mocks.NewMockKeyValue(s.mockCtrl)
@@ -57,15 +57,15 @@ func (s *KVCreatePublicTestSuite) SetupTest() {
 	s.client.ExtJS = s.mockExt
 }
 
-func (s *KVCreatePublicTestSuite) TearDownTest() {
+func (s *KVPublicTestSuite) TearDownTest() {
 	s.mockCtrl.Finish()
 }
 
-func (s *KVCreatePublicTestSuite) SetupSubTest() {
+func (s *KVPublicTestSuite) SetupSubTest() {
 	s.SetupTest()
 }
 
-func (s *KVCreatePublicTestSuite) TestCreateOrUpdateKVBucket() {
+func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucket() {
 	tests := []struct {
 		name        string
 		bucketName  string
@@ -112,7 +112,7 @@ func (s *KVCreatePublicTestSuite) TestCreateOrUpdateKVBucket() {
 	}
 }
 
-func (s *KVCreatePublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
+func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
 	tests := []struct {
 		name        string
 		config      jetstream.KeyValueConfig
@@ -176,7 +176,7 @@ func (s *KVCreatePublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
 	}
 }
 
-func (s *KVCreatePublicTestSuite) TestPublishAndWaitKV() {
+func (s *KVPublicTestSuite) TestPublishAndWaitKV() {
 	tests := []struct {
 		name         string
 		subject      string
@@ -402,7 +402,7 @@ func (s *KVCreatePublicTestSuite) TestPublishAndWaitKV() {
 	}
 }
 
-func (s *KVCreatePublicTestSuite) TestWatchKV() {
+func (s *KVPublicTestSuite) TestWatchKV() {
 	tests := []struct {
 		name          string
 		pattern       string
@@ -672,7 +672,7 @@ func (s *KVCreatePublicTestSuite) TestWatchKV() {
 	}
 }
 
-func (s *KVCreatePublicTestSuite) TestKVPut() {
+func (s *KVPublicTestSuite) TestKVPut() {
 	tests := []struct {
 		name        string
 		bucket      string
@@ -747,7 +747,7 @@ func (s *KVCreatePublicTestSuite) TestKVPut() {
 	}
 }
 
-func (s *KVCreatePublicTestSuite) TestKVGet() {
+func (s *KVPublicTestSuite) TestKVGet() {
 	tests := []struct {
 		name         string
 		bucket       string
@@ -831,7 +831,7 @@ func (s *KVCreatePublicTestSuite) TestKVGet() {
 	}
 }
 
-func (s *KVCreatePublicTestSuite) TestKVDelete() {
+func (s *KVPublicTestSuite) TestKVDelete() {
 	tests := []struct {
 		name        string
 		bucket      string
@@ -902,7 +902,7 @@ func (s *KVCreatePublicTestSuite) TestKVDelete() {
 	}
 }
 
-func (s *KVCreatePublicTestSuite) TestKVKeys() {
+func (s *KVPublicTestSuite) TestKVKeys() {
 	tests := []struct {
 		name         string
 		bucket       string
@@ -1014,6 +1014,6 @@ func (s *KVCreatePublicTestSuite) TestKVKeys() {
 	}
 }
 
-func TestKVCreatePublicTestSuite(t *testing.T) {
-	suite.Run(t, new(KVCreatePublicTestSuite))
+func TestKVPublicTestSuite(t *testing.T) {
+	suite.Run(t, new(KVPublicTestSuite))
 }
