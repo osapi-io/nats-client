@@ -21,6 +21,7 @@ Package client provides a NATS JetStream client with connection management, KV s
   - [func \(c \*Client\) CreateOrUpdateJetStreamWithConfig\(ctx context.Context, streamConfig jetstream.StreamConfig, consumerConfigs ...jetstream.ConsumerConfig\) error](<#Client.CreateOrUpdateJetStreamWithConfig>)
   - [func \(c \*Client\) CreateOrUpdateKVBucket\(ctx context.Context, bucketName string\) \(jetstream.KeyValue, error\)](<#Client.CreateOrUpdateKVBucket>)
   - [func \(c \*Client\) CreateOrUpdateKVBucketWithConfig\(ctx context.Context, config jetstream.KeyValueConfig\) \(jetstream.KeyValue, error\)](<#Client.CreateOrUpdateKVBucketWithConfig>)
+  - [func \(c \*Client\) CreateOrUpdateObjectStore\(ctx context.Context, cfg jetstream.ObjectStoreConfig\) \(jetstream.ObjectStore, error\)](<#Client.CreateOrUpdateObjectStore>)
   - [func \(c \*Client\) CreateOrUpdateStreamWithConfig\(ctx context.Context, streamConfig jetstream.StreamConfig\) error](<#Client.CreateOrUpdateStreamWithConfig>)
   - [func \(c \*Client\) GetStreamInfo\(ctx context.Context, streamName string\) \(\*jetstream.StreamInfo, error\)](<#Client.GetStreamInfo>)
   - [func \(c \*Client\) KVDelete\(bucket string, key string\) error](<#Client.KVDelete>)
@@ -28,6 +29,7 @@ Package client provides a NATS JetStream client with connection management, KV s
   - [func \(c \*Client\) KVKeys\(bucket string\) \(\[\]string, error\)](<#Client.KVKeys>)
   - [func \(c \*Client\) KVPut\(bucket string, key string, value \[\]byte\) error](<#Client.KVPut>)
   - [func \(c \*Client\) KVPutAndPublish\(ctx context.Context, kvBucket string, key string, data \[\]byte, notifySubject string\) \(uint64, error\)](<#Client.KVPutAndPublish>)
+  - [func \(c \*Client\) ObjectStore\(ctx context.Context, name string\) \(jetstream.ObjectStore, error\)](<#Client.ObjectStore>)
   - [func \(c \*Client\) Publish\(ctx context.Context, subject string, data \[\]byte\) error](<#Client.Publish>)
   - [func \(c \*Client\) PublishAndWaitKV\(ctx context.Context, subject string, data \[\]byte, kvBucket jetstream.KeyValue, opts \*RequestReplyOptions\) \(\[\]byte, error\)](<#Client.PublishAndWaitKV>)
   - [func \(c \*Client\) WatchKV\(ctx context.Context, kv jetstream.KeyValue, pattern string\) \(\<\-chan jetstream.KeyValueEntry, error\)](<#Client.WatchKV>)
@@ -179,6 +181,15 @@ func (c *Client) CreateOrUpdateKVBucketWithConfig(ctx context.Context, config je
 
 CreateOrUpdateKVBucketWithConfig creates or updates a KV bucket with the provided configuration using the jetstream API. This uses native upsert semantics and does not require a fallback hack for existing buckets.
 
+<a name="Client.CreateOrUpdateObjectStore"></a>
+### func \(\*Client\) [CreateOrUpdateObjectStore](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/objectstore.go#L34-L37>)
+
+```go
+func (c *Client) CreateOrUpdateObjectStore(ctx context.Context, cfg jetstream.ObjectStoreConfig) (jetstream.ObjectStore, error)
+```
+
+CreateOrUpdateObjectStore creates or updates a NATS Object Store bucket with the provided configuration using the jetstream API. This uses native upsert semantics.
+
 <a name="Client.CreateOrUpdateStreamWithConfig"></a>
 ### func \(\*Client\) [CreateOrUpdateStreamWithConfig](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L37-L40>)
 
@@ -241,6 +252,15 @@ func (c *Client) KVPutAndPublish(ctx context.Context, kvBucket string, key strin
 ```
 
 KVPutAndPublish implements the pattern of storing data in KV and sending a notification via stream. This is useful for workflow systems where you want persistent storage \+ event notification.
+
+<a name="Client.ObjectStore"></a>
+### func \(\*Client\) [ObjectStore](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/objectstore.go#L56-L59>)
+
+```go
+func (c *Client) ObjectStore(ctx context.Context, name string) (jetstream.ObjectStore, error)
+```
+
+ObjectStore returns an existing NATS Object Store handle by name.
 
 <a name="Client.Publish"></a>
 ### func \(\*Client\) [Publish](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/jetstream.go#L120-L124>)
