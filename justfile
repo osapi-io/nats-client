@@ -1,5 +1,6 @@
 # Optional modules: mod? allows `just fetch` to work before .just/remote/ exists.
 # Recipes below use `just` subcommands instead of dependency syntax because just
+
 # validates dependencies at parse time, which would fail when modules aren't loaded.
 mod? go '.just/remote/go.mod.just'
 mod? just '.just/remote/just.mod.just'
