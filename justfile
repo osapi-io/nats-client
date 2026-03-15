@@ -2,6 +2,7 @@
 # Recipes below use `just` subcommands instead of dependency syntax because just
 # validates dependencies at parse time, which would fail when modules aren't loaded.
 mod? go '.just/remote/go.mod.just'
+mod? just '.just/remote/just.mod.just'
 
 # --- Fetch ---
 
@@ -10,6 +11,8 @@ fetch:
     mkdir -p .just/remote
     curl -sSfL https://raw.githubusercontent.com/osapi-io/osapi-justfiles/refs/heads/main/go.mod.just -o .just/remote/go.mod.just
     curl -sSfL https://raw.githubusercontent.com/osapi-io/osapi-justfiles/refs/heads/main/go.just -o .just/remote/go.just
+    curl -sSfL https://raw.githubusercontent.com/osapi-io/osapi-justfiles/refs/heads/main/just.mod.just -o .just/remote/just.mod.just
+    curl -sSfL https://raw.githubusercontent.com/osapi-io/osapi-justfiles/refs/heads/main/just.just -o .just/remote/just.just
 
 # --- Top-level orchestration ---
 
@@ -20,4 +23,10 @@ deps:
 
 # Run all tests
 test:
+    just just::fmt-check
     just go::test
+
+# Format and lint before committing
+ready:
+    just go::fmt
+    just go::vet
