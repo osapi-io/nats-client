@@ -23,7 +23,6 @@ deps:
 
 # Run all tests
 test:
-    just just::fmt-check
     just go::test
 
 # Format and lint before committing
