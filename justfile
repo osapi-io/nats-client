@@ -28,5 +28,7 @@ test:
 
 # Format and lint before committing
 ready:
+    just go::generate
+    just go::docs
     just go::fmt
     just go::vet
