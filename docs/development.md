@@ -73,6 +73,15 @@ go test -run TestName -v ./pkg/client/...  # Run a single test
   `TestFooNilResponse` methods.
 - Use `golang/mock` for mocking interfaces.
 
+## Before committing
+
+Run `just ready` before committing to ensure generated code, package docs,
+formatting, and lint are all up to date:
+
+```bash
+just ready   # go::generate, go::docs, go::fmt, go::vet
+```
+
 ## Branching
 
 All changes should be developed on feature branches. Create a branch from
