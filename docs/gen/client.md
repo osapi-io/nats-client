@@ -15,7 +15,10 @@ Package client provides a NATS JetStream client with connection management, KV s
 - [type AuthType](<#AuthType>)
 - [type Client](<#Client>)
   - [func New\(logger \*slog.Logger, opts \*Options\) \*Client](<#New>)
+  - [func \(c \*Client\) Close\(\)](<#Client.Close>)
   - [func \(c \*Client\) Connect\(\) error](<#Client.Connect>)
+  - [func \(c \*Client\) ConnectedServerVersion\(\) string](<#Client.ConnectedServerVersion>)
+  - [func \(c \*Client\) ConnectedURL\(\) string](<#Client.ConnectedURL>)
   - [func \(c \*Client\) ConsumeMessages\(ctx context.Context, streamName string, consumerName string, handler JetStreamMessageHandler, opts \*ConsumeOptions\) error](<#Client.ConsumeMessages>)
   - [func \(c \*Client\) CreateOrUpdateConsumerWithConfig\(ctx context.Context, streamName string, consumerConfig jetstream.ConsumerConfig\) error](<#Client.CreateOrUpdateConsumerWithConfig>)
   - [func \(c \*Client\) CreateOrUpdateJetStreamWithConfig\(ctx context.Context, streamConfig jetstream.StreamConfig, consumerConfigs ...jetstream.ConsumerConfig\) error](<#Client.CreateOrUpdateJetStreamWithConfig>)
@@ -29,9 +32,11 @@ Package client provides a NATS JetStream client with connection management, KV s
   - [func \(c \*Client\) KVKeys\(bucket string\) \(\[\]string, error\)](<#Client.KVKeys>)
   - [func \(c \*Client\) KVPut\(bucket string, key string, value \[\]byte\) error](<#Client.KVPut>)
   - [func \(c \*Client\) KVPutAndPublish\(ctx context.Context, kvBucket string, key string, data \[\]byte, notifySubject string\) \(uint64, error\)](<#Client.KVPutAndPublish>)
+  - [func \(c \*Client\) KeyValue\(ctx context.Context, bucket string\) \(jetstream.KeyValue, error\)](<#Client.KeyValue>)
   - [func \(c \*Client\) ObjectStore\(ctx context.Context, name string\) \(jetstream.ObjectStore, error\)](<#Client.ObjectStore>)
   - [func \(c \*Client\) Publish\(ctx context.Context, subject string, data \[\]byte\) error](<#Client.Publish>)
   - [func \(c \*Client\) PublishAndWaitKV\(ctx context.Context, subject string, data \[\]byte, kvBucket jetstream.KeyValue, opts \*RequestReplyOptions\) \(\[\]byte, error\)](<#Client.PublishAndWaitKV>)
+  - [func \(c \*Client\) Stream\(ctx context.Context, name string\) \(jetstream.Stream, error\)](<#Client.Stream>)
   - [func \(c \*Client\) WatchKV\(ctx context.Context, kv jetstream.KeyValue, pattern string\) \(\<\-chan jetstream.KeyValueEntry, error\)](<#Client.WatchKV>)
 - [type ConsumeOptions](<#ConsumeOptions>)
 - [type JetStreamMessageHandler](<#JetStreamMessageHandler>)
@@ -127,6 +132,15 @@ func New(logger *slog.Logger, opts *Options) *Client
 
 New creates a new Client instance using the provided logger and Options.
 
+<a name="Client.Close"></a>
+### func \(\*Client\) [Close](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connection.go#L30>)
+
+```go
+func (c *Client) Close()
+```
+
+Close closes the underlying NATS connection.
+
 <a name="Client.Connect"></a>
 ### func \(\*Client\) [Connect](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connect.go#L40>)
 
@@ -135,6 +149,24 @@ func (c *Client) Connect() error
 ```
 
 Connect establishes the connection to the NATS server and JetStream context. This method returns an error if there are any issues during connection.
+
+<a name="Client.ConnectedServerVersion"></a>
+### func \(\*Client\) [ConnectedServerVersion](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connection.go#L48>)
+
+```go
+func (c *Client) ConnectedServerVersion() string
+```
+
+ConnectedServerVersion returns the version of the connected NATS server. Returns an empty string if not connected or the version is unavailable.
+
+<a name="Client.ConnectedURL"></a>
+### func \(\*Client\) [ConnectedURL](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connection.go#L38>)
+
+```go
+func (c *Client) ConnectedURL() string
+```
+
+ConnectedURL returns the URL of the NATS server the client is connected to. Returns an empty string if not connected.
 
 <a name="Client.ConsumeMessages"></a>
 ### func \(\*Client\) [ConsumeMessages](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/consumer.go#L44-L50>)
@@ -253,6 +285,15 @@ func (c *Client) KVPutAndPublish(ctx context.Context, kvBucket string, key strin
 
 KVPutAndPublish implements the pattern of storing data in KV and sending a notification via stream. This is useful for workflow systems where you want persistent storage \+ event notification.
 
+<a name="Client.KeyValue"></a>
+### func \(\*Client\) [KeyValue](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connection.go#L62-L65>)
+
+```go
+func (c *Client) KeyValue(ctx context.Context, bucket string) (jetstream.KeyValue, error)
+```
+
+KeyValue returns a handle to a JetStream Key\-Value bucket by name.
+
 <a name="Client.ObjectStore"></a>
 ### func \(\*Client\) [ObjectStore](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/objectstore.go#L56-L59>)
 
@@ -279,6 +320,15 @@ func (c *Client) PublishAndWaitKV(ctx context.Context, subject string, data []by
 ```
 
 PublishAndWaitKV publishes a message and waits for a response in a KV bucket. This implements an async request/reply pattern using KV for response storage.
+
+<a name="Client.Stream"></a>
+### func \(\*Client\) [Stream](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/connection.go#L70-L73>)
+
+```go
+func (c *Client) Stream(ctx context.Context, name string) (jetstream.Stream, error)
+```
+
+Stream returns a handle to a JetStream stream by name.
 
 <a name="Client.WatchKV"></a>
 ### func \(\*Client\) [WatchKV](<https://github.com/osapi-io/nats-client/blob/main/pkg/client/kv.go#L165-L169>)
