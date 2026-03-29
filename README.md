@@ -8,6 +8,7 @@
 [![nats](https://img.shields.io/badge/NATS-27AAE1?style=for-the-badge&logo=natsdotio&logoColor=white)](https://nats.io)
 [![built with just](https://img.shields.io/badge/Built_with-Just-black?style=for-the-badge&logo=just&logoColor=white)](https://just.systems)
 ![gitHub commit activity](https://img.shields.io/github/commit-activity/m/osapi-io/nats-client?style=for-the-badge)
+[![go reference](https://img.shields.io/badge/go-reference-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://pkg.go.dev/github.com/osapi-io/nats-client/pkg/client)
 
 # NATS Client
 
@@ -47,7 +48,7 @@ Each example is a standalone Go program you can read and run.
 
 ## 📖 Documentation
 
-See the [generated documentation][] for package-level API details.
+See the [package documentation][] on pkg.go.dev for API details.
 
 ## 🤝 Contributing
 
@@ -59,5 +60,5 @@ submitting a PR.
 
 The [MIT][] License.
 
-[generated documentation]: docs/gen/
+[package documentation]: https://pkg.go.dev/github.com/osapi-io/nats-client/pkg/client
 [MIT]: LICENSE

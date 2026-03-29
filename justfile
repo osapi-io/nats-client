@@ -34,6 +34,5 @@ ready:
     just go::generate
     just just::fmt
     just docs::fmt
-    just go::docs
     just go::fmt
     just go::vet
