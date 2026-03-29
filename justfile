@@ -32,6 +32,7 @@ test:
 # Format and lint before committing
 ready:
     just go::generate
+    just just::fmt
     just docs::fmt
     just go::docs
     just go::fmt
