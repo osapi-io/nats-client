@@ -51,9 +51,10 @@ Go code should be formatted by [`gofumpt`][gofumpt] and linted using
 [`golangci-lint`][golangci-lint]. This style is enforced by CI.
 
 ```bash
-just go::fmt-check   # Check formatting
-just go::fmt         # Auto-fix formatting
-just go::vet         # Run linter
+just go::fmt-check    # Check formatting
+just go::fmt          # Auto-fix formatting
+just go::vet          # Run linter
+just go::docs-check   # Check generated docs are up to date
 ```
 
 ### Documentation
@@ -94,7 +95,7 @@ Run `just ready` before committing to ensure generated code, package docs,
 formatting, and lint are all up to date:
 
 ```bash
-just ready   # go::generate, go::docs, go::fmt, go::vet
+just ready
 ```
 
 ## Branching
