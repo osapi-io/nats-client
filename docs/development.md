@@ -51,10 +51,9 @@ Go code should be formatted by [`gofumpt`][gofumpt] and linted using
 [`golangci-lint`][golangci-lint]. This style is enforced by CI.
 
 ```bash
-just go::fmt-check    # Check formatting
-just go::fmt          # Auto-fix formatting
-just go::vet          # Run linter
-just go::docs-check   # Check generated docs are up to date
+just go::fmt-check   # Check formatting
+just go::fmt         # Auto-fix formatting
+just go::vet         # Run linter
 ```
 
 ### Documentation
