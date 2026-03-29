@@ -68,8 +68,8 @@ go test -run TestName -v ./pkg/client/...  # Run a single test
   functions.
 - Use `testify/suite` with table-driven patterns.
 - **One suite method per function under test.** All scenarios for a function
-  (success, error codes, transport failures, nil responses) belong as rows in
-  a single table — never split into separate `TestFoo`, `TestFooError`,
+  (success, error codes, transport failures, nil responses) belong as rows in a
+  single table — never split into separate `TestFoo`, `TestFooError`,
   `TestFooNilResponse` methods.
 - Use `golang/mock` for mocking interfaces.
 
@@ -84,9 +84,9 @@ just ready   # go::generate, go::docs, go::fmt, go::vet
 
 ## Branching
 
-All changes should be developed on feature branches. Create a branch from
-`main` using the naming convention `type/short-description`, where `type`
-matches the [Conventional Commits][] type:
+All changes should be developed on feature branches. Create a branch from `main`
+using the naming convention `type/short-description`, where `type` matches the
+[Conventional Commits][] type:
 
 - `feat/add-retry-logic`
 - `fix/null-pointer-crash`
@@ -104,8 +104,7 @@ Follow [Conventional Commits][] with the 50/72 rule:
 - **Subject line**: max 50 characters, imperative mood, capitalized, no period
 - **Body**: wrap at 72 characters, separated from subject by a blank line
 - **Format**: `type(scope): description`
-- **Types**: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
-  `chore`
+- **Types**: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`
 - Summarize the "what" and "why", not the "how"
 
 Try to write meaningful commit messages and avoid having too many commits on a

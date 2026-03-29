@@ -1,14 +1,13 @@
 # Object Store
 
-Manage NATS Object Store buckets for large blob storage with automatic
-chunking.
+Manage NATS Object Store buckets for large blob storage with automatic chunking.
 
 ## Methods
 
-| Method                                          | Description                                       |
-| ----------------------------------------------- | ------------------------------------------------- |
-| `CreateOrUpdateObjectStore(ctx, config)`        | Create or update an Object Store bucket            |
-| `ObjectStore(ctx, name)`                        | Get an existing Object Store handle                |
+| Method                                   | Description                             |
+| ---------------------------------------- | --------------------------------------- |
+| `CreateOrUpdateObjectStore(ctx, config)` | Create or update an Object Store bucket |
+| `ObjectStore(ctx, name)`                 | Get an existing Object Store handle     |
 
 ## Usage
 

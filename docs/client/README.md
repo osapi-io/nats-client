@@ -20,19 +20,19 @@ if err := c.Connect(); err != nil {
 
 ## Features
 
-| Feature                                       | Description                                  | Source             |
-| --------------------------------------------- | -------------------------------------------- | ------------------ |
-| [`Connection`](connection.md)                 | Connect to NATS with configurable auth modes | `connect.go`       |
-| [`JetStream`](jetstream.md)                   | Create and manage JetStream streams          | `jetstream.go`     |
-| [`Key-Value`](kv.md)                          | CRUD operations on NATS KV buckets           | `kv.go`            |
-| [`KV-Backed Streams`](kv-stream.md)           | KV storage with stream notifications         | `kv_stream.go`     |
-| [`Consumer`](consumer.md)                     | JetStream consumer message processing        | `consumer.go`      |
-| [`Object Store`](objectstore.md)              | Large blob storage with automatic chunking   | `objectstore.go`   |
+| Feature                             | Description                                  | Source           |
+| ----------------------------------- | -------------------------------------------- | ---------------- |
+| [`Connection`](connection.md)       | Connect to NATS with configurable auth modes | `connect.go`     |
+| [`JetStream`](jetstream.md)         | Create and manage JetStream streams          | `jetstream.go`   |
+| [`Key-Value`](kv.md)                | CRUD operations on NATS KV buckets           | `kv.go`          |
+| [`KV-Backed Streams`](kv-stream.md) | KV storage with stream notifications         | `kv_stream.go`   |
+| [`Consumer`](consumer.md)           | JetStream consumer message processing        | `consumer.go`    |
+| [`Object Store`](objectstore.md)    | Large blob storage with automatic chunking   | `objectstore.go` |
 
 ## Authentication
 
-| Type           | Description                         | Constant       |
-| -------------- | ----------------------------------- | -------------- |
-| No auth        | Connect without authentication      | `NoAuth`       |
-| Username/pass  | Username and password               | `UserPassAuth` |
-| NKey           | Ed25519 public-private key pairs    | `NKeyAuth`     |
+| Type          | Description                      | Constant       |
+| ------------- | -------------------------------- | -------------- |
+| No auth       | Connect without authentication   | `NoAuth`       |
+| Username/pass | Username and password            | `UserPassAuth` |
+| NKey          | Ed25519 public-private key pairs | `NKeyAuth`     |

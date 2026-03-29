@@ -4,10 +4,10 @@ Connect to a NATS server with configurable authentication.
 
 ## Methods
 
-| Method      | Description                                             |
-| ----------- | ------------------------------------------------------- |
-| `Connect()` | Establish connection to NATS and initialize JetStream   |
-| `Close()`   | Close the underlying NATS connection                    |
+| Method      | Description                                           |
+| ----------- | ----------------------------------------------------- |
+| `Connect()` | Establish connection to NATS and initialize JetStream |
+| `Close()`   | Close the underlying NATS connection                  |
 
 ## Usage
 

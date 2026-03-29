@@ -5,9 +5,9 @@ for workflow systems that need persistent storage plus event notification.
 
 ## Methods
 
-| Method                                               | Description                                   |
-| ---------------------------------------------------- | --------------------------------------------- |
-| `KVPutAndPublish(ctx, bucket, key, data, subject)`   | Store in KV then publish notification         |
+| Method                                             | Description                           |
+| -------------------------------------------------- | ------------------------------------- |
+| `KVPutAndPublish(ctx, bucket, key, data, subject)` | Store in KV then publish notification |
 
 ## Usage
 
