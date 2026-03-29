@@ -4,11 +4,11 @@ Create and manage JetStream streams.
 
 ## Methods
 
-| Method                                        | Description                                            |
-| --------------------------------------------- | ------------------------------------------------------ |
-| `CreateOrUpdateStreamWithConfig(ctx, config)` | Create or update a JetStream stream                    |
-| `Publish(ctx, subject, data)`                 | Publish a message to a JetStream subject               |
-| `PublishWithHeaders(ctx, subject, hdrs, data)` | Publish with NATS headers (e.g., trace propagation)   |
+| Method                                         | Description                                         |
+| ---------------------------------------------- | --------------------------------------------------- |
+| `CreateOrUpdateStreamWithConfig(ctx, config)`  | Create or update a JetStream stream                 |
+| `Publish(ctx, subject, data)`                  | Publish a message to a JetStream subject            |
+| `PublishWithHeaders(ctx, subject, hdrs, data)` | Publish with NATS headers (e.g., trace propagation) |
 
 ## Usage
 
