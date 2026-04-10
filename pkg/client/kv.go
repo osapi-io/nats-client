@@ -22,7 +22,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -62,19 +61,20 @@ func (c *Client) CreateOrUpdateKVBucketWithConfig(
 		return kv, nil
 	}
 
-	if strings.Contains(err.Error(), "can not change storage type") {
+	// NATS does not allow changing the storage type on an existing
+	// stream (error 10052). Fall back to returning the existing bucket.
+	if isStorageTypeError(err) {
 		c.logger.Debug(
-			"retrying KV bucket update without storage type",
+			"KV bucket exists with different storage type, returning existing",
 			slog.String("bucket", config.Bucket),
 		)
 
-		config.Storage = 0
-		kv, retryErr := c.ExtJS.CreateOrUpdateKeyValue(ctx, config)
-		if retryErr != nil {
+		kv, getErr := c.ExtJS.KeyValue(ctx, config.Bucket)
+		if getErr != nil {
 			return nil, fmt.Errorf(
 				"failed to create/update KV bucket %s: %w",
 				config.Bucket,
-				retryErr,
+				err,
 			)
 		}
 

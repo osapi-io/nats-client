@@ -115,7 +115,7 @@ func (s *ObjectStorePublicTestSuite) TestCreateOrUpdateObjectStore() {
 			expectedErr: "",
 		},
 		{
-			name: "when storage type conflict retries without storage",
+			name: "when storage type conflict returns existing bucket",
 			config: jetstream.ObjectStoreConfig{
 				Bucket:  "existing-bucket",
 				Storage: jetstream.MemoryStorage,
@@ -123,17 +123,17 @@ func (s *ObjectStorePublicTestSuite) TestCreateOrUpdateObjectStore() {
 			mockSetup: func() {
 				s.mockExt.EXPECT().
 					CreateOrUpdateObjectStore(gomock.Any(), gomock.Any()).
-					Return(nil, errors.New("stream configuration update can not change storage type")).
+					Return(nil, &jetstream.APIError{Code: 500, ErrorCode: 10052, Description: "stream configuration update can not change storage type"}).
 					Times(1)
 				s.mockExt.EXPECT().
-					CreateOrUpdateObjectStore(gomock.Any(), gomock.Any()).
+					ObjectStore(gomock.Any(), "existing-bucket").
 					Return(s.mockObjStor, nil).
 					Times(1)
 			},
 			expectedErr: "",
 		},
 		{
-			name: "when storage type conflict and retry fails returns retry error",
+			name: "when storage type conflict and get fails returns original error",
 			config: jetstream.ObjectStoreConfig{
 				Bucket:  "bad-bucket",
 				Storage: jetstream.MemoryStorage,
@@ -141,14 +141,14 @@ func (s *ObjectStorePublicTestSuite) TestCreateOrUpdateObjectStore() {
 			mockSetup: func() {
 				s.mockExt.EXPECT().
 					CreateOrUpdateObjectStore(gomock.Any(), gomock.Any()).
-					Return(nil, errors.New("stream configuration update can not change storage type")).
+					Return(nil, &jetstream.APIError{Code: 500, ErrorCode: 10052, Description: "stream configuration update can not change storage type"}).
 					Times(1)
 				s.mockExt.EXPECT().
-					CreateOrUpdateObjectStore(gomock.Any(), gomock.Any()).
-					Return(nil, errors.New("other error")).
+					ObjectStore(gomock.Any(), "bad-bucket").
+					Return(nil, errors.New("bucket not found")).
 					Times(1)
 			},
-			expectedErr: "failed to create/update Object Store bucket bad-bucket: other error",
+			expectedErr: "failed to create/update Object Store bucket bad-bucket: nats: API error: code=500 err_code=10052 description=stream configuration update can not change storage type",
 		},
 		{
 			name: "error creating Object Store bucket",
