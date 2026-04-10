@@ -94,7 +94,7 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateStreamWithConfig() {
 			expectedErr: "error creating/updating stream test-stream: stream creation failed",
 		},
 		{
-			name: "when storage type conflict retries without storage",
+			name: "when storage type conflict returns success",
 			config: jetstream.StreamConfig{
 				Name:    "test-stream",
 				Storage: jetstream.MemoryStorage,
@@ -102,32 +102,10 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateStreamWithConfig() {
 			mockSetup: func() {
 				s.mockExt.EXPECT().
 					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
-					Return(nil, errors.New("stream configuration update can not change storage type")).
-					Times(1)
-				s.mockExt.EXPECT().
-					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
-					Return(nil, nil).
+					Return(nil, &jetstream.APIError{Code: 500, ErrorCode: 10052, Description: "stream configuration update can not change storage type"}).
 					Times(1)
 			},
 			expectedErr: "",
-		},
-		{
-			name: "when storage type conflict and retry fails returns retry error",
-			config: jetstream.StreamConfig{
-				Name:    "test-stream",
-				Storage: jetstream.MemoryStorage,
-			},
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
-					Return(nil, errors.New("stream configuration update can not change storage type")).
-					Times(1)
-				s.mockExt.EXPECT().
-					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
-					Return(nil, errors.New("other error")).
-					Times(1)
-			},
-			expectedErr: "error creating/updating stream test-stream: other error",
 		},
 	}
 

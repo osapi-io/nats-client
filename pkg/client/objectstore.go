@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -49,19 +48,21 @@ func (c *Client) CreateOrUpdateObjectStore(
 		return os, nil
 	}
 
-	if strings.Contains(err.Error(), "can not change storage type") {
+	// NATS does not allow changing the storage type on an existing
+	// stream (error 10052). Fall back to returning the existing
+	// Object Store.
+	if isStorageTypeError(err) {
 		c.logger.Debug(
-			"retrying Object Store update without storage type",
+			"Object Store exists with different storage type, returning existing",
 			slog.String("bucket", cfg.Bucket),
 		)
 
-		cfg.Storage = 0
-		os, retryErr := c.ExtJS.CreateOrUpdateObjectStore(ctx, cfg)
-		if retryErr != nil {
+		os, getErr := c.ExtJS.ObjectStore(ctx, cfg.Bucket)
+		if getErr != nil {
 			return nil, fmt.Errorf(
 				"failed to create/update Object Store bucket %s: %w",
 				cfg.Bucket,
-				retryErr,
+				err,
 			)
 		}
 

@@ -22,6 +22,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -32,6 +33,24 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 )
+
+// jsErrCodeStorageTypeChange is the NATS JetStream error code returned when
+// attempting to change the storage type on an existing stream. Storage type
+// is immutable once a stream is created.
+const jsErrCodeStorageTypeChange = 10052
+
+// isStorageTypeError returns true if the error is a NATS API error indicating
+// that the storage type cannot be changed on an existing stream.
+func isStorageTypeError(
+	err error,
+) bool {
+	var apiErr *jetstream.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.ErrorCode == jsErrCodeStorageTypeChange
+	}
+
+	return false
+}
 
 // CreateOrUpdateStreamWithConfig creates or updates a JetStream stream with
 // the provided configuration.
@@ -55,16 +74,14 @@ func (c *Client) CreateOrUpdateStreamWithConfig(
 		return nil
 	}
 
-	if strings.Contains(err.Error(), "can not change storage type") {
+	// NATS does not allow changing the storage type on an existing
+	// stream (error 10052). The stream already exists, which is what
+	// we wanted — return success.
+	if isStorageTypeError(err) {
 		c.logger.Debug(
-			"retrying stream update without storage type",
+			"stream exists with different storage type, skipping update",
 			slog.String("name", streamConfig.Name),
 		)
-
-		streamConfig.Storage = 0
-		if _, retryErr := c.ExtJS.CreateOrUpdateStream(ctx, streamConfig); retryErr != nil {
-			return fmt.Errorf("error creating/updating stream %s: %w", streamConfig.Name, retryErr)
-		}
 
 		return nil
 	}
