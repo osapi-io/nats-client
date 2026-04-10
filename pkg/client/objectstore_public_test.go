@@ -115,6 +115,24 @@ func (s *ObjectStorePublicTestSuite) TestCreateOrUpdateObjectStore() {
 			expectedErr: "",
 		},
 		{
+			name: "when storage type conflict retries without storage",
+			config: jetstream.ObjectStoreConfig{
+				Bucket:  "existing-bucket",
+				Storage: jetstream.MemoryStorage,
+			},
+			mockSetup: func() {
+				s.mockExt.EXPECT().
+					CreateOrUpdateObjectStore(gomock.Any(), gomock.Any()).
+					Return(nil, errors.New("stream configuration update can not change storage type")).
+					Times(1)
+				s.mockExt.EXPECT().
+					CreateOrUpdateObjectStore(gomock.Any(), gomock.Any()).
+					Return(s.mockObjStor, nil).
+					Times(1)
+			},
+			expectedErr: "",
+		},
+		{
 			name: "error creating Object Store bucket",
 			config: jetstream.ObjectStoreConfig{
 				Bucket: "bad-bucket",

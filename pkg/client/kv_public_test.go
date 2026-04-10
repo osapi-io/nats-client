@@ -146,6 +146,52 @@ func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
 			expectedErr: "",
 		},
 		{
+			name: "when storage type conflict retries without storage",
+			config: jetstream.KeyValueConfig{
+				Bucket:  "existing-bucket",
+				Storage: jetstream.MemoryStorage,
+				TTL:     1 * time.Hour,
+			},
+			mockSetup: func() {
+				// First call fails with storage type error.
+				s.mockExt.EXPECT().
+					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{
+						Bucket:  "existing-bucket",
+						Storage: jetstream.MemoryStorage,
+						TTL:     1 * time.Hour,
+					}).
+					Return(nil, errors.New("stream configuration update can not change storage type")).
+					Times(1)
+				// Retry without storage type succeeds.
+				s.mockExt.EXPECT().
+					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{
+						Bucket: "existing-bucket",
+						TTL:    1 * time.Hour,
+					}).
+					Return(s.mockKV, nil).
+					Times(1)
+			},
+			expectedErr: "",
+		},
+		{
+			name: "when storage type conflict and retry fails returns retry error",
+			config: jetstream.KeyValueConfig{
+				Bucket:  "bad-bucket",
+				Storage: jetstream.MemoryStorage,
+			},
+			mockSetup: func() {
+				s.mockExt.EXPECT().
+					CreateOrUpdateKeyValue(gomock.Any(), gomock.Any()).
+					Return(nil, errors.New("stream configuration update can not change storage type")).
+					Times(1)
+				s.mockExt.EXPECT().
+					CreateOrUpdateKeyValue(gomock.Any(), gomock.Any()).
+					Return(nil, errors.New("other error")).
+					Times(1)
+			},
+			expectedErr: "failed to create/update KV bucket bad-bucket: other error",
+		},
+		{
 			name: "error creating KV bucket with config",
 			config: jetstream.KeyValueConfig{
 				Bucket: "invalid-bucket",

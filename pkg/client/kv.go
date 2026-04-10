@@ -14,8 +14,6 @@
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
 package client
@@ -24,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,9 +41,13 @@ func (c *Client) CreateOrUpdateKVBucket(
 	})
 }
 
-// CreateOrUpdateKVBucketWithConfig creates or updates a KV bucket with the provided
-// configuration using the jetstream API. This uses native upsert semantics and
-// does not require a fallback hack for existing buckets.
+// CreateOrUpdateKVBucketWithConfig creates or updates a KV bucket with the
+// provided configuration.
+//
+// NATS does not allow changing the storage type on an existing stream. If
+// CreateOrUpdateKeyValue fails with a "can not change storage type" error,
+// this method retries without the storage field so that other mutable
+// settings (TTL, MaxBytes, Replicas) are still applied.
 func (c *Client) CreateOrUpdateKVBucketWithConfig(
 	ctx context.Context,
 	config jetstream.KeyValueConfig,
@@ -55,11 +58,31 @@ func (c *Client) CreateOrUpdateKVBucketWithConfig(
 	)
 
 	kv, err := c.ExtJS.CreateOrUpdateKeyValue(ctx, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create/update KV bucket %s: %w", config.Bucket, err)
+	if err == nil {
+		return kv, nil
 	}
 
-	return kv, nil
+	// Retry without storage type if NATS rejected the storage change.
+	if strings.Contains(err.Error(), "can not change storage type") {
+		c.logger.Debug(
+			"retrying KV bucket update without storage type",
+			slog.String("bucket", config.Bucket),
+		)
+
+		config.Storage = 0 // zero value = let NATS keep existing storage
+		kv, retryErr := c.ExtJS.CreateOrUpdateKeyValue(ctx, config)
+		if retryErr != nil {
+			return nil, fmt.Errorf(
+				"failed to create/update KV bucket %s: %w",
+				config.Bucket,
+				retryErr,
+			)
+		}
+
+		return kv, nil
+	}
+
+	return nil, fmt.Errorf("failed to create/update KV bucket %s: %w", config.Bucket, err)
 }
 
 // RequestReplyOptions configures request/reply behavior.

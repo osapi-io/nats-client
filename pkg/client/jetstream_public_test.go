@@ -93,6 +93,24 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateStreamWithConfig() {
 			},
 			expectedErr: "error creating/updating stream test-stream: stream creation failed",
 		},
+		{
+			name: "when storage type conflict retries without storage",
+			config: jetstream.StreamConfig{
+				Name:    "test-stream",
+				Storage: jetstream.MemoryStorage,
+			},
+			mockSetup: func() {
+				s.mockExt.EXPECT().
+					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
+					Return(nil, errors.New("stream configuration update can not change storage type")).
+					Times(1)
+				s.mockExt.EXPECT().
+					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
+					Return(nil, nil).
+					Times(1)
+			},
+			expectedErr: "",
+		},
 	}
 
 	for _, tc := range tests {

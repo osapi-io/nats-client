@@ -24,13 +24,17 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
 
 // CreateOrUpdateObjectStore creates or updates a NATS Object Store bucket
-// with the provided configuration using the jetstream API. This uses native
-// upsert semantics.
+// with the provided configuration.
+//
+// NATS does not allow changing the storage type on an existing stream. If
+// CreateOrUpdateObjectStore fails with a "can not change storage type"
+// error, this method retries without the storage field.
 func (c *Client) CreateOrUpdateObjectStore(
 	ctx context.Context,
 	cfg jetstream.ObjectStoreConfig,
@@ -41,15 +45,34 @@ func (c *Client) CreateOrUpdateObjectStore(
 	)
 
 	os, err := c.ExtJS.CreateOrUpdateObjectStore(ctx, cfg)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"failed to create/update Object Store bucket %s: %w",
-			cfg.Bucket,
-			err,
-		)
+	if err == nil {
+		return os, nil
 	}
 
-	return os, nil
+	if strings.Contains(err.Error(), "can not change storage type") {
+		c.logger.Debug(
+			"retrying Object Store update without storage type",
+			slog.String("bucket", cfg.Bucket),
+		)
+
+		cfg.Storage = 0
+		os, retryErr := c.ExtJS.CreateOrUpdateObjectStore(ctx, cfg)
+		if retryErr != nil {
+			return nil, fmt.Errorf(
+				"failed to create/update Object Store bucket %s: %w",
+				cfg.Bucket,
+				retryErr,
+			)
+		}
+
+		return os, nil
+	}
+
+	return nil, fmt.Errorf(
+		"failed to create/update Object Store bucket %s: %w",
+		cfg.Bucket,
+		err,
+	)
 }
 
 // ObjectStore returns an existing NATS Object Store handle by name.
