@@ -62,14 +62,13 @@ func (c *Client) CreateOrUpdateKVBucketWithConfig(
 		return kv, nil
 	}
 
-	// Retry without storage type if NATS rejected the storage change.
 	if strings.Contains(err.Error(), "can not change storage type") {
 		c.logger.Debug(
 			"retrying KV bucket update without storage type",
 			slog.String("bucket", config.Bucket),
 		)
 
-		config.Storage = 0 // zero value = let NATS keep existing storage
+		config.Storage = 0
 		kv, retryErr := c.ExtJS.CreateOrUpdateKeyValue(ctx, config)
 		if retryErr != nil {
 			return nil, fmt.Errorf(
@@ -214,7 +213,6 @@ func (c *Client) WatchKV(
 				return
 			case entry, ok := <-watcher.Updates():
 				if !ok {
-					// Channel is closed, exit the goroutine
 					return
 				}
 				if entry != nil {

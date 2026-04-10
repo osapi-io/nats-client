@@ -153,7 +153,6 @@ func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
 				TTL:     1 * time.Hour,
 			},
 			mockSetup: func() {
-				// First call fails with storage type error.
 				s.mockExt.EXPECT().
 					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{
 						Bucket:  "existing-bucket",
@@ -162,7 +161,6 @@ func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
 					}).
 					Return(nil, errors.New("stream configuration update can not change storage type")).
 					Times(1)
-				// Retry without storage type succeeds.
 				s.mockExt.EXPECT().
 					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{
 						Bucket: "existing-bucket",
