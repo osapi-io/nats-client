@@ -33,7 +33,13 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 )
 
-// CreateOrUpdateStreamWithConfig creates or updates a JetStream stream with the provided configuration.
+// CreateOrUpdateStreamWithConfig creates or updates a JetStream stream with
+// the provided configuration.
+//
+// NATS does not allow changing the storage type on an existing stream. If
+// CreateOrUpdateStream fails with a "can not change storage type" error,
+// this method retries without the storage field so that other mutable
+// settings are still applied.
 func (c *Client) CreateOrUpdateStreamWithConfig(
 	ctx context.Context,
 	streamConfig jetstream.StreamConfig,
@@ -45,11 +51,25 @@ func (c *Client) CreateOrUpdateStreamWithConfig(
 	)
 
 	_, err := c.ExtJS.CreateOrUpdateStream(ctx, streamConfig)
-	if err != nil {
-		return fmt.Errorf("error creating/updating stream %s: %w", streamConfig.Name, err)
+	if err == nil {
+		return nil
 	}
 
-	return nil
+	if strings.Contains(err.Error(), "can not change storage type") {
+		c.logger.Debug(
+			"retrying stream update without storage type",
+			slog.String("name", streamConfig.Name),
+		)
+
+		streamConfig.Storage = 0
+		if _, retryErr := c.ExtJS.CreateOrUpdateStream(ctx, streamConfig); retryErr != nil {
+			return fmt.Errorf("error creating/updating stream %s: %w", streamConfig.Name, retryErr)
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("error creating/updating stream %s: %w", streamConfig.Name, err)
 }
 
 // CreateOrUpdateConsumerWithConfig creates or updates a JetStream consumer with the provided configuration.
