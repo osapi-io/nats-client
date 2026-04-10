@@ -49,19 +49,22 @@ func (c *Client) CreateOrUpdateObjectStore(
 		return os, nil
 	}
 
+	// NATS does not allow changing the storage type on an existing
+	// stream. FileStorage is the zero value (iota = 0), so we cannot
+	// use Storage = 0 to mean "don't change". Fall back to returning
+	// the existing Object Store.
 	if strings.Contains(err.Error(), "can not change storage type") {
 		c.logger.Debug(
-			"retrying Object Store update without storage type",
+			"Object Store exists with different storage type, returning existing",
 			slog.String("bucket", cfg.Bucket),
 		)
 
-		cfg.Storage = 0
-		os, retryErr := c.ExtJS.CreateOrUpdateObjectStore(ctx, cfg)
-		if retryErr != nil {
+		os, getErr := c.ExtJS.ObjectStore(ctx, cfg.Bucket)
+		if getErr != nil {
 			return nil, fmt.Errorf(
 				"failed to create/update Object Store bucket %s: %w",
 				cfg.Bucket,
-				retryErr,
+				err,
 			)
 		}
 

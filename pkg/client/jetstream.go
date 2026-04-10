@@ -55,16 +55,15 @@ func (c *Client) CreateOrUpdateStreamWithConfig(
 		return nil
 	}
 
+	// NATS does not allow changing the storage type on an existing
+	// stream. FileStorage is the zero value (iota = 0), so we cannot
+	// use Storage = 0 to mean "don't change". The stream already
+	// exists, which is what we wanted — return success.
 	if strings.Contains(err.Error(), "can not change storage type") {
 		c.logger.Debug(
-			"retrying stream update without storage type",
+			"stream exists with different storage type, skipping update",
 			slog.String("name", streamConfig.Name),
 		)
-
-		streamConfig.Storage = 0
-		if _, retryErr := c.ExtJS.CreateOrUpdateStream(ctx, streamConfig); retryErr != nil {
-			return fmt.Errorf("error creating/updating stream %s: %w", streamConfig.Name, retryErr)
-		}
 
 		return nil
 	}

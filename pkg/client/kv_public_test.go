@@ -146,33 +146,25 @@ func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
 			expectedErr: "",
 		},
 		{
-			name: "when storage type conflict retries without storage",
+			name: "when storage type conflict returns existing bucket",
 			config: jetstream.KeyValueConfig{
 				Bucket:  "existing-bucket",
 				Storage: jetstream.MemoryStorage,
-				TTL:     1 * time.Hour,
 			},
 			mockSetup: func() {
 				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{
-						Bucket:  "existing-bucket",
-						Storage: jetstream.MemoryStorage,
-						TTL:     1 * time.Hour,
-					}).
+					CreateOrUpdateKeyValue(gomock.Any(), gomock.Any()).
 					Return(nil, errors.New("stream configuration update can not change storage type")).
 					Times(1)
 				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{
-						Bucket: "existing-bucket",
-						TTL:    1 * time.Hour,
-					}).
+					KeyValue(gomock.Any(), "existing-bucket").
 					Return(s.mockKV, nil).
 					Times(1)
 			},
 			expectedErr: "",
 		},
 		{
-			name: "when storage type conflict and retry fails returns retry error",
+			name: "when storage type conflict and get fails returns original error",
 			config: jetstream.KeyValueConfig{
 				Bucket:  "bad-bucket",
 				Storage: jetstream.MemoryStorage,
@@ -183,11 +175,11 @@ func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
 					Return(nil, errors.New("stream configuration update can not change storage type")).
 					Times(1)
 				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), gomock.Any()).
-					Return(nil, errors.New("other error")).
+					KeyValue(gomock.Any(), "bad-bucket").
+					Return(nil, errors.New("bucket not found")).
 					Times(1)
 			},
-			expectedErr: "failed to create/update KV bucket bad-bucket: other error",
+			expectedErr: "failed to create/update KV bucket bad-bucket: stream configuration update can not change storage type",
 		},
 		{
 			name: "error creating KV bucket with config",
