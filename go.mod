@@ -3,12 +3,12 @@ module github.com/osapi-io/nats-client
 go 1.25.0
 
 require (
-	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.6.0
 	github.com/nats-io/nats.go v1.50.0
 	github.com/nats-io/nkeys v0.4.15
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.43.0
+	go.uber.org/mock v0.6.0
 )
 
 require (
@@ -280,11 +280,11 @@ require (
 
 tool (
 	github.com/boumenot/gocover-cobertura
-	github.com/golang/mock/mockgen
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	github.com/nats-io/nats.go/jetstream
 	github.com/nats-io/natscli/nats
 	github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 	github.com/segmentio/golines
+	go.uber.org/mock/mockgen
 	mvdan.cc/gofumpt
 )
