@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/nats-io/nats.go v1.50.0
+	github.com/nats-io/nats.go v1.51.0
 	github.com/nats-io/nkeys v0.4.15
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.43.0
