@@ -240,7 +240,8 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStreamWithConfig() {
 			err := s.client.CreateOrUpdateJetStreamWithConfig(
 				s.ctx,
 				tc.streamConfig,
-				tc.consumerConfigs...)
+				tc.consumerConfigs...,
+			)
 
 			if tc.expectedErr == "" {
 				s.NoError(err)
