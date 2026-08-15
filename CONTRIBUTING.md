@@ -65,9 +65,9 @@ Go code should be formatted by [gofumpt] and linted using [golangci-lint].
 This style is enforced by CI.
 
 ```bash
-just go::fmt-check   # Check formatting
-just go::fmt         # Auto-fix formatting
-just go::vet         # Run linter
+just go-fmt-check   # Check formatting
+just go-fmt         # Auto-fix formatting
+just go-vet         # Run linter
 ```
 
 golangci-lint runs errcheck, errname, goimports, govet, prealloc, predeclared,
@@ -109,8 +109,8 @@ just docs::fmt         # Auto-fix formatting
 
 ```bash
 just test           # Run all tests (lint + unit + coverage + bats)
-just go::unit       # Run unit tests only
-just go::unit-cov   # Generate coverage report
+just go-unit       # Run unit tests only
+just go-unit-cov   # Generate coverage report
 go test -run TestName -v ./pkg/client/...  # Run a single test
 ```
 
@@ -118,7 +118,7 @@ Coverage is gated at 100%. `just test` fails if total coverage drops below it,
 so a change that adds untested code fails locally and in CI:
 
 ```bash
-just go::unit-cov-check   # Report coverage and fail below the target
+just go-unit-cov-check   # Report coverage and fail below the target
 ```
 
 The target is declared in `.github/codecov.yml` and in the shared `go` justfile
