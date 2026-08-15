@@ -28,7 +28,6 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/osapi-io/nats-client/pkg/client"
 )
@@ -61,19 +60,19 @@ func main() {
 		logger.Error("failed to connect", "error", err)
 		os.Exit(1)
 	}
-	defer c.NC.Close()
-	logger.Info("connected", "url", c.NC.ConnectedUrl())
+	defer c.Close()
+	logger.Info("connected", "url", c.ConnectedURL())
 
-	// Provision the stream and consumer using the native API.
+	// Provision the stream and consumer from a declarative config.
 	// (For example, this creates a stream "jobs" with a consumer named worker_high
 	// that only receives messages matching "jobs.<priority.>" such as "jobs.high.>")
-	streamConfig := &nats.StreamConfig{
+	streamConfig := jetstream.StreamConfig{
 		Name:              streamName,
 		Subjects:          []string{"jobs.*.*"},
-		Storage:           nats.FileStorage,
+		Storage:           jetstream.FileStorage,
 		Replicas:          1,
-		Retention:         nats.WorkQueuePolicy,
-		Discard:           nats.DiscardNew,
+		Retention:         jetstream.WorkQueuePolicy,
+		Discard:           jetstream.DiscardNew,
 		MaxMsgs:           20000,
 		MaxMsgsPerSubject: -1,
 		MaxBytes:          256 * 1024 * 1024,  // 256 MiB
@@ -96,10 +95,10 @@ func main() {
 	// Provision the DLQ stream to capture advisories for consumer max deliveries.
 	// When a consumer reaches its max delivery attempts, NATS publishes an advisory on:
 	//   $JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.jobs.{consumer_name}
-	dlqStreamConfig := &nats.StreamConfig{
+	dlqStreamConfig := jetstream.StreamConfig{
 		Name:     "jobs_dlq",
 		Subjects: []string{"$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.jobs.*"},
-		Storage:  nats.FileStorage,
+		Storage:  jetstream.FileStorage,
 		Replicas: 1,
 		Metadata: map[string]string{
 			"dead_letter_queue": "true",

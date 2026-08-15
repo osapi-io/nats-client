@@ -26,7 +26,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/osapi-io/nats-client/pkg/client"
 )
@@ -48,13 +47,13 @@ func main() {
 		logger.Error("failed to connect", "error", err)
 		os.Exit(1)
 	}
-	defer c.NC.Close()
-	logger.Info("connected", "url", c.NC.ConnectedUrl())
+	defer c.Close()
+	logger.Info("connected", "url", c.ConnectedURL())
 
-	streamConfig := &nats.StreamConfig{
+	streamConfig := jetstream.StreamConfig{
 		Name:     "STREAM2",
 		Subjects: []string{"stream2.*"},
-		Storage:  nats.FileStorage,
+		Storage:  jetstream.FileStorage,
 		Replicas: 1,
 	}
 
