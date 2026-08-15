@@ -1,8 +1,13 @@
 # Optional modules: mod? allows `just fetch` to work before .just/remote/ exists.
 # Recipes below use `just` subcommands instead of dependency syntax because just
-
 # validates dependencies at parse time, which would fail when modules aren't loaded.
+# Minimum total coverage. Declared again in .github/codecov.yml —
+# change both together.
+
+go_coverage_target := "100"
+
 import? '.just/remote/go.just'
+
 mod? docs '.just/remote/docs.mod.just'
 mod? just '.just/remote/just.mod.just'
 
