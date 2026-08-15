@@ -45,5 +45,5 @@ c := client.New(logger, &client.Options{
 if err := c.Connect(); err != nil {
     log.Fatal(err)
 }
-defer c.NC.Close()
+defer c.Close()
 ```

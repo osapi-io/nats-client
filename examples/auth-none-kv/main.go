@@ -21,6 +21,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
 
@@ -46,10 +47,12 @@ func main() {
 		logger.Error("failed to connect", "error", err)
 		os.Exit(1)
 	}
-	defer c.NC.Close()
-	logger.Info("connected", "url", c.NC.ConnectedUrl())
+	defer c.Close()
+	logger.Info("connected", "url", c.ConnectedURL())
 
-	kv, err := c.CreateKVBucket(kvBucketName)
+	ctx := context.Background()
+
+	kv, err := c.CreateOrUpdateKVBucket(ctx, kvBucketName)
 	if err != nil {
 		logger.Error("failed to create KV store", "error", err)
 		os.Exit(1)
