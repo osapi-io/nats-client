@@ -29,9 +29,13 @@ deps:
 test:
     just go::test
 
+# Generate code
+generate:
+    just go::generate
+
 # Format and lint before committing
 ready:
-    just go::generate
+    just generate
     just just::fmt
     just docs::fmt
     just go::fmt
