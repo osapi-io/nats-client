@@ -1,10 +1,15 @@
+set allow-duplicate-variables
+
 # Optional modules: mod? allows `just fetch` to work before .just/remote/ exists.
 # Recipes below use `just` subcommands instead of dependency syntax because just
 
 # validates dependencies at parse time, which would fail when modules aren't loaded.
 import? '.just/remote/go.just'
-mod? docs '.just/remote/docs.mod.just'
+import? '.just/remote/md.just'
 mod? just '.just/remote/just.mod.just'
+
+# No documentation site, so md formats every markdown file in the repository.
+md_site_dir := ""
 
 # --- Fetch ---
 
@@ -12,8 +17,7 @@ mod? just '.just/remote/just.mod.just'
 fetch:
     mkdir -p .just/remote
     curl -sSfL https://raw.githubusercontent.com/osapi-io/osapi-justfiles/refs/heads/main/go/go.just -o .just/remote/go.just
-    curl -sSfL https://raw.githubusercontent.com/osapi-io/osapi-justfiles/refs/heads/main/docs.mod.just -o .just/remote/docs.mod.just
-    curl -sSfL https://raw.githubusercontent.com/osapi-io/osapi-justfiles/refs/heads/main/docs.just -o .just/remote/docs.just
+    curl -sSfL https://raw.githubusercontent.com/osapi-io/osapi-justfiles/refs/heads/main/md/md.just -o .just/remote/md.just
     curl -sSfL https://raw.githubusercontent.com/osapi-io/osapi-justfiles/refs/heads/main/just.mod.just -o .just/remote/just.mod.just
     curl -sSfL https://raw.githubusercontent.com/osapi-io/osapi-justfiles/refs/heads/main/just.just -o .just/remote/just.just
 
@@ -36,6 +40,6 @@ generate:
 ready:
     just generate
     just just::fmt
-    just docs::fmt
+    just md-fmt
     just go-fmt
     just go-vet

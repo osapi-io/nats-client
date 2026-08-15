@@ -1,7 +1,7 @@
 # NATS Key-Value Store Without Authentication
 
-This example demonstrates how to create and interact with a NATS Key-Value
-(KV) store without authentication.
+This example demonstrates how to create and interact with a NATS Key-Value (KV)
+store without authentication.
 
 ## Usage
 
