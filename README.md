@@ -52,9 +52,8 @@ See the [package documentation][] on pkg.go.dev for API details.
 
 ## 🤝 Contributing
 
-See the [Development](docs/development.md) guide for prerequisites, setup,
-and conventions. See the [Contributing](docs/contributing.md) guide before
-submitting a PR.
+See the [Contributing](CONTRIBUTING.md) guide for prerequisites, setup,
+conventions, and the PR workflow.
 
 ## 📄 License
 
