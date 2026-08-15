@@ -25,30 +25,30 @@ go get github.com/osapi-io/nats-client
 See the [client docs](docs/client/README.md) for quick start, authentication,
 and per-feature reference.
 
-| Feature               | Description                                              | Docs                                       | Source                                                  |
-| --------------------- | -------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------- |
-| Connection management | Connect to NATS with configurable options and auth modes | [docs](docs/client/connection.md)          | [`connect.go`](pkg/client/connect.go)                   |
-| JetStream             | Create and manage JetStream streams                      | [docs](docs/client/jetstream.md)           | [`jetstream.go`](pkg/client/jetstream.go)               |
-| Key-Value stores      | CRUD operations on NATS KV buckets                       | [docs](docs/client/kv.md)                  | [`kv.go`](pkg/client/kv.go)                             |
-| KV-backed streams     | KV storage with stream notifications                     | [docs](docs/client/kv-stream.md)           | [`kv_stream.go`](pkg/client/kv_stream.go)               |
-| Consumer helpers      | JetStream consumer message processing                    | [docs](docs/client/consumer.md)            | [`consumer.go`](pkg/client/consumer.go)                 |
-| Object Store          | Large blob storage with automatic chunking               | [docs](docs/client/objectstore.md)         | [`objectstore.go`](pkg/client/objectstore.go)           |
+| Feature               | Description                                              | Docs                               | Source                                        |
+| --------------------- | -------------------------------------------------------- | ---------------------------------- | --------------------------------------------- |
+| Connection management | Connect to NATS with configurable options and auth modes | [docs](docs/client/connection.md)  | [`connect.go`](pkg/client/connect.go)         |
+| JetStream             | Create and manage JetStream streams                      | [docs](docs/client/jetstream.md)   | [`jetstream.go`](pkg/client/jetstream.go)     |
+| Key-Value stores      | CRUD operations on NATS KV buckets                       | [docs](docs/client/kv.md)          | [`kv.go`](pkg/client/kv.go)                   |
+| KV-backed streams     | KV storage with stream notifications                     | [docs](docs/client/kv-stream.md)   | [`kv_stream.go`](pkg/client/kv_stream.go)     |
+| Consumer helpers      | JetStream consumer message processing                    | [docs](docs/client/consumer.md)    | [`consumer.go`](pkg/client/consumer.go)       |
+| Object Store          | Large blob storage with automatic chunking               | [docs](docs/client/objectstore.md) | [`objectstore.go`](pkg/client/objectstore.go) |
 
 ## 📋 Examples
 
 Each example is a standalone Go program you can read and run.
 
-| Example                                                    | What it shows                                      |
-| ---------------------------------------------------------- | -------------------------------------------------- |
-| [auth-none-stream](examples/auth-none-stream/main.go)     | Stream publish/subscribe without authentication    |
-| [auth-none-kv](examples/auth-none-kv/main.go)             | KV store operations without authentication         |
-| [auth-user-pass-stream](examples/auth-user-pass-stream/main.go) | Stream with username/password authentication |
-| [auth-nkeys-stream](examples/auth-nkeys-stream/main.go)   | Stream with NKey authentication                    |
-| [workqueue-stream](examples/workqueue-stream/main.go)     | Work queue pattern with consumer groups            |
+| Example                                                         | What it shows                                   |
+| --------------------------------------------------------------- | ----------------------------------------------- |
+| [auth-none-stream](examples/auth-none-stream/main.go)           | Stream publish/subscribe without authentication |
+| [auth-none-kv](examples/auth-none-kv/main.go)                   | KV store operations without authentication      |
+| [auth-user-pass-stream](examples/auth-user-pass-stream/main.go) | Stream with username/password authentication    |
+| [auth-nkeys-stream](examples/auth-nkeys-stream/main.go)         | Stream with NKey authentication                 |
+| [workqueue-stream](examples/workqueue-stream/main.go)           | Work queue pattern with consumer groups         |
 
 ## 📖 Documentation
 
-See the [package documentation][] on pkg.go.dev for API details.
+See the [package documentation] on pkg.go.dev for API details.
 
 ## 🤝 Contributing
 
@@ -57,7 +57,7 @@ conventions, and the PR workflow.
 
 ## 📄 License
 
-The [MIT][] License.
+The [MIT] License.
 
+[mit]: LICENSE
 [package documentation]: https://pkg.go.dev/github.com/osapi-io/nats-client/pkg/client
-[MIT]: LICENSE

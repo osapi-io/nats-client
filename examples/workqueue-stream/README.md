@@ -2,7 +2,7 @@
 
 A worker consumer to interact with a work queue stream.
 
-Adapted from [14-jetstream-workqueues][].
+Adapted from [14-jetstream-workqueues].
 
 ## Usage
 
