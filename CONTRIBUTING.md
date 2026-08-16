@@ -98,6 +98,16 @@ Zero-parameter functions stay on one line.
 - Unused parameters: rename to `_`
 - Import order: stdlib, third-party, local (blank-line separated)
 
+### Documentation
+
+Markdown files are formatted with [mdformat] through `uvx`. This style is
+enforced by CI.
+
+```bash
+just md-fmt-check   # Check formatting
+just md-fmt         # Auto-fix formatting
+```
+
 ## Testing
 
 ```bash
