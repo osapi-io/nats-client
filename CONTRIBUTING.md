@@ -136,7 +136,7 @@ module — change both together.
   (success, error codes, transport failures, nil responses) belong as rows in a
   single table — never split into separate `TestFoo`, `TestFooError`,
   `TestFooNilResponse` methods.
-- Use `golang/mock` for mocking interfaces.
+- Use `go.uber.org/mock` for mocking interfaces.
 
 ## Before committing
 

@@ -25,7 +25,7 @@ fetch:
 # Install all dependencies
 deps:
     just go-deps
-    go get -tool github.com/golang/mock/mockgen
+    go get -tool go.uber.org/mock/mockgen
 
 # Run all tests
 test:
