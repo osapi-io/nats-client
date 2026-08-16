@@ -58,10 +58,10 @@ just deps
 
 ## Code style
 
-### Go
-
-Go code should be formatted by [gofumpt] and linted using [golangci-lint]. This
-style is enforced by CI.
+Go conventions — signatures, file naming, test structure, mocking, and the style
+baseline — are specified in the `go-code-standards` capability in
+[osapi-io/specs](https://github.com/osapi-io/specs). Where this page and the
+specification disagree, the specification wins.
 
 ```bash
 just go-fmt-check   # Check formatting
@@ -69,40 +69,7 @@ just go-fmt         # Auto-fix formatting
 just go-vet         # Run linter
 ```
 
-golangci-lint runs errcheck, errname, goimports, govet, prealloc, predeclared,
-revive, and staticcheck. Generated files (`*.gen.go`, `*.pb.go`) are excluded
-from formatting.
-
-### Function signatures
-
-Functions with parameters MUST use multi-line format:
-
-```go
-func FunctionName(
-    param1 type1,
-    param2 type2,
-) (returnType, error) {
-}
-```
-
-### Go patterns
-
-- Error wrapping: `fmt.Errorf("context: %w", err)`
-- Early returns over nested if-else
-- Unused parameters: rename to `_`
-- Import order: stdlib, third-party, local (blank-line separated)
-- Avoid generic file names like `helpers.go` or `utils.go` — name files after
-  what they contain
-
-### Documentation
-
-Markdown files are formatted with [mdformat] through `uvx`. This style is
-enforced by CI.
-
-```bash
-just md-fmt-check   # Check formatting
-just md-fmt         # Auto-fix formatting
-```
+Generated files (`*.gen.go`, `*.pb.go`) are excluded from formatting.
 
 ## Testing
 
@@ -125,18 +92,8 @@ module — change both together.
 
 ### Test file conventions
 
-- Public tests: `*_public_test.go` in test package (`package client_test`) for
-  exported functions.
-- Internal tests: `*_test.go` in the same package (`package client`) for private
-  functions.
-- Suite naming: `*_public_test.go` → `{Name}PublicTestSuite`, `*_test.go` →
-  `{Name}TestSuite`.
-- Use `testify/suite` with table-driven patterns and `validateFunc` callbacks.
-- **One suite method per function under test.** All scenarios for a function
-  (success, error codes, transport failures, nil responses) belong as rows in a
-  single table — never split into separate `TestFoo`, `TestFooError`,
-  `TestFooNilResponse` methods.
-- Use `go.uber.org/mock` for mocking interfaces.
+Test structure, suite naming, and mocking are specified in `go-code-standards`.
+In this repository the external test package is `package client_test`.
 
 ## Before committing
 
@@ -211,8 +168,6 @@ If you have questions, feel free to open a [Discussion] on GitHub.
 [conventional commits]: https://www.conventionalcommits.org
 [discussion]: https://github.com/osapi-io/nats-client/discussions
 [go]: https://go.dev
-[gofumpt]: https://github.com/mvdan/gofumpt
-[golangci-lint]: https://golangci-lint.run
 [just]: https://just.systems
 [mdformat]: https://pypi.org/project/mdformat/
 [mise]: https://mise.jdx.dev
