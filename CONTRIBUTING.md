@@ -58,10 +58,14 @@ just deps
 
 ## Code style
 
-Go conventions — signatures, file naming, test structure, mocking, and the style
-baseline — are specified in the `go-code-standards` capability in
-[osapi-io/specs](https://github.com/osapi-io/specs). Where this page and the
-specification disagree, the specification wins.
+These conventions are shared across every Go repository in the organization and
+are specified in the `go-code-standards` capability in
+[osapi-io/specs](https://github.com/osapi-io/specs). They are restated here
+because a contributor should not have to read another repository to learn how to
+write code in this one. Where the two disagree, the specification wins.
+
+Go code is formatted by [gofumpt] and linted using [golangci-lint], enforced by
+CI.
 
 ```bash
 just go-fmt-check   # Check formatting
@@ -69,7 +73,30 @@ just go-fmt         # Auto-fix formatting
 just go-vet         # Run linter
 ```
 
-Generated files (`*.gen.go`, `*.pb.go`) are excluded from formatting.
+golangci-lint runs errcheck, errname, goimports, govet, prealloc, predeclared,
+revive, and staticcheck. Generated files (`*.gen.go`, `*.pb.go`) are excluded
+from formatting.
+
+### Function signatures
+
+Functions with parameters use multi-line format, one parameter per line:
+
+```go
+func FunctionName(
+    param1 type1,
+    param2 type2,
+) (returnType, error) {
+}
+```
+
+Zero-parameter functions stay on one line.
+
+### Go patterns
+
+- Error wrapping: `fmt.Errorf("context: %w", err)`
+- Early returns over nested if-else
+- Unused parameters: rename to `_`
+- Import order: stdlib, third-party, local (blank-line separated)
 
 ## Testing
 
@@ -92,8 +119,17 @@ module — change both together.
 
 ### Test file conventions
 
-Test structure, suite naming, and mocking are specified in `go-code-standards`.
-In this repository the external test package is `package client_test`.
+- Public tests: `*_public_test.go` in `package client_test`, exercising the
+  exported surface. This is the default.
+- Internal tests: `*_test.go` in `package client`, for what the exported surface
+  cannot reach.
+- Suite naming: `*_public_test.go` → `{Name}PublicTestSuite`, `*_test.go` →
+  `{Name}TestSuite`.
+- `testify/suite` with table-driven cases and `validateFunc` callbacks.
+- One suite method per function under test — all scenarios for a function
+  (success, error codes, transport failures, nil responses) are rows in one
+  table, never separate `TestFoo` / `TestFooError` methods.
+- Mocks are generated with `go.uber.org/mock` and committed; never hand-written.
 
 ## Before committing
 
