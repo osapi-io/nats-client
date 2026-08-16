@@ -43,4 +43,5 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ## Task tracking
 
 Implementation planning and execution uses the superpowers plugin workflows
-(`writing-plans` and `executing-plans`). Plans live in `docs/plans/`.
+(`writing-plans` and `executing-plans`). Plans live in `docs/plans/`, created
+when the first plan is written.
