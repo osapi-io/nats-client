@@ -43,6 +43,16 @@ linters:
     presets:
       - comments
       - std-error-handling
+    rules:
+      # These three rules ask whether a function does too much. A table-driven
+      # test does not: it holds a list of cases and one small loop. revive
+      # counts the whole literal, closures included, so a ten-case table reads
+      # as complexity twenty while the loop body under it branches twice.
+      #
+      # They stay on for production, where they found four functions genuinely
+      # worth splitting — ConsumeMessages at 23, WatchKV at 20, Connect at 14.
+      - path: _test\.go
+        text: "function-length|cognitive-complexity|cyclomatic"
 
 formatters:
   enable:
