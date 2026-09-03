@@ -10,7 +10,7 @@
 ![gitHub commit activity](https://img.shields.io/github/commit-activity/m/osapi-io/nats-client?style=for-the-badge)
 [![go reference](https://img.shields.io/badge/go-reference-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://pkg.go.dev/github.com/osapi-io/nats-client/pkg/client)
 
-# NATS Client
+# NATS client
 
 A Go package for connecting to and interacting with a NATS server.
 
