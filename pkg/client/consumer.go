@@ -29,6 +29,14 @@ import (
 )
 
 // JetStreamMessageHandler defines the signature for JetStream message handling functions.
+// defaultMaxInFlight caps unacknowledged messages when the caller passes no
+// ConsumeOptions.
+const defaultMaxInFlight = 10
+
+// fetchTimeoutMessage is what a Fetch returns when no message arrived before
+// the deadline. It is the idle case, not a failure.
+const fetchTimeoutMessage = "nats: timeout"
+
 type JetStreamMessageHandler func(msg jetstream.Msg) error
 
 // ConsumeOptions configures message consumption behavior.
@@ -50,7 +58,7 @@ func (c *Client) ConsumeMessages(
 ) error {
 	if opts == nil {
 		opts = &ConsumeOptions{
-			MaxInFlight: 10, // Default limit
+			MaxInFlight: defaultMaxInFlight,
 		}
 	}
 
@@ -77,44 +85,70 @@ func (c *Client) ConsumeMessages(
 	for {
 		select {
 		case <-ctx.Done():
-			c.logger.Debug("stopping message consumption due to context cancellation")
+			c.logger.Debug(
+				"stopping message consumption due to context cancellation",
+			)
+
 			return ctx.Err()
 
 		default:
-			// Fetch messages with timeout
-			msgs, err := consumer.Fetch(1)
-			if err != nil {
-				if err.Error() == "nats: timeout" {
-					continue // Normal timeout, try again
-				}
-				c.logger.Error(
-					"error fetching messages",
-					slog.String("error", err.Error()),
-				)
-				continue
-			}
-
-			// Process each message
-			for msg := range msgs.Messages() {
-				if err := c.processMessage(msg, handler); err != nil {
-					c.logger.Error(
-						"error processing message",
-						slog.String("error", err.Error()),
-						slog.String("subject", msg.Subject()),
-					)
-					// Don't ack failed messages - they'll be redelivered
-					continue
-				}
-
-				// Acknowledge successful processing
-				if err := msg.Ack(); err != nil {
-					c.logger.Error(
-						"error acknowledging message",
-						slog.String("error", err.Error()),
-					)
-				}
-			}
+			c.fetchAndDeliver(consumer, handler)
 		}
+	}
+}
+
+// fetchAndDeliver fetches one batch and hands each message to the handler.
+//
+// Nothing here returns an error. A fetch that times out is the normal idle
+// case, and a fetch that fails for another reason is logged and retried on the
+// next pass — consumption is a loop that keeps running, not an operation that
+// succeeds once.
+func (c *Client) fetchAndDeliver(
+	consumer jetstream.Consumer,
+	handler JetStreamMessageHandler,
+) {
+	msgs, err := consumer.Fetch(1)
+	if err != nil {
+		if err.Error() == fetchTimeoutMessage {
+			return
+		}
+
+		c.logger.Error(
+			"error fetching messages",
+			slog.String("error", err.Error()),
+		)
+
+		return
+	}
+
+	for msg := range msgs.Messages() {
+		c.deliver(msg, handler)
+	}
+}
+
+// deliver runs the handler against one message and acknowledges it.
+//
+// A message the handler failed on is deliberately left unacknowledged, so
+// JetStream redelivers it.
+func (c *Client) deliver(
+	msg jetstream.Msg,
+	handler JetStreamMessageHandler,
+) {
+	if err := c.processMessage(msg, handler); err != nil {
+		c.logger.Error(
+			"error processing message",
+			slog.String("error", err.Error()),
+			slog.String("subject", msg.Subject()),
+		)
+
+		return
+	}
+
+	if err := msg.Ack(); err != nil {
+		c.logger.Error(
+			"error acknowledging message",
+			slog.String("error", err.Error()),
+		)
 	}
 }
 

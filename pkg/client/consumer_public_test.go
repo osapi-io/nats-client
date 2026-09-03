@@ -42,7 +42,7 @@ type MessageChannel struct {
 
 func NewMessageChannel() *MessageChannel {
 	return &MessageChannel{
-		ch: make(chan jetstream.Msg, 10),
+		ch: make(chan jetstream.Msg, msgChanBuffer),
 	}
 }
 
@@ -135,9 +135,9 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			},
 			opts: &client.ConsumeOptions{
 				QueueGroup:  "test-queue",
-				MaxInFlight: 5,
+				MaxInFlight: testMaxInFlight,
 			},
-			contextTimeout: 100 * time.Millisecond,
+			contextTimeout: defaultTimeout,
 			assertFn: func(err error) {
 				s.Error(err)
 				s.Contains(err.Error(), "failed to get consumer")
@@ -162,7 +162,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				return nil
 			},
 			opts:           nil,
-			contextTimeout: 100 * time.Millisecond,
+			contextTimeout: defaultTimeout,
 			assertFn: func(err error) {
 				s.Error(err)
 				s.Contains(err.Error(), "failed to get consumer")
@@ -213,9 +213,9 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			},
 			opts: &client.ConsumeOptions{
 				QueueGroup:  "test-queue",
-				MaxInFlight: 5,
+				MaxInFlight: testMaxInFlight,
 			},
-			contextTimeout: 100 * time.Millisecond,
+			contextTimeout: defaultTimeout,
 		},
 		{
 			name: "message processing error no ack",
@@ -259,8 +259,8 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			handler: func(_ jetstream.Msg) error {
 				return errors.New("processing error")
 			},
-			opts:           &client.ConsumeOptions{MaxInFlight: 10},
-			contextTimeout: 100 * time.Millisecond,
+			opts:           &client.ConsumeOptions{MaxInFlight: testMaxInFlightLarge},
+			contextTimeout: defaultTimeout,
 		},
 		{
 			name: "ack error handling",
@@ -305,7 +305,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			handler: func(_ jetstream.Msg) error {
 				return nil
 			},
-			contextTimeout: 100 * time.Millisecond,
+			contextTimeout: defaultTimeout,
 		},
 		{
 			name: "fetch error non timeout",
@@ -328,7 +328,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			handler: func(_ jetstream.Msg) error {
 				return nil
 			},
-			contextTimeout: 100 * time.Millisecond,
+			contextTimeout: defaultTimeout,
 		},
 		{
 			name: "context cancellation during fetch",
@@ -354,7 +354,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			handler: func(_ jetstream.Msg) error {
 				return nil
 			},
-			contextTimeout: 50 * time.Millisecond,
+			contextTimeout: shortTimeout,
 			expectedError:  "context",
 		},
 		{
@@ -400,7 +400,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			handler: func(_ jetstream.Msg) error {
 				panic("handler panic")
 			},
-			contextTimeout: 200 * time.Millisecond,
+			contextTimeout: longTimeout,
 		},
 		{
 			name: "exact timeout error handling",
@@ -423,7 +423,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			handler: func(_ jetstream.Msg) error {
 				return nil
 			},
-			contextTimeout: 100 * time.Millisecond,
+			contextTimeout: defaultTimeout,
 		},
 		{
 			name: "non timeout fetch error with logging",
@@ -453,7 +453,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			handler: func(_ jetstream.Msg) error {
 				return nil
 			},
-			contextTimeout: 200 * time.Millisecond,
+			contextTimeout: longTimeout,
 		},
 		{
 			name: "non timeout fetch error with ordered expectations",
@@ -484,7 +484,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				return nil
 			},
 			opts:           nil,
-			contextTimeout: 50 * time.Millisecond,
+			contextTimeout: shortTimeout,
 		},
 		{
 			name: "message processing error with logging",
@@ -529,7 +529,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			handler: func(_ jetstream.Msg) error {
 				return errors.New("processing failed")
 			},
-			contextTimeout: 200 * time.Millisecond,
+			contextTimeout: longTimeout,
 		},
 		{
 			name: "focused message processing error logging",
@@ -574,7 +574,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				return errors.New("processing always fails")
 			},
 			opts:           nil,
-			contextTimeout: 100 * time.Millisecond,
+			contextTimeout: defaultTimeout,
 		},
 		{
 			name: "focused ack error logging",
@@ -620,7 +620,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				return nil
 			},
 			opts:           nil,
-			contextTimeout: 100 * time.Millisecond,
+			contextTimeout: defaultTimeout,
 		},
 		{
 			name: "focused panic recovery logging",
@@ -665,7 +665,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				panic("test panic for coverage")
 			},
 			opts:           nil,
-			contextTimeout: 100 * time.Millisecond,
+			contextTimeout: defaultTimeout,
 		},
 		{
 			name: "ack error with logging",
@@ -711,7 +711,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			handler: func(_ jetstream.Msg) error {
 				return nil
 			},
-			contextTimeout: 200 * time.Millisecond,
+			contextTimeout: longTimeout,
 		},
 	}
 

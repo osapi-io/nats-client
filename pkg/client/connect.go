@@ -48,51 +48,12 @@ func (c *Client) Connect() error {
 		slog.String("client_name", c.Opts.Name),
 	)
 
-	var nc *nats.Conn
-	var err error
-
-	var opts []nats.Option
-	if c.Opts.Name != "" {
-		opts = append(opts, nats.Name(c.Opts.Name))
+	opts, err := c.connectOptions()
+	if err != nil {
+		return err
 	}
 
-	switch c.Opts.Auth.AuthType {
-	case NoAuth:
-		nc, err = c.NC.Connect(natsURL, opts...)
-	case UserPassAuth:
-		opts = append(opts, nats.UserInfo(c.Opts.Auth.Username, c.Opts.Auth.Password))
-		nc, err = c.NC.Connect(natsURL, opts...)
-	case NKeyAuth:
-		seed, readErr := os.ReadFile(c.Opts.Auth.NKeyFile)
-		if readErr != nil {
-			return fmt.Errorf("failed to read nkey seed file: %w", readErr)
-		}
-
-		var kp nkeys.KeyPair
-		if c.KeyPair != nil {
-			kp = c.KeyPair // mocked
-		} else {
-			var kpErr error
-			kp, kpErr = nkeys.FromSeed(seed)
-			if kpErr != nil {
-				return fmt.Errorf("failed to parse nkey seed: %w", kpErr)
-			}
-		}
-
-		pubKey, pubErr := kp.PublicKey()
-		if pubErr != nil {
-			return fmt.Errorf("failed to get public key from nkey: %w", pubErr)
-		}
-
-		opts = append(opts, nats.Nkey(pubKey, func(nonce []byte) ([]byte, error) {
-			return kp.Sign(nonce)
-		}))
-
-		nc, err = c.NC.Connect(natsURL, opts...)
-	default:
-		return errors.New("unsupported authentication method")
-	}
-
+	nc, err := c.NC.Connect(natsURL, opts...)
 	if err != nil {
 		return fmt.Errorf("error connecting to nats: %w", err)
 	}
@@ -106,6 +67,71 @@ func (c *Client) Connect() error {
 	c.logger.Debug("successfully connected to NATS and enabled JetStream")
 
 	return nil
+}
+
+// connectOptions builds the dial options for the configured authentication
+// method.
+//
+// Separated from Connect so that adding an auth type is a case here rather
+// than another branch in a function that also dials, enables JetStream and
+// logs.
+func (c *Client) connectOptions() ([]nats.Option, error) {
+	var opts []nats.Option
+
+	if c.Opts.Name != "" {
+		opts = append(opts, nats.Name(c.Opts.Name))
+	}
+
+	switch c.Opts.Auth.AuthType {
+	case NoAuth:
+		return opts, nil
+
+	case UserPassAuth:
+		return append(
+			opts,
+			nats.UserInfo(c.Opts.Auth.Username, c.Opts.Auth.Password),
+		), nil
+
+	case NKeyAuth:
+		opt, err := c.nkeyOption()
+		if err != nil {
+			return nil, err
+		}
+
+		return append(opts, opt), nil
+
+	default:
+		return nil, errors.New("unsupported authentication method")
+	}
+}
+
+// nkeyOption reads the configured seed file and returns the signing option it
+// implies.
+//
+// c.KeyPair, when set, replaces the seed file — the tests inject a keypair
+// rather than writing a real seed to disk.
+func (c *Client) nkeyOption() (nats.Option, error) {
+	seed, err := os.ReadFile(c.Opts.Auth.NKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read nkey seed file: %w", err)
+	}
+
+	kp := c.KeyPair
+	if kp == nil {
+		kp, err = nkeys.FromSeed(seed)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse nkey seed: %w", err)
+		}
+	}
+
+	pubKey, err := kp.PublicKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get public key from nkey: %w", err)
+	}
+
+	return nats.Nkey(pubKey, func(nonce []byte) ([]byte, error) {
+		return kp.Sign(nonce)
+	}), nil
 }
 
 // getAuthTypeName returns a human-readable string for the auth type

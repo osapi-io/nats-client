@@ -20,6 +20,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -31,6 +32,17 @@ import (
 
 // CreateOrUpdateKVBucket creates or updates a KV bucket using the jetstream API,
 // which natively supports upsert semantics. Returns the jetstream.KeyValue interface.
+// Defaults applied when PublishAndWaitKV is called with the zero value for
+// either field.
+const (
+	defaultRequestTimeout = 30 * time.Second
+	defaultPollInterval   = 100 * time.Millisecond
+)
+
+// errGetKVBucket wraps a bucket lookup failure. Four call sites report the
+// same thing and drifted apart would read as four different failures.
+const errGetKVBucket = "failed to get KV bucket %s: %w"
+
 func (c *Client) CreateOrUpdateKVBucket(
 	ctx context.Context,
 	bucketName string,
@@ -112,10 +124,10 @@ func (c *Client) PublishAndWaitKV(
 		opts.RequestID = uuid.New().String()
 	}
 	if opts.Timeout == 0 {
-		opts.Timeout = 30 * time.Second
+		opts.Timeout = defaultRequestTimeout
 	}
 	if opts.PollInterval == 0 {
-		opts.PollInterval = 100 * time.Millisecond
+		opts.PollInterval = defaultPollInterval
 	}
 
 	// Add request ID to headers
@@ -155,26 +167,96 @@ func (c *Client) waitForKVResponse(
 	defer ticker.Stop()
 
 	for {
+		// The select only waits. Doing the read inside a case nests every
+		// branch below it one level deeper for no benefit.
 		select {
 		case <-ctx.Done():
 			return nil, fmt.Errorf("timeout waiting for response: %w", ctx.Err())
 		case <-ticker.C:
-			entry, err := kv.Get(ctx, key)
-			if err != nil {
-				if err == jetstream.ErrKeyNotFound {
-					continue // Not ready yet
-				}
-				return nil, fmt.Errorf("failed to get response: %w", err)
-			}
-
-			c.logger.Debug(
-				"received KV response",
-				slog.String("key", key),
-				slog.Uint64("revision", entry.Revision()),
-			)
-
-			return entry.Value(), nil
 		}
+
+		value, err := c.readKVResponse(ctx, kv, key)
+		if err != nil {
+			return nil, err
+		}
+
+		if value != nil {
+			return value, nil
+		}
+	}
+}
+
+// readKVResponse reads one key.
+//
+// A nil value with a nil error means the key is not there yet, which is the
+// ordinary case while a worker is still writing its reply — the caller polls
+// again rather than failing.
+func (c *Client) readKVResponse(
+	ctx context.Context,
+	kv jetstream.KeyValue,
+	key string,
+) ([]byte, error) {
+	entry, err := kv.Get(ctx, key)
+	if err != nil {
+		if errors.Is(err, jetstream.ErrKeyNotFound) {
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("failed to get response: %w", err)
+	}
+
+	c.logger.Debug(
+		"received KV response",
+		slog.String("key", key),
+		slog.Uint64("revision", entry.Revision()),
+	)
+
+	return entry.Value(), nil
+}
+
+// forwardUpdates copies watcher updates to out until either side is done, then
+// closes out and stops the watcher.
+func forwardUpdates(
+	ctx context.Context,
+	watcher jetstream.KeyWatcher,
+	out chan<- jetstream.KeyValueEntry,
+) {
+	defer close(out)
+
+	defer func() {
+		_ = watcher.Stop()
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case entry, ok := <-watcher.Updates():
+			if !ok || !forwardOne(ctx, out, entry) {
+				return
+			}
+		}
+	}
+}
+
+// forwardOne delivers a single entry, reporting whether forwarding should
+// continue. A nil entry is skipped rather than sent; the watcher emits one to
+// signal that the initial replay is done.
+func forwardOne(
+	ctx context.Context,
+	out chan<- jetstream.KeyValueEntry,
+	entry jetstream.KeyValueEntry,
+) bool {
+	if entry == nil {
+		return true
+	}
+
+	select {
+	case out <- entry:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 
@@ -201,30 +283,7 @@ func (c *Client) WatchKV(
 
 	out := make(chan jetstream.KeyValueEntry)
 
-	go func() {
-		defer close(out)
-		defer func() {
-			_ = watcher.Stop()
-		}()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case entry, ok := <-watcher.Updates():
-				if !ok {
-					return
-				}
-				if entry != nil {
-					select {
-					case out <- entry:
-					case <-ctx.Done():
-						return
-					}
-				}
-			}
-		}
-	}()
+	go forwardUpdates(ctx, watcher, out)
 
 	return out, nil
 }
@@ -237,7 +296,7 @@ func (c *Client) KVPut(
 ) error {
 	kv, err := c.CreateOrUpdateKVBucket(context.Background(), bucket)
 	if err != nil {
-		return fmt.Errorf("failed to get KV bucket %s: %w", bucket, err)
+		return fmt.Errorf(errGetKVBucket, bucket, err)
 	}
 
 	_, err = kv.Put(context.Background(), key, value)
@@ -255,7 +314,7 @@ func (c *Client) KVGet(
 ) ([]byte, error) {
 	kv, err := c.CreateOrUpdateKVBucket(context.Background(), bucket)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get KV bucket %s: %w", bucket, err)
+		return nil, fmt.Errorf(errGetKVBucket, bucket, err)
 	}
 
 	entry, err := kv.Get(context.Background(), key)
@@ -273,7 +332,7 @@ func (c *Client) KVDelete(
 ) error {
 	kv, err := c.CreateOrUpdateKVBucket(context.Background(), bucket)
 	if err != nil {
-		return fmt.Errorf("failed to get KV bucket %s: %w", bucket, err)
+		return fmt.Errorf(errGetKVBucket, bucket, err)
 	}
 
 	err = kv.Delete(context.Background(), key)
@@ -290,7 +349,7 @@ func (c *Client) KVKeys(
 ) ([]string, error) {
 	kv, err := c.CreateOrUpdateKVBucket(context.Background(), bucket)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get KV bucket %s: %w", bucket, err)
+		return nil, fmt.Errorf(errGetKVBucket, bucket, err)
 	}
 
 	keys, err := kv.ListKeys(context.Background())

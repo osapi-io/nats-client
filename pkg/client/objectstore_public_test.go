@@ -75,13 +75,13 @@ func (s *ObjectStorePublicTestSuite) TestCreateOrUpdateObjectStore() {
 		{
 			name: "successfully creates Object Store bucket",
 			config: jetstream.ObjectStoreConfig{
-				Bucket: "file-uploads",
+				Bucket: testObjectStore,
 			},
 			mockSetup: func() {
 				s.mockExt.EXPECT().
 					CreateOrUpdateObjectStore(
 						gomock.Any(),
-						jetstream.ObjectStoreConfig{Bucket: "file-uploads"},
+						jetstream.ObjectStoreConfig{Bucket: testObjectStore},
 					).
 					Return(s.mockObjStor, nil).
 					Times(1)
@@ -91,19 +91,19 @@ func (s *ObjectStorePublicTestSuite) TestCreateOrUpdateObjectStore() {
 		{
 			name: "successfully creates Object Store bucket with custom config",
 			config: jetstream.ObjectStoreConfig{
-				Bucket:      "file-uploads",
+				Bucket:      testObjectStore,
 				Description: "Storage for file uploads",
 				TTL:         1 * time.Hour,
-				MaxBytes:    500 * 1024 * 1024,
+				MaxBytes:    maxObjectBytes,
 				Storage:     jetstream.FileStorage,
 				Replicas:    1,
 			},
 			mockSetup: func() {
 				expectedConfig := jetstream.ObjectStoreConfig{
-					Bucket:      "file-uploads",
+					Bucket:      testObjectStore,
 					Description: "Storage for file uploads",
 					TTL:         1 * time.Hour,
-					MaxBytes:    500 * 1024 * 1024,
+					MaxBytes:    maxObjectBytes,
 					Storage:     jetstream.FileStorage,
 					Replicas:    1,
 				}
@@ -194,10 +194,10 @@ func (s *ObjectStorePublicTestSuite) TestObjectStore() {
 	}{
 		{
 			name:       "successfully gets Object Store bucket",
-			bucketName: "file-uploads",
+			bucketName: testObjectStore,
 			mockSetup: func() {
 				s.mockExt.EXPECT().
-					ObjectStore(gomock.Any(), "file-uploads").
+					ObjectStore(gomock.Any(), testObjectStore).
 					Return(s.mockObjStor, nil).
 					Times(1)
 			},

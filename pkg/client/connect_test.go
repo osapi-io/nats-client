@@ -41,7 +41,7 @@ func (s *ConnectTestSuite) SetupTest() {
 		logger: s.logger,
 		Opts: &Options{
 			Host: "localhost",
-			Port: 4222,
+			Port: natsDefaultPort,
 			Auth: AuthOptions{
 				AuthType: NoAuth,
 			},
@@ -72,7 +72,7 @@ func (s *ConnectTestSuite) TestGetAuthTypeName() {
 		},
 		{
 			name:     "unknown auth type returns unknown",
-			authType: AuthType(99),
+			authType: AuthType(unknownInternalAuthType),
 			expected: "unknown",
 		},
 		{

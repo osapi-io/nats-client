@@ -72,7 +72,7 @@ func (s *CorePublicTestSuite) TestSubscribe() {
 	}{
 		{
 			name:    "when subscribe succeeds returns subscription",
-			subject: "test.subject",
+			subject: testSubject,
 			setupMock: func() {
 				s.mockNATS.EXPECT().
 					Subscribe("test.subject", gomock.Any()).
@@ -81,7 +81,7 @@ func (s *CorePublicTestSuite) TestSubscribe() {
 		},
 		{
 			name:    "when subscribe fails returns error",
-			subject: "test.subject",
+			subject: testSubject,
 			setupMock: func() {
 				s.mockNATS.EXPECT().
 					Subscribe("test.subject", gomock.Any()).
@@ -92,7 +92,7 @@ func (s *CorePublicTestSuite) TestSubscribe() {
 		},
 		{
 			name:    "when NC is nil returns error",
-			subject: "test.subject",
+			subject: testSubject,
 			setupMock: func() {
 				s.client.NC = nil
 			},
@@ -130,7 +130,7 @@ func (s *CorePublicTestSuite) TestPublishCore() {
 	}{
 		{
 			name:    "when publish succeeds",
-			subject: "test.subject",
+			subject: testSubject,
 			data:    []byte("test data"),
 			setupClient: func() {
 				s.mockNATS.EXPECT().
@@ -140,7 +140,7 @@ func (s *CorePublicTestSuite) TestPublishCore() {
 		},
 		{
 			name:    "when publish fails returns error",
-			subject: "test.subject",
+			subject: testSubject,
 			data:    []byte("test data"),
 			setupClient: func() {
 				s.mockNATS.EXPECT().
@@ -152,7 +152,7 @@ func (s *CorePublicTestSuite) TestPublishCore() {
 		},
 		{
 			name:    "when NC is nil returns error",
-			subject: "test.subject",
+			subject: testSubject,
 			data:    []byte("test data"),
 			setupClient: func() {
 				s.client.NC = nil

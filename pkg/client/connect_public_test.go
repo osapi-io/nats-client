@@ -50,7 +50,7 @@ func (s *ConnectPublicTestSuite) SetupTest() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	opts := &client.Options{
 		Host: "localhost",
-		Port: 4222,
+		Port: natsDefaultPort,
 		Auth: client.AuthOptions{AuthType: client.NoAuth},
 		Name: "test-client",
 	}
@@ -101,10 +101,10 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			authType: client.NKeyAuth,
 			mockSetup: func() {
 				tempDir := s.T().TempDir()
-				tempFile := fmt.Sprintf("%s/test.nkey", tempDir)
+				tempFile := fmt.Sprintf(testNkeyPath, tempDir)
 
 				validSeed := []byte("SUAJT6TKTZNOL3IR2G6FTLZOKM2YSJVD7BL4TUSZCAMHISXNN2DHHXTS4Q")
-				err := os.WriteFile(tempFile, validSeed, 0o644)
+				err := os.WriteFile(tempFile, validSeed, testFileMode)
 				require.NoError(s.T(), err)
 
 				s.client.Opts.Auth.NKeyFile = tempFile
@@ -133,10 +133,10 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 				s.client.KeyPair = mockKP
 
 				tempDir := s.T().TempDir()
-				tempFile := fmt.Sprintf("%s/test.nkey", tempDir)
+				tempFile := fmt.Sprintf(testNkeyPath, tempDir)
 
 				validSeed := []byte("SUAJT6TKTZNOL3IR2G6FTLZOKM2YSJVD7BL4TUSZCAMHISXNN2DHHXTS4Q")
-				err := os.WriteFile(tempFile, validSeed, 0o644)
+				err := os.WriteFile(tempFile, validSeed, testFileMode)
 				require.NoError(s.T(), err)
 
 				s.client.Opts.Auth.NKeyFile = tempFile
@@ -171,9 +171,9 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			authType: client.NKeyAuth,
 			mockSetup: func() {
 				tempDir := s.T().TempDir()
-				tempFile := fmt.Sprintf("%s/test.nkey", tempDir)
+				tempFile := fmt.Sprintf(testNkeyPath, tempDir)
 
-				err := os.WriteFile(tempFile, []byte("invalid-seed"), 0o644)
+				err := os.WriteFile(tempFile, []byte("invalid-seed"), testFileMode)
 				require.NoError(s.T(), err)
 
 				s.client.Opts.Auth.NKeyFile = tempFile
@@ -182,7 +182,7 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 		},
 		{
 			name:        "unsupported authentication method",
-			authType:    client.AuthType(999),
+			authType:    client.AuthType(unknownAuthType),
 			mockSetup:   func() {},
 			expectedErr: "unsupported authentication method",
 		},
@@ -191,10 +191,10 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			authType: client.NKeyAuth,
 			mockSetup: func() {
 				tempDir := s.T().TempDir()
-				tempFile := fmt.Sprintf("%s/test.nkey", tempDir)
+				tempFile := fmt.Sprintf(testNkeyPath, tempDir)
 
 				invalidSeed := []byte("INVALIDSEEDDATA")
-				err := os.WriteFile(tempFile, invalidSeed, 0o644)
+				err := os.WriteFile(tempFile, invalidSeed, testFileMode)
 				require.NoError(s.T(), err)
 
 				s.client.Opts.Auth.NKeyFile = tempFile
@@ -214,10 +214,10 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 				s.client.KeyPair = mockKP
 
 				tempDir := s.T().TempDir()
-				tempFile := fmt.Sprintf("%s/test.nkey", tempDir)
+				tempFile := fmt.Sprintf(testNkeyPath, tempDir)
 
 				validSeed := []byte("SUAJT6TKTZNOL3IR2G6FTLZOKM2YSJVD7BL4TUSZCAMHISXNN2DHHXTS4Q")
-				err := os.WriteFile(tempFile, validSeed, 0o644)
+				err := os.WriteFile(tempFile, validSeed, testFileMode)
 				require.NoError(s.T(), err)
 
 				s.client.Opts.Auth.NKeyFile = tempFile

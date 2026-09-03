@@ -34,6 +34,29 @@ import (
 	"github.com/osapi-io/nats-client/pkg/client/mocks"
 )
 
+// Timings the wait-for-reply tests run against. testWaitTimeout has to
+// out-last several poll intervals; testShortWaitTimeout has to expire before
+// the first reply arrives.
+const (
+	testPollInterval     = 10 * time.Millisecond
+	testWaitTimeout      = 500 * time.Millisecond
+	testShortWaitTimeout = 50 * time.Millisecond
+)
+
+// natsDefaultPort is the port a NATS server listens on unless told otherwise.
+const natsDefaultPort = 4222
+
+// panicValue is an arbitrary value a handler panics with, so the recovery
+// path can be exercised.
+const panicValue = 42
+
+// unknownInternalAuthType is outside the defined AuthType values, exercising
+// the default branch.
+const unknownInternalAuthType = 99
+
+// testRevision is an arbitrary KV revision the mocks return.
+const testRevision = 5
+
 type KVTestSuite struct {
 	suite.Suite
 
@@ -48,7 +71,7 @@ func (s *KVTestSuite) SetupTest() {
 		logger: s.logger,
 		Opts: &Options{
 			Host: "localhost",
-			Port: 4222,
+			Port: natsDefaultPort,
 			Auth: AuthOptions{
 				AuthType: NoAuth,
 			},
@@ -80,8 +103,8 @@ func (s *KVTestSuite) TestWaitForKVResponse() {
 
 				return mockKV
 			},
-			pollInterval: 10 * time.Millisecond,
-			ctxTimeout:   500 * time.Millisecond,
+			pollInterval: testPollInterval,
+			ctxTimeout:   testWaitTimeout,
 			expectedData: []byte("response-data"),
 			expectedErr:  "",
 		},
@@ -106,8 +129,8 @@ func (s *KVTestSuite) TestWaitForKVResponse() {
 
 				return mockKV
 			},
-			pollInterval: 10 * time.Millisecond,
-			ctxTimeout:   500 * time.Millisecond,
+			pollInterval: testPollInterval,
+			ctxTimeout:   testWaitTimeout,
 			expectedData: []byte("delayed-response"),
 			expectedErr:  "",
 		},
@@ -123,8 +146,8 @@ func (s *KVTestSuite) TestWaitForKVResponse() {
 
 				return mockKV
 			},
-			pollInterval: 10 * time.Millisecond,
-			ctxTimeout:   50 * time.Millisecond,
+			pollInterval: testPollInterval,
+			ctxTimeout:   testShortWaitTimeout,
 			expectedData: nil,
 			expectedErr:  "timeout waiting for response",
 		},
@@ -140,8 +163,8 @@ func (s *KVTestSuite) TestWaitForKVResponse() {
 
 				return mockKV
 			},
-			pollInterval: 10 * time.Millisecond,
-			ctxTimeout:   500 * time.Millisecond,
+			pollInterval: testPollInterval,
+			ctxTimeout:   testWaitTimeout,
 			expectedData: nil,
 			expectedErr:  "failed to get response",
 		},
@@ -160,8 +183,8 @@ func (s *KVTestSuite) TestWaitForKVResponse() {
 
 				return mockKV
 			},
-			pollInterval: 10 * time.Millisecond,
-			ctxTimeout:   500 * time.Millisecond,
+			pollInterval: testPollInterval,
+			ctxTimeout:   testWaitTimeout,
 			expectedData: []byte{},
 			expectedErr:  "",
 		},
@@ -171,7 +194,7 @@ func (s *KVTestSuite) TestWaitForKVResponse() {
 				mockKV := mocks.NewMockKeyValue(ctrl)
 				mockEntry := mocks.NewMockKeyValueEntry(ctrl)
 				mockEntry.EXPECT().Value().Return([]byte("eventually-found"))
-				mockEntry.EXPECT().Revision().Return(uint64(5))
+				mockEntry.EXPECT().Revision().Return(uint64(testRevision))
 
 				first := mockKV.EXPECT().
 					Get(gomock.Any(), "request-123").
@@ -198,8 +221,8 @@ func (s *KVTestSuite) TestWaitForKVResponse() {
 
 				return mockKV
 			},
-			pollInterval: 10 * time.Millisecond,
-			ctxTimeout:   500 * time.Millisecond,
+			pollInterval: testPollInterval,
+			ctxTimeout:   testWaitTimeout,
 			expectedData: []byte("eventually-found"),
 			expectedErr:  "",
 		},

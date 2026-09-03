@@ -49,7 +49,7 @@ func (s *ConsumerTestSuite) SetupTest() {
 		logger: s.logger,
 		Opts: &Options{
 			Host: "localhost",
-			Port: 4222,
+			Port: natsDefaultPort,
 			Auth: AuthOptions{
 				AuthType: NoAuth,
 			},
@@ -119,7 +119,7 @@ func (s *ConsumerTestSuite) TestProcessMessage() {
 		{
 			name: "handler panics with integer",
 			handler: func(_ jetstream.Msg) error {
-				panic(42)
+				panic(panicValue)
 			},
 			setupMsg: func() jetstream.Msg {
 				mockMsg := mocks.NewMockMsg(s.mockCtrl)

@@ -73,10 +73,10 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 	}{
 		{
 			name:          "successfully stores and notifies",
-			kvBucket:      "test-bucket",
-			key:           "test-key",
-			data:          []byte(`{"test": "data"}`),
-			notifySubject: "notify.subject",
+			kvBucket:      testBucket,
+			key:           testKey,
+			data:          []byte(testDataValue),
+			notifySubject: notifySubject,
 			mockSetup: func() {
 				// Mock KV bucket retrieval
 				s.mockExt.EXPECT().
@@ -85,22 +85,22 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 
 				// Mock KV put
 				s.mockKV.EXPECT().
-					Put(gomock.Any(), "test-key", []byte(`{"test": "data"}`)).
-					Return(uint64(42), nil)
+					Put(gomock.Any(), "test-key", []byte(testDataValue)).
+					Return(uint64(testRevision), nil)
 
 				// Mock stream publish
 				s.mockExt.EXPECT().
 					Publish(gomock.Any(), "notify.subject", []byte("test-key")).
 					Return(nil, nil)
 			},
-			expectedResult: 42,
+			expectedResult: testRevision,
 		},
 		{
 			name:          "error getting KV bucket",
 			kvBucket:      "bad-bucket",
-			key:           "test-key",
-			data:          []byte(`{"test": "data"}`),
-			notifySubject: "notify.subject",
+			key:           testKey,
+			data:          []byte(testDataValue),
+			notifySubject: notifySubject,
 			mockSetup: func() {
 				s.mockExt.EXPECT().
 					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "bad-bucket"}).
@@ -110,10 +110,10 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 		},
 		{
 			name:          "error storing in KV",
-			kvBucket:      "test-bucket",
-			key:           "test-key",
-			data:          []byte(`{"test": "data"}`),
-			notifySubject: "notify.subject",
+			kvBucket:      testBucket,
+			key:           testKey,
+			data:          []byte(testDataValue),
+			notifySubject: notifySubject,
 			mockSetup: func() {
 				// KV bucket retrieval succeeds
 				s.mockExt.EXPECT().
@@ -122,17 +122,17 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 
 				// KV put fails
 				s.mockKV.EXPECT().
-					Put(gomock.Any(), "test-key", []byte(`{"test": "data"}`)).
+					Put(gomock.Any(), "test-key", []byte(testDataValue)).
 					Return(uint64(0), errors.New("put failed"))
 			},
 			expectedError: "failed to store data in KV: put failed",
 		},
 		{
 			name:          "error sending notification",
-			kvBucket:      "test-bucket",
-			key:           "test-key",
-			data:          []byte(`{"test": "data"}`),
-			notifySubject: "notify.subject",
+			kvBucket:      testBucket,
+			key:           testKey,
+			data:          []byte(testDataValue),
+			notifySubject: notifySubject,
 			mockSetup: func() {
 				// KV operations succeed
 				s.mockExt.EXPECT().
@@ -140,8 +140,8 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 					Return(s.mockKV, nil)
 
 				s.mockKV.EXPECT().
-					Put(gomock.Any(), "test-key", []byte(`{"test": "data"}`)).
-					Return(uint64(42), nil)
+					Put(gomock.Any(), "test-key", []byte(testDataValue)).
+					Return(uint64(testRevision), nil)
 
 				// Publish fails
 				s.mockExt.EXPECT().
@@ -152,7 +152,7 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 		},
 		{
 			name:          "handles empty data",
-			kvBucket:      "test-bucket",
+			kvBucket:      testBucket,
 			key:           "empty-key",
 			data:          []byte{},
 			notifySubject: "notify.empty",
@@ -173,7 +173,7 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 		},
 		{
 			name:          "handles nil data",
-			kvBucket:      "test-bucket",
+			kvBucket:      testBucket,
 			key:           "nil-key",
 			data:          nil,
 			notifySubject: "notify.nil",

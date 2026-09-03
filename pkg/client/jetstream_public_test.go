@@ -73,7 +73,7 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateStreamWithConfig() {
 	}{
 		{
 			name:   "successfully creates stream",
-			config: jetstream.StreamConfig{Name: "test-stream", Subjects: []string{"test.*"}},
+			config: jetstream.StreamConfig{Name: testStream, Subjects: []string{"test.*"}},
 			mockSetup: func() {
 				s.mockExt.EXPECT().
 					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
@@ -84,7 +84,7 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateStreamWithConfig() {
 		},
 		{
 			name:   "error creating stream",
-			config: jetstream.StreamConfig{Name: "test-stream"},
+			config: jetstream.StreamConfig{Name: testStream},
 			mockSetup: func() {
 				s.mockExt.EXPECT().
 					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
@@ -134,8 +134,8 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateConsumerWithConfig() {
 	}{
 		{
 			name:       "successfully creates consumer",
-			streamName: "test-stream",
-			config:     jetstream.ConsumerConfig{Durable: "consumer-1"},
+			streamName: testStream,
+			config:     jetstream.ConsumerConfig{Durable: testConsumer},
 			mockSetup: func() {
 				s.mockExt.EXPECT().
 					CreateOrUpdateConsumer(gomock.Any(), "test-stream", gomock.Any()).
@@ -146,8 +146,8 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateConsumerWithConfig() {
 		},
 		{
 			name:       "error creating consumer",
-			streamName: "test-stream",
-			config:     jetstream.ConsumerConfig{Durable: "consumer-1"},
+			streamName: testStream,
+			config:     jetstream.ConsumerConfig{Durable: testConsumer},
 			mockSetup: func() {
 				s.mockExt.EXPECT().
 					CreateOrUpdateConsumer(gomock.Any(), "test-stream", gomock.Any()).
@@ -183,9 +183,9 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStreamWithConfig() {
 	}{
 		{
 			name:         "successfully creates stream and consumers",
-			streamConfig: jetstream.StreamConfig{Name: "test-stream", Subjects: []string{"test.*"}},
+			streamConfig: jetstream.StreamConfig{Name: testStream, Subjects: []string{"test.*"}},
 			consumerConfigs: []jetstream.ConsumerConfig{
-				{Durable: "consumer-1"},
+				{Durable: testConsumer},
 				{Durable: "consumer-2"},
 			},
 			mockSetup: func() {
@@ -202,8 +202,8 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStreamWithConfig() {
 		},
 		{
 			name:            "error creating stream",
-			streamConfig:    jetstream.StreamConfig{Name: "test-stream"},
-			consumerConfigs: []jetstream.ConsumerConfig{{Durable: "consumer-1"}},
+			streamConfig:    jetstream.StreamConfig{Name: testStream},
+			consumerConfigs: []jetstream.ConsumerConfig{{Durable: testConsumer}},
 			mockSetup: func() {
 				s.mockExt.EXPECT().
 					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
@@ -217,8 +217,8 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStreamWithConfig() {
 		},
 		{
 			name:            "error creating consumer",
-			streamConfig:    jetstream.StreamConfig{Name: "test-stream"},
-			consumerConfigs: []jetstream.ConsumerConfig{{Durable: "consumer-1"}},
+			streamConfig:    jetstream.StreamConfig{Name: testStream},
+			consumerConfigs: []jetstream.ConsumerConfig{{Durable: testConsumer}},
 			mockSetup: func() {
 				s.mockExt.EXPECT().
 					CreateOrUpdateStream(gomock.Any(), gomock.Any()).
@@ -271,10 +271,10 @@ func (s *JetStreamPublicTestSuite) TestGetStreamInfo() {
 						Storage:  jetstream.FileStorage,
 					},
 					State: jetstream.StreamState{
-						Msgs:      10,
-						Bytes:     1024,
+						Msgs:      testMsgCount,
+						Bytes:     testByteCount,
 						FirstSeq:  1,
-						LastSeq:   10,
+						LastSeq:   testMsgCount,
 						Consumers: 2,
 					},
 				}
@@ -295,10 +295,10 @@ func (s *JetStreamPublicTestSuite) TestGetStreamInfo() {
 					Storage:  jetstream.FileStorage,
 				},
 				State: jetstream.StreamState{
-					Msgs:      10,
-					Bytes:     1024,
+					Msgs:      testMsgCount,
+					Bytes:     testByteCount,
 					FirstSeq:  1,
-					LastSeq:   10,
+					LastSeq:   testMsgCount,
 					Consumers: 2,
 				},
 			},
