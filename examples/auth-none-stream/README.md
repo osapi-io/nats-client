@@ -1,4 +1,4 @@
-# NATS Streaming Without Authentication
+# NATS streaming without authentication
 
 This example demonstrates how to interact with NATS by creating streams and
 consumers withouth Auth.

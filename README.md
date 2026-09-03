@@ -14,13 +14,13 @@
 
 A Go package for connecting to and interacting with a NATS server.
 
-## 📦 Install
+## Install
 
 ```bash
 go get github.com/osapi-io/nats-client
 ```
 
-## ✨ Features
+## Features
 
 See the [client docs](docs/client/README.md) for quick start, authentication,
 and per-feature reference.
@@ -34,7 +34,7 @@ and per-feature reference.
 | Consumer helpers      | JetStream consumer message processing                    | [docs](docs/client/consumer.md)    | [`consumer.go`](pkg/client/consumer.go)       |
 | Object Store          | Large blob storage with automatic chunking               | [docs](docs/client/objectstore.md) | [`objectstore.go`](pkg/client/objectstore.go) |
 
-## 📋 Examples
+## Examples
 
 Each example is a standalone Go program you can read and run.
 
@@ -46,16 +46,16 @@ Each example is a standalone Go program you can read and run.
 | [auth-nkeys-stream](examples/auth-nkeys-stream/main.go)         | Stream with NKey authentication                 |
 | [workqueue-stream](examples/workqueue-stream/main.go)           | Work queue pattern with consumer groups         |
 
-## 📖 Documentation
+## Documentation
 
 See the [package documentation] on pkg.go.dev for API details.
 
-## 🤝 Contributing
+## Contributing
 
 See the [Contributing](CONTRIBUTING.md) guide for prerequisites, setup,
 conventions, and the PR workflow.
 
-## 📄 License
+## License
 
 The [MIT] License.
 

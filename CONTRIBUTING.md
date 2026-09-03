@@ -292,7 +292,7 @@ answer questions.
 
 > I'm stuck, where can I get help?
 
-If you have questions, feel free to open a [Discussion] on GitHub.
+If you have questions, open a [Discussion] on GitHub.
 
 [claude code]: https://claude.ai/code
 [conventional commits]: https://www.conventionalcommits.org
