@@ -1,6 +1,12 @@
 # golangci-lint v2 configuration.
 # https://golangci-lint.run/docs/configuration/file/
 #
+# One config, copied byte for byte into every Go repository in osapi-io, and
+# generated into new ones from @retr0h/golang-starter. A repository that needs a
+# change to it changes it there too, and the change goes back out to the others
+# in the same pass — a rule that fires in five places and is tuned in one is not
+# the same rule any more.
+#
 # `version` is the string "2" and settings nest under `linters`. Written the v1
 # way — a numeric version, a top-level `linters-settings`, an
 # `issues.exclude-use-default` — `run` drops the keys without complaint and
