@@ -51,7 +51,7 @@ linters:
       #
       # They stay on for production, where they found four functions genuinely
       # worth splitting — ConsumeMessages at 23, WatchKV at 20, Connect at 14.
-      - path: _test\.go
+      - path: _test\.go$
         text: "function-length|cognitive-complexity|cyclomatic"
 
 formatters:
