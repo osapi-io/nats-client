@@ -278,9 +278,9 @@ be reasonable to split it in a few). Git squash and rebase is your friend!
 
 ## AI usage
 
-All contributions are subject to the [AI Usage Policy](AI_POLICY.md). Disclose
-the tool you used, and make sure you can explain what your change does without
-the aid of AI tools.
+This repo is written with AI assistance. All contributions are subject to the
+[AI Usage Policy](AI_POLICY.md). Disclose the tool you used, and make sure you
+can explain what your change does without the aid of AI tools.
 
 ## FAQ
 
@@ -298,6 +298,8 @@ If you have questions, open a [Discussion] on GitHub.
 [conventional commits]: https://www.conventionalcommits.org
 [discussion]: https://github.com/osapi-io/nats-client/discussions
 [go]: https://go.dev
+[gofumpt]: https://github.com/mvdan/gofumpt
+[golangci-lint]: https://golangci-lint.run
 [just]: https://just.systems
 [mdformat]: https://pypi.org/project/mdformat/
 [mise]: https://mise.jdx.dev
