@@ -1,4 +1,4 @@
-# Connection Management
+# Connection management
 
 Connect to a NATS server with configurable authentication.
 

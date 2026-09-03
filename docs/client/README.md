@@ -1,10 +1,10 @@
-# NATS Client
+# NATS client
 
 The `client` package provides a NATS JetStream client with connection
 management, KV stores, KV-backed streams, and consumer helpers. Create a client
 with `New()` and call `Connect()` to establish the connection.
 
-## Quick Start
+## Quick start
 
 ```go
 c := client.New(logger, &client.Options{

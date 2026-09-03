@@ -1,4 +1,4 @@
-# Consumer Helpers
+# Consumer helpers
 
 Create and manage JetStream consumers for message processing.
 

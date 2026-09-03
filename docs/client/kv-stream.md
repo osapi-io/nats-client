@@ -1,4 +1,4 @@
-# KV-Backed Streams
+# KV-backed streams
 
 Store data in KV and send a stream notification in a single operation. Useful
 for workflow systems that need persistent storage plus event notification.

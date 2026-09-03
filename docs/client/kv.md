@@ -1,4 +1,4 @@
-# Key-Value Stores
+# Key-value stores
 
 CRUD operations on NATS KV buckets.
 

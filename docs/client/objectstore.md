@@ -1,4 +1,4 @@
-# Object Store
+# Object store
 
 Manage NATS Object Store buckets for large blob storage with automatic chunking.
 

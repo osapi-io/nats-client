@@ -1,4 +1,4 @@
-# NATS Streaming with NKEY Authentication
+# NATS streaming with NKEY authentication
 
 This example demonstrates how to interact with NATS by creating streams and
 consumers using [NKey Auth].

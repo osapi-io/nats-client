@@ -1,4 +1,4 @@
-# Workqueue Stream
+# Workqueue stream
 
 A worker consumer to interact with a work queue stream.
 
