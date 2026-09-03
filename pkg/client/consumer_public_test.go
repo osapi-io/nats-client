@@ -62,15 +62,22 @@ type ConsumerPublicTestSuite struct {
 	suite.Suite
 }
 
+// consumerMocks holds the fresh mocks one subtest runs against.
+//
+// A struct rather than five positional returns: every call site would
+// otherwise have to get the order right, and adding a mock would touch all of
+// them.
+type consumerMocks struct {
+	ctrl         *gomock.Controller
+	jetStream    *mocks.MockJetStream
+	consumer     *mocks.MockConsumer
+	messageBatch *mocks.MockMessageBatch
+	client       *client.Client
+}
+
 // resetMocks creates fresh mock objects for each subtest, avoiding shared-state
 // issues when gomock expectations (Times, AnyTimes) span subtests.
-func (s *ConsumerPublicTestSuite) resetMocks() (
-	*gomock.Controller,
-	*mocks.MockJetStream,
-	*mocks.MockConsumer,
-	*mocks.MockMessageBatch,
-	*client.Client,
-) {
+func (s *ConsumerPublicTestSuite) resetMocks() consumerMocks {
 	ctrl := gomock.NewController(s.T())
 	mockExt := mocks.NewMockJetStream(ctrl)
 	mockConsumer := mocks.NewMockConsumer(ctrl)
@@ -88,7 +95,13 @@ func (s *ConsumerPublicTestSuite) resetMocks() (
 	c.NC = mockNC
 	c.ExtJS = mockExt
 
-	return ctrl, mockExt, mockConsumer, mockMessageBatch, c
+	return consumerMocks{
+		ctrl:         ctrl,
+		jetStream:    mockExt,
+		consumer:     mockConsumer,
+		messageBatch: mockMessageBatch,
+		client:       c,
+	}
 }
 
 func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
@@ -704,7 +717,9 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			ctrl, mockExt, mockConsumer, mockMessageBatch, c := s.resetMocks()
+			m := s.resetMocks()
+			ctrl, mockExt := m.ctrl, m.jetStream
+			mockConsumer, mockMessageBatch, c := m.consumer, m.messageBatch, m.client
 			defer ctrl.Finish()
 
 			ctx, cancel := context.WithTimeout(context.Background(), tc.contextTimeout)

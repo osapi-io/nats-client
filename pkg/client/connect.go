@@ -21,6 +21,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -89,7 +90,7 @@ func (c *Client) Connect() error {
 
 		nc, err = c.NC.Connect(natsURL, opts...)
 	default:
-		return fmt.Errorf("unsupported authentication method")
+		return errors.New("unsupported authentication method")
 	}
 
 	if err != nil {

@@ -416,6 +416,8 @@ func (s *KVPublicTestSuite) TestPublishAndWaitKV() {
 						time.Sleep(5 * time.Millisecond) // Give publish time to complete
 						cancel()
 					}()
+				default:
+					// Every other case runs with the options set above.
 				}
 			}
 

@@ -166,7 +166,7 @@ func (c *Client) Publish(
 	)
 
 	if c.ExtJS == nil {
-		return fmt.Errorf("jetstream not initialized: call Connect() first")
+		return errors.New("jetstream not initialized: call Connect() first")
 	}
 
 	msg := &nats.Msg{

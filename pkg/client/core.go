@@ -21,6 +21,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -36,7 +37,7 @@ func (c *Client) Subscribe(
 	handler nats.MsgHandler,
 ) (*nats.Subscription, error) {
 	if c.NC == nil {
-		return nil, fmt.Errorf("NATS connection not established: call Connect() first")
+		return nil, errors.New("NATS connection not established: call Connect() first")
 	}
 
 	c.logger.Debug(
@@ -61,7 +62,7 @@ func (c *Client) PublishCore(
 	data []byte,
 ) error {
 	if c.NC == nil {
-		return fmt.Errorf("NATS connection not established: call Connect() first")
+		return errors.New("NATS connection not established: call Connect() first")
 	}
 
 	c.logger.Debug(
