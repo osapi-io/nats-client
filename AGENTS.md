@@ -2,9 +2,10 @@
 
 Test: `just test` | Before committing: `just ready`
 
-Read @CONTRIBUTING.md first. It covers prerequisites, setup, code style, test
-conventions, and the pull request workflow. All of it applies to agents exactly
-as they apply to people. This file carries only what is specific to agents.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) first. It covers prerequisites, setup,
+code style, test conventions, and the pull request workflow. All of it applies
+to agents exactly as they apply to people. This file carries only what is
+specific to agents.
 
 ## Running tools
 
@@ -24,9 +25,9 @@ treating the failure as real.
 
 ## Where the rules come from
 
-@CONTRIBUTING.md names the specification under "Before you start". When a
-convention here and the specification disagree, the specification wins. Say so
-rather than following the code.
+[CONTRIBUTING.md](CONTRIBUTING.md#before-you-start) names the specification.
+When a convention here and the specification disagree, the specification wins.
+Say so rather than following the code.
 
 ## Commit trailer
 
