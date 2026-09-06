@@ -65,6 +65,25 @@ just fetch
 just deps
 ```
 
+## Project structure
+
+- **`pkg/client/`.** Public SDK. The only package consumers import.
+  - `types.go`. `Client`, `Options`, `AuthOptions`, `AuthType`. Type
+    declarations only.
+  - `client.go`. `New()`.
+  - `connect.go`. `Connect()` and auth-type resolution.
+  - `connection.go`. Connection lifecycle and accessors: `Close()`,
+    `ConnectedURL()`, `KeyValue()`, `Stream()`.
+  - `connect_wrapper.go`. `NATSConnector`, the seam over `*nats.Conn` that lets
+    tests substitute the connection.
+  - `core.go`. Core NATS: `Subscribe()`, `PublishCore()`.
+  - `jetstream.go`. Stream and consumer management.
+  - `consumer.go`. Message consumption and handler dispatch.
+  - `kv.go`, `kv_stream.go`. Key-value buckets, and request/reply over KV.
+  - `objectstore.go`. Object store buckets.
+  - `mocks/`. Generated mocks. See [Test doubles](#test-doubles).
+- **`examples/`.** Runnable programs, one per auth mode and workload.
+
 ## Code style
 
 Go code is formatted by [gofumpt] and linted using [golangci-lint], enforced by
@@ -187,6 +206,12 @@ Three doubles are written by hand, because generating them buys nothing:
 - A recorder for a dependency called from a goroutine the test cannot join,
   where a generated mock would assert a call count at a moment the test cannot
   establish. State that reason where the recorder is defined.
+
+### File headers
+
+Every `.go` file MUST start with the MIT license header. See any existing Go
+file in the repo for the exact format. Build-tagged files put `//go:build` on
+line 1, blank line, then the header.
 
 ## Testing
 
