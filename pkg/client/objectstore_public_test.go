@@ -68,10 +68,10 @@ func (s *ObjectStorePublicTestSuite) SetupSubTest() {
 
 func (s *ObjectStorePublicTestSuite) TestCreateOrUpdateObjectStore() {
 	tests := []struct {
-		name        string
-		config      jetstream.ObjectStoreConfig
-		mockSetup   func()
-		expectedErr string
+		name         string
+		config       jetstream.ObjectStoreConfig
+		mockSetup    func()
+		validateFunc func(jetstream.ObjectStore, error)
 	}{
 		{
 			name: "successfully creates Object Store bucket",
@@ -87,7 +87,10 @@ func (s *ObjectStorePublicTestSuite) TestCreateOrUpdateObjectStore() {
 					Return(s.mockObjStor, nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(os jetstream.ObjectStore, err error) {
+				s.NoError(err)
+				s.NotNil(os)
+			},
 		},
 		{
 			name: "successfully creates Object Store bucket with custom config",
@@ -113,7 +116,10 @@ func (s *ObjectStorePublicTestSuite) TestCreateOrUpdateObjectStore() {
 					Return(s.mockObjStor, nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(os jetstream.ObjectStore, err error) {
+				s.NoError(err)
+				s.NotNil(os)
+			},
 		},
 		{
 			name: "when storage type conflict returns existing bucket",
@@ -131,7 +137,10 @@ func (s *ObjectStorePublicTestSuite) TestCreateOrUpdateObjectStore() {
 					Return(s.mockObjStor, nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(os jetstream.ObjectStore, err error) {
+				s.NoError(err)
+				s.NotNil(os)
+			},
 		},
 		{
 			name: "when storage type conflict and get fails returns original error",
@@ -149,7 +158,13 @@ func (s *ObjectStorePublicTestSuite) TestCreateOrUpdateObjectStore() {
 					Return(nil, errors.New("bucket not found")).
 					Times(1)
 			},
-			expectedErr: "failed to create/update Object Store bucket bad-bucket: nats: API error: code=500 err_code=10052 description=stream configuration update can not change storage type",
+			validateFunc: func(os jetstream.ObjectStore, err error) {
+				s.EqualError(
+					err,
+					"failed to create/update Object Store bucket bad-bucket: nats: API error: code=500 err_code=10052 description=stream configuration update can not change storage type",
+				)
+				s.Nil(os)
+			},
 		},
 		{
 			name: "error creating Object Store bucket",
@@ -165,7 +180,13 @@ func (s *ObjectStorePublicTestSuite) TestCreateOrUpdateObjectStore() {
 					Return(nil, errors.New("object store creation failed")).
 					Times(1)
 			},
-			expectedErr: "failed to create/update Object Store bucket bad-bucket: object store creation failed",
+			validateFunc: func(os jetstream.ObjectStore, err error) {
+				s.EqualError(
+					err,
+					"failed to create/update Object Store bucket bad-bucket: object store creation failed",
+				)
+				s.Nil(os)
+			},
 		},
 	}
 
@@ -173,25 +194,17 @@ func (s *ObjectStorePublicTestSuite) TestCreateOrUpdateObjectStore() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			os, err := s.client.CreateOrUpdateObjectStore(context.Background(), tc.config)
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-				s.NotNil(os)
-			} else {
-				s.EqualError(err, tc.expectedErr)
-				s.Nil(os)
-			}
+			tc.validateFunc(s.client.CreateOrUpdateObjectStore(context.Background(), tc.config))
 		})
 	}
 }
 
 func (s *ObjectStorePublicTestSuite) TestObjectStore() {
 	tests := []struct {
-		name        string
-		bucketName  string
-		mockSetup   func()
-		expectedErr string
+		name         string
+		bucketName   string
+		mockSetup    func()
+		validateFunc func(jetstream.ObjectStore, error)
 	}{
 		{
 			name:       "successfully gets Object Store bucket",
@@ -202,7 +215,10 @@ func (s *ObjectStorePublicTestSuite) TestObjectStore() {
 					Return(s.mockObjStor, nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(os jetstream.ObjectStore, err error) {
+				s.NoError(err)
+				s.NotNil(os)
+			},
 		},
 		{
 			name:       "error getting non-existent Object Store bucket",
@@ -213,7 +229,13 @@ func (s *ObjectStorePublicTestSuite) TestObjectStore() {
 					Return(nil, errors.New("object store not found")).
 					Times(1)
 			},
-			expectedErr: "failed to get Object Store bucket missing-bucket: object store not found",
+			validateFunc: func(os jetstream.ObjectStore, err error) {
+				s.EqualError(
+					err,
+					"failed to get Object Store bucket missing-bucket: object store not found",
+				)
+				s.Nil(os)
+			},
 		},
 	}
 
@@ -221,15 +243,7 @@ func (s *ObjectStorePublicTestSuite) TestObjectStore() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			os, err := s.client.ObjectStore(context.Background(), tc.bucketName)
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-				s.NotNil(os)
-			} else {
-				s.EqualError(err, tc.expectedErr)
-				s.Nil(os)
-			}
+			tc.validateFunc(s.client.ObjectStore(context.Background(), tc.bucketName))
 		})
 	}
 }

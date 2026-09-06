@@ -69,11 +69,10 @@ func (s *ConnectPublicTestSuite) TearDownTest() {
 
 func (s *ConnectPublicTestSuite) TestConnect() {
 	tests := []struct {
-		name        string
-		authType    client.AuthType
-		mockSetup   func()
-		expectedErr string
-		needsNilNC  bool
+		name         string
+		authType     client.AuthType
+		mockSetup    func()
+		validateFunc func(error)
 	}{
 		{
 			name:     "successfully connects (NoAuth)",
@@ -83,8 +82,15 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 					Connect(gomock.Any(), gomock.Any()).
 					Return(&nats.Conn{}, nil).
 					Times(1)
+				originalGetJetStream := client.GetJetStream
+				client.GetJetStream = func(_ *nats.Conn) (jetstream.JetStream, error) {
+					return mocks.NewMockJetStream(s.mockCtrl), nil
+				}
+				s.T().Cleanup(func() { client.GetJetStream = originalGetJetStream })
 			},
-			expectedErr: "",
+			validateFunc: func(err error) {
+				s.NoError(err)
+			},
 		},
 		{
 			name:     "successfully connects (UserPassAuth)",
@@ -94,8 +100,15 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 					Connect(gomock.Any(), gomock.Any()).
 					Return(&nats.Conn{}, nil).
 					Times(1)
+				originalGetJetStream := client.GetJetStream
+				client.GetJetStream = func(_ *nats.Conn) (jetstream.JetStream, error) {
+					return mocks.NewMockJetStream(s.mockCtrl), nil
+				}
+				s.T().Cleanup(func() { client.GetJetStream = originalGetJetStream })
 			},
-			expectedErr: "",
+			validateFunc: func(err error) {
+				s.NoError(err)
+			},
 		},
 		{
 			name:     "successfully connects (NKeyAuth)",
@@ -114,8 +127,15 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 					Connect(gomock.Any(), gomock.Any()).
 					Return(&nats.Conn{}, nil).
 					Times(1)
+				originalGetJetStream := client.GetJetStream
+				client.GetJetStream = func(_ *nats.Conn) (jetstream.JetStream, error) {
+					return mocks.NewMockJetStream(s.mockCtrl), nil
+				}
+				s.T().Cleanup(func() { client.GetJetStream = originalGetJetStream })
 			},
-			expectedErr: "",
+			validateFunc: func(err error) {
+				s.NoError(err)
+			},
 		},
 		{
 			name:     "NKeyAuth signing callback invokes KeyPair Sign",
@@ -156,8 +176,15 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 						return &nats.Conn{}, nil
 					}).
 					Times(1)
+				originalGetJetStream := client.GetJetStream
+				client.GetJetStream = func(_ *nats.Conn) (jetstream.JetStream, error) {
+					return mocks.NewMockJetStream(s.mockCtrl), nil
+				}
+				s.T().Cleanup(func() { client.GetJetStream = originalGetJetStream })
 			},
-			expectedErr: "",
+			validateFunc: func(err error) {
+				s.NoError(err)
+			},
 		},
 		{
 			name:     "fails to read NKey file",
@@ -165,7 +192,10 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			mockSetup: func() {
 				s.client.Opts.Auth.NKeyFile = "/invalid/path"
 			},
-			expectedErr: "failed to read nkey seed file",
+			validateFunc: func(err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "failed to read nkey seed file")
+			},
 		},
 		{
 			name:     "fails to parse NKey seed",
@@ -179,13 +209,19 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 
 				s.client.Opts.Auth.NKeyFile = tempFile
 			},
-			expectedErr: "failed to parse nkey seed",
+			validateFunc: func(err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "failed to parse nkey seed")
+			},
 		},
 		{
-			name:        "unsupported authentication method",
-			authType:    client.AuthType(999),
-			mockSetup:   func() {},
-			expectedErr: "unsupported authentication method",
+			name:      "unsupported authentication method",
+			authType:  client.AuthType(999),
+			mockSetup: func() {},
+			validateFunc: func(err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "unsupported authentication method")
+			},
 		},
 		{
 			name:     "fails to get public key from nkey",
@@ -200,7 +236,10 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 
 				s.client.Opts.Auth.NKeyFile = tempFile
 			},
-			expectedErr: "failed to parse nkey seed",
+			validateFunc: func(err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "failed to parse nkey seed")
+			},
 		},
 		{
 			name:     "fails to get public key from nkey",
@@ -223,7 +262,13 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 
 				s.client.Opts.Auth.NKeyFile = tempFile
 			},
-			expectedErr: "failed to get public key from nkey: simulated public key failure",
+			validateFunc: func(err error) {
+				s.Error(err)
+				s.Contains(
+					err.Error(),
+					"failed to get public key from nkey: simulated public key failure",
+				)
+			},
 		},
 		{
 			name:     "error connecting to NATS",
@@ -234,7 +279,10 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 					Return(nil, errors.New("nats: connection error")).
 					Times(1)
 			},
-			expectedErr: "error connecting to nats: nats: connection error",
+			validateFunc: func(err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "error connecting to nats: nats: connection error")
+			},
 		},
 		{
 			name:     "error enabling JetStream",
@@ -252,7 +300,10 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 				}
 				s.T().Cleanup(func() { client.GetJetStream = originalGetJetStream })
 			},
-			expectedErr: "error enabling jetstream",
+			validateFunc: func(err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "error enabling jetstream")
+			},
 		},
 	}
 
@@ -261,39 +312,25 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			s.client.Opts.Auth.AuthType = tc.authType
 			tc.mockSetup()
 
-			// For successful connect tests, mock GetJetStream to avoid nil *nats.Conn panic
-			if tc.expectedErr == "" {
-				originalGetJetStream := client.GetJetStream
-				client.GetJetStream = func(_ *nats.Conn) (jetstream.JetStream, error) {
-					return mocks.NewMockJetStream(s.mockCtrl), nil
-				}
-				defer func() { client.GetJetStream = originalGetJetStream }()
-			}
-
-			err := s.client.Connect()
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-			} else {
-				s.Contains(err.Error(), tc.expectedErr)
-			}
+			tc.validateFunc(s.client.Connect())
 		})
 	}
 }
 
 func (s *ConnectPublicTestSuite) TestGetJetStream() {
 	tests := []struct {
-		name        string
-		mockSetup   func()
-		assert      func()
-		expectedErr string
+		name         string
+		mockSetup    func()
+		callFunc     func() (jetstream.JetStream, error)
+		validateFunc func(jetstream.JetStream, error)
 	}{
 		{
 			name:      "returns JetStream with default implementation",
 			mockSetup: func() {},
-			assert: func() {
-				js, err := client.GetJetStream(&nats.Conn{})
-
+			callFunc: func() (jetstream.JetStream, error) {
+				return client.GetJetStream(&nats.Conn{})
+			},
+			validateFunc: func(js jetstream.JetStream, err error) {
 				s.NoError(err)
 				s.NotNil(js)
 			},
@@ -312,9 +349,10 @@ func (s *ConnectPublicTestSuite) TestGetJetStream() {
 					Return(&nats.Conn{}, nil).
 					Times(1)
 			},
-			assert: func() {
-				err := s.client.Connect()
-
+			callFunc: func() (jetstream.JetStream, error) {
+				return nil, s.client.Connect()
+			},
+			validateFunc: func(_ jetstream.JetStream, err error) {
 				s.Error(err)
 				s.Contains(err.Error(), "simulated JetStream error")
 			},
@@ -324,7 +362,7 @@ func (s *ConnectPublicTestSuite) TestGetJetStream() {
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
-			tc.assert()
+			tc.validateFunc(tc.callFunc())
 		})
 	}
 }
