@@ -13,8 +13,9 @@
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, EXPRESS OR IMPLIED,
-// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
 package client_test
@@ -66,10 +67,10 @@ func (s *JetStreamPublicTestSuite) SetupSubTest() {
 
 func (s *JetStreamPublicTestSuite) TestCreateOrUpdateStreamWithConfig() {
 	tests := []struct {
-		name        string
-		config      jetstream.StreamConfig
-		mockSetup   func()
-		expectedErr string
+		name         string
+		config       jetstream.StreamConfig
+		mockSetup    func()
+		validateFunc func(error)
 	}{
 		{
 			name:   "successfully creates stream",
@@ -80,7 +81,9 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateStreamWithConfig() {
 					Return(nil, nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(err error) {
+				s.NoError(err)
+			},
 		},
 		{
 			name:   "error creating stream",
@@ -91,7 +94,12 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateStreamWithConfig() {
 					Return(nil, errors.New("stream creation failed")).
 					Times(1)
 			},
-			expectedErr: "error creating/updating stream test-stream: stream creation failed",
+			validateFunc: func(err error) {
+				s.EqualError(
+					err,
+					"error creating/updating stream test-stream: stream creation failed",
+				)
+			},
 		},
 		{
 			name: "when storage type conflict returns success",
@@ -105,7 +113,9 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateStreamWithConfig() {
 					Return(nil, &jetstream.APIError{Code: 500, ErrorCode: 10052, Description: "stream configuration update can not change storage type"}).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(err error) {
+				s.NoError(err)
+			},
 		},
 	}
 
@@ -113,24 +123,18 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateStreamWithConfig() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			err := s.client.CreateOrUpdateStreamWithConfig(s.ctx, tc.config)
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-			} else {
-				s.EqualError(err, tc.expectedErr)
-			}
+			tc.validateFunc(s.client.CreateOrUpdateStreamWithConfig(s.ctx, tc.config))
 		})
 	}
 }
 
 func (s *JetStreamPublicTestSuite) TestCreateOrUpdateConsumerWithConfig() {
 	tests := []struct {
-		name        string
-		streamName  string
-		config      jetstream.ConsumerConfig
-		mockSetup   func()
-		expectedErr string
+		name         string
+		streamName   string
+		config       jetstream.ConsumerConfig
+		mockSetup    func()
+		validateFunc func(error)
 	}{
 		{
 			name:       "successfully creates consumer",
@@ -142,7 +146,9 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateConsumerWithConfig() {
 					Return(nil, nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(err error) {
+				s.NoError(err)
+			},
 		},
 		{
 			name:       "error creating consumer",
@@ -154,7 +160,12 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateConsumerWithConfig() {
 					Return(nil, errors.New("consumer creation failed")).
 					Times(1)
 			},
-			expectedErr: "error creating consumer for stream test-stream: consumer creation failed",
+			validateFunc: func(err error) {
+				s.EqualError(
+					err,
+					"error creating consumer for stream test-stream: consumer creation failed",
+				)
+			},
 		},
 	}
 
@@ -162,13 +173,9 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateConsumerWithConfig() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			err := s.client.CreateOrUpdateConsumerWithConfig(s.ctx, tc.streamName, tc.config)
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-			} else {
-				s.EqualError(err, tc.expectedErr)
-			}
+			tc.validateFunc(
+				s.client.CreateOrUpdateConsumerWithConfig(s.ctx, tc.streamName, tc.config),
+			)
 		})
 	}
 }
@@ -179,7 +186,7 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStreamWithConfig() {
 		streamConfig    jetstream.StreamConfig
 		consumerConfigs []jetstream.ConsumerConfig
 		mockSetup       func()
-		expectedErr     string
+		validateFunc    func(error)
 	}{
 		{
 			name:         "successfully creates stream and consumers",
@@ -198,7 +205,9 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStreamWithConfig() {
 					Return(nil, nil).
 					Times(2)
 			},
-			expectedErr: "",
+			validateFunc: func(err error) {
+				s.NoError(err)
+			},
 		},
 		{
 			name:            "error creating stream",
@@ -213,7 +222,12 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStreamWithConfig() {
 					CreateOrUpdateConsumer(gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(0)
 			},
-			expectedErr: "error creating/updating stream test-stream: stream creation failed",
+			validateFunc: func(err error) {
+				s.EqualError(
+					err,
+					"error creating/updating stream test-stream: stream creation failed",
+				)
+			},
 		},
 		{
 			name:            "error creating consumer",
@@ -229,7 +243,12 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStreamWithConfig() {
 					Return(nil, errors.New("consumer creation failed")).
 					Times(1)
 			},
-			expectedErr: "error creating consumer for stream test-stream: consumer creation failed",
+			validateFunc: func(err error) {
+				s.EqualError(
+					err,
+					"error creating consumer for stream test-stream: consumer creation failed",
+				)
+			},
 		},
 	}
 
@@ -237,17 +256,11 @@ func (s *JetStreamPublicTestSuite) TestCreateOrUpdateJetStreamWithConfig() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			err := s.client.CreateOrUpdateJetStreamWithConfig(
+			tc.validateFunc(s.client.CreateOrUpdateJetStreamWithConfig(
 				s.ctx,
 				tc.streamConfig,
 				tc.consumerConfigs...,
-			)
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-			} else {
-				s.EqualError(err, tc.expectedErr)
-			}
+			))
 		})
 	}
 }
@@ -257,8 +270,7 @@ func (s *JetStreamPublicTestSuite) TestGetStreamInfo() {
 		name         string
 		streamName   string
 		mockSetup    func()
-		expectedInfo *jetstream.StreamInfo
-		expectedErr  string
+		validateFunc func(*jetstream.StreamInfo, error)
 	}{
 		{
 			name:       "successfully gets stream info",
@@ -288,21 +300,18 @@ func (s *JetStreamPublicTestSuite) TestGetStreamInfo() {
 					Return(expectedInfo, nil).
 					Times(1)
 			},
-			expectedInfo: &jetstream.StreamInfo{
-				Config: jetstream.StreamConfig{
-					Name:     "TEST-STREAM",
-					Subjects: []string{"test.>"},
-					Storage:  jetstream.FileStorage,
-				},
-				State: jetstream.StreamState{
-					Msgs:      10,
-					Bytes:     1024,
-					FirstSeq:  1,
-					LastSeq:   10,
-					Consumers: 2,
-				},
+			validateFunc: func(info *jetstream.StreamInfo, err error) {
+				s.NoError(err)
+				s.NotNil(info)
+				s.Equal("TEST-STREAM", info.Config.Name)
+				s.Equal([]string{"test.>"}, info.Config.Subjects)
+				s.Equal(jetstream.FileStorage, info.Config.Storage)
+				s.Equal(uint64(10), info.State.Msgs)
+				s.Equal(uint64(1024), info.State.Bytes)
+				s.Equal(uint64(1), info.State.FirstSeq)
+				s.Equal(uint64(10), info.State.LastSeq)
+				s.Equal(2, info.State.Consumers)
 			},
-			expectedErr: "",
 		},
 		{
 			name:       "error getting stream - stream not found",
@@ -313,8 +322,11 @@ func (s *JetStreamPublicTestSuite) TestGetStreamInfo() {
 					Return(nil, errors.New("stream not found")).
 					Times(1)
 			},
-			expectedInfo: nil,
-			expectedErr:  "failed to get stream MISSING-STREAM: stream not found",
+			validateFunc: func(info *jetstream.StreamInfo, err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "failed to get stream MISSING-STREAM: stream not found")
+				s.Nil(info)
+			},
 		},
 		{
 			name:       "error getting stream info - connection error",
@@ -330,8 +342,14 @@ func (s *JetStreamPublicTestSuite) TestGetStreamInfo() {
 					Return(nil, errors.New("connection lost")).
 					Times(1)
 			},
-			expectedInfo: nil,
-			expectedErr:  "failed to get stream info for ERROR-STREAM: connection lost",
+			validateFunc: func(info *jetstream.StreamInfo, err error) {
+				s.Error(err)
+				s.Contains(
+					err.Error(),
+					"failed to get stream info for ERROR-STREAM: connection lost",
+				)
+				s.Nil(info)
+			},
 		},
 	}
 
@@ -339,35 +357,18 @@ func (s *JetStreamPublicTestSuite) TestGetStreamInfo() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			info, err := s.client.GetStreamInfo(s.ctx, tc.streamName)
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-				s.NotNil(info)
-				s.Equal(tc.expectedInfo.Config.Name, info.Config.Name)
-				s.Equal(tc.expectedInfo.Config.Subjects, info.Config.Subjects)
-				s.Equal(tc.expectedInfo.Config.Storage, info.Config.Storage)
-				s.Equal(tc.expectedInfo.State.Msgs, info.State.Msgs)
-				s.Equal(tc.expectedInfo.State.Bytes, info.State.Bytes)
-				s.Equal(tc.expectedInfo.State.FirstSeq, info.State.FirstSeq)
-				s.Equal(tc.expectedInfo.State.LastSeq, info.State.LastSeq)
-				s.Equal(tc.expectedInfo.State.Consumers, info.State.Consumers)
-			} else {
-				s.Error(err)
-				s.Contains(err.Error(), tc.expectedErr)
-				s.Nil(info)
-			}
+			tc.validateFunc(s.client.GetStreamInfo(s.ctx, tc.streamName))
 		})
 	}
 }
 
 func (s *JetStreamPublicTestSuite) TestPublish() {
 	tests := []struct {
-		name        string
-		subject     string
-		data        []byte
-		mockSetup   func()
-		expectedErr string
+		name         string
+		subject      string
+		data         []byte
+		mockSetup    func()
+		validateFunc func(error)
 	}{
 		{
 			name:    "successfully publishes message",
@@ -379,7 +380,9 @@ func (s *JetStreamPublicTestSuite) TestPublish() {
 					Return(nil, nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(err error) {
+				s.NoError(err)
+			},
 		},
 		{
 			name:    "publishes empty message",
@@ -391,7 +394,9 @@ func (s *JetStreamPublicTestSuite) TestPublish() {
 					Return(nil, nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(err error) {
+				s.NoError(err)
+			},
 		},
 		{
 			name:    "error publishing message",
@@ -403,14 +408,20 @@ func (s *JetStreamPublicTestSuite) TestPublish() {
 					Return(nil, errors.New("publish failed")).
 					Times(1)
 			},
-			expectedErr: "failed to publish message to test.error: publish failed",
+			validateFunc: func(err error) {
+				s.EqualError(err, "failed to publish message to test.error: publish failed")
+			},
 		},
 		{
-			name:        "jetstream not initialized",
-			subject:     "test.noinit",
-			data:        []byte("test message"),
-			mockSetup:   func() {},
-			expectedErr: "jetstream not initialized: call Connect() first",
+			name:    "jetstream not initialized",
+			subject: "test.noinit",
+			data:    []byte("test message"),
+			mockSetup: func() {
+				s.client.ExtJS = nil
+			},
+			validateFunc: func(err error) {
+				s.EqualError(err, "jetstream not initialized: call Connect() first")
+			},
 		},
 	}
 
@@ -418,22 +429,7 @@ func (s *JetStreamPublicTestSuite) TestPublish() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			// For the "jetstream not initialized" test, set ExtJS to nil
-			if tc.name == "jetstream not initialized" {
-				originalExtJS := s.client.ExtJS
-				s.client.ExtJS = nil
-				defer func() {
-					s.client.ExtJS = originalExtJS
-				}()
-			}
-
-			err := s.client.Publish(s.ctx, tc.subject, tc.data)
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-			} else {
-				s.EqualError(err, tc.expectedErr)
-			}
+			tc.validateFunc(s.client.Publish(s.ctx, tc.subject, tc.data))
 		})
 	}
 }

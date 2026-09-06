@@ -13,8 +13,9 @@
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, EXPRESS OR IMPLIED,
-// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
 package client_test
@@ -67,10 +68,10 @@ func (s *KVPublicTestSuite) SetupSubTest() {
 
 func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucket() {
 	tests := []struct {
-		name        string
-		bucketName  string
-		mockSetup   func()
-		expectedErr string
+		name         string
+		bucketName   string
+		mockSetup    func()
+		validateFunc func(jetstream.KeyValue, error)
 	}{
 		{
 			name:       "successfully creates KV bucket",
@@ -81,7 +82,10 @@ func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucket() {
 					Return(s.mockKV, nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(kv jetstream.KeyValue, err error) {
+				s.NoError(err)
+				s.NotNil(kv)
+			},
 		},
 		{
 			name:       "error creating KV bucket",
@@ -92,7 +96,10 @@ func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucket() {
 					Return(nil, errors.New("kv creation failed")).
 					Times(1)
 			},
-			expectedErr: "failed to create/update KV bucket responses: kv creation failed",
+			validateFunc: func(kv jetstream.KeyValue, err error) {
+				s.EqualError(err, "failed to create/update KV bucket responses: kv creation failed")
+				s.Nil(kv)
+			},
 		},
 	}
 
@@ -100,24 +107,17 @@ func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucket() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			kv, err := s.client.CreateOrUpdateKVBucket(context.Background(), tc.bucketName)
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-				s.NotNil(kv)
-			} else {
-				s.EqualError(err, tc.expectedErr)
-			}
+			tc.validateFunc(s.client.CreateOrUpdateKVBucket(context.Background(), tc.bucketName))
 		})
 	}
 }
 
 func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
 	tests := []struct {
-		name        string
-		config      jetstream.KeyValueConfig
-		mockSetup   func()
-		expectedErr string
+		name         string
+		config       jetstream.KeyValueConfig
+		mockSetup    func()
+		validateFunc func(jetstream.KeyValue, error)
 	}{
 		{
 			name: "successfully creates KV bucket with custom config",
@@ -143,7 +143,10 @@ func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
 					Return(s.mockKV, nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(kv jetstream.KeyValue, err error) {
+				s.NoError(err)
+				s.NotNil(kv)
+			},
 		},
 		{
 			name: "when storage type conflict returns existing bucket",
@@ -161,7 +164,10 @@ func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
 					Return(s.mockKV, nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(kv jetstream.KeyValue, err error) {
+				s.NoError(err)
+				s.NotNil(kv)
+			},
 		},
 		{
 			name: "when storage type conflict and get fails returns original error",
@@ -179,7 +185,13 @@ func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
 					Return(nil, errors.New("bucket not found")).
 					Times(1)
 			},
-			expectedErr: "failed to create/update KV bucket bad-bucket: nats: API error: code=500 err_code=10052 description=stream configuration update can not change storage type",
+			validateFunc: func(kv jetstream.KeyValue, err error) {
+				s.EqualError(
+					err,
+					"failed to create/update KV bucket bad-bucket: nats: API error: code=500 err_code=10052 description=stream configuration update can not change storage type",
+				)
+				s.Nil(kv)
+			},
 		},
 		{
 			name: "error creating KV bucket with config",
@@ -192,7 +204,13 @@ func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
 					Return(nil, errors.New("invalid bucket configuration")).
 					Times(1)
 			},
-			expectedErr: "failed to create/update KV bucket invalid-bucket: invalid bucket configuration",
+			validateFunc: func(kv jetstream.KeyValue, err error) {
+				s.EqualError(
+					err,
+					"failed to create/update KV bucket invalid-bucket: invalid bucket configuration",
+				)
+				s.Nil(kv)
+			},
 		},
 	}
 
@@ -200,14 +218,9 @@ func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			kv, err := s.client.CreateOrUpdateKVBucketWithConfig(context.Background(), tc.config)
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-				s.NotNil(kv)
-			} else {
-				s.EqualError(err, tc.expectedErr)
-			}
+			tc.validateFunc(
+				s.client.CreateOrUpdateKVBucketWithConfig(context.Background(), tc.config),
+			)
 		})
 	}
 }
@@ -218,16 +231,14 @@ func (s *KVPublicTestSuite) TestPublishAndWaitKV() {
 		subject      string
 		data         []byte
 		requestID    string
-		responseData []byte
 		mockSetup    func()
-		expectedErr  string
+		validateFunc func([]byte, error)
 	}{
 		{
-			name:         "successfully publishes and receives response",
-			subject:      "test.subject",
-			data:         []byte(`{"test": "data"}`),
-			requestID:    "test-123",
-			responseData: []byte(`{"status": "ok"}`),
+			name:      "successfully publishes and receives response",
+			subject:   "test.subject",
+			data:      []byte(`{"test": "data"}`),
+			requestID: "test-123",
 			mockSetup: func() {
 				// Mock publish
 				s.mockExt.EXPECT().
@@ -250,7 +261,10 @@ func (s *KVPublicTestSuite) TestPublishAndWaitKV() {
 					Return(mockEntry, nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(response []byte, err error) {
+				s.NoError(err)
+				s.Equal([]byte(`{"status": "ok"}`), response)
+			},
 		},
 		{
 			name:      "error publishing message",
@@ -263,14 +277,17 @@ func (s *KVPublicTestSuite) TestPublishAndWaitKV() {
 					Return(nil, errors.New("publish failed")).
 					Times(1)
 			},
-			expectedErr: "failed to publish: publish failed",
+			validateFunc: func(response []byte, err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "failed to publish: publish failed")
+				s.Nil(response)
+			},
 		},
 		{
-			name:         "timeout waiting for response",
-			subject:      "test.timeout",
-			data:         []byte(`{"test": "timeout"}`),
-			requestID:    "timeout-123",
-			responseData: nil,
+			name:      "timeout waiting for response",
+			subject:   "test.timeout",
+			data:      []byte(`{"test": "timeout"}`),
+			requestID: "timeout-123",
 			mockSetup: func() {
 				// Mock successful publish
 				s.mockExt.EXPECT().
@@ -284,14 +301,17 @@ func (s *KVPublicTestSuite) TestPublishAndWaitKV() {
 					Return(nil, jetstream.ErrKeyNotFound).
 					MinTimes(2) // At least 2 calls due to polling
 			},
-			expectedErr: "context deadline exceeded",
+			validateFunc: func(response []byte, err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "context deadline exceeded")
+				s.Nil(response)
+			},
 		},
 		{
-			name:         "context cancelled during wait",
-			subject:      "test.cancel",
-			data:         []byte(`{"test": "cancel"}`),
-			requestID:    "cancel-123",
-			responseData: nil,
+			name:      "context cancelled during wait",
+			subject:   "test.cancel",
+			data:      []byte(`{"test": "cancel"}`),
+			requestID: "cancel-123",
 			mockSetup: func() {
 				// Mock successful publish
 				s.mockExt.EXPECT().
@@ -305,14 +325,17 @@ func (s *KVPublicTestSuite) TestPublishAndWaitKV() {
 					Return(nil, jetstream.ErrKeyNotFound).
 					AnyTimes()
 			},
-			expectedErr: "context canceled",
+			validateFunc: func(response []byte, err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "context canceled")
+				s.Nil(response)
+			},
 		},
 		{
-			name:         "error during KV get",
-			subject:      "test.kv_error",
-			data:         []byte(`{"test": "kv_error"}`),
-			requestID:    "kv-error-123",
-			responseData: nil,
+			name:      "error during KV get",
+			subject:   "test.kv_error",
+			data:      []byte(`{"test": "kv_error"}`),
+			requestID: "kv-error-123",
 			mockSetup: func() {
 				// Mock successful publish
 				s.mockExt.EXPECT().
@@ -326,14 +349,17 @@ func (s *KVPublicTestSuite) TestPublishAndWaitKV() {
 					Return(nil, errors.New("kv store error")).
 					Times(1)
 			},
-			expectedErr: "failed to get response: kv store error",
+			validateFunc: func(response []byte, err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "failed to get response: kv store error")
+				s.Nil(response)
+			},
 		},
 		{
-			name:         "nil options uses defaults",
-			subject:      "test.defaults",
-			data:         []byte(`{"test": "defaults"}`),
-			requestID:    "", // Will be generated
-			responseData: []byte(`{"status": "ok"}`),
+			name:      "nil options uses defaults",
+			subject:   "test.defaults",
+			data:      []byte(`{"test": "defaults"}`),
+			requestID: "", // Will be generated
 			mockSetup: func() {
 				// Mock publish
 				s.mockExt.EXPECT().
@@ -351,14 +377,16 @@ func (s *KVPublicTestSuite) TestPublishAndWaitKV() {
 					Return(mockEntry, nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(response []byte, err error) {
+				s.NoError(err)
+				s.Equal([]byte(`{"status": "ok"}`), response)
+			},
 		},
 		{
-			name:         "empty RequestID gets generated",
-			subject:      "test.generate_id",
-			data:         []byte(`{"test": "generate_id"}`),
-			requestID:    "", // Will be generated
-			responseData: []byte(`{"status": "ok"}`),
+			name:      "empty RequestID gets generated",
+			subject:   "test.generate_id",
+			data:      []byte(`{"test": "generate_id"}`),
+			requestID: "", // Will be generated
 			mockSetup: func() {
 				// Mock publish
 				s.mockExt.EXPECT().
@@ -376,7 +404,10 @@ func (s *KVPublicTestSuite) TestPublishAndWaitKV() {
 					Return(mockEntry, nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(response []byte, err error) {
+				s.NoError(err)
+				s.Equal([]byte(`{"status": "ok"}`), response)
+			},
 		},
 	}
 
@@ -419,32 +450,23 @@ func (s *KVPublicTestSuite) TestPublishAndWaitKV() {
 				}
 			}
 
-			response, err := s.client.PublishAndWaitKV(
+			tc.validateFunc(s.client.PublishAndWaitKV(
 				ctx,
 				tc.subject,
 				tc.data,
 				s.mockKV,
 				opts,
-			)
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-				s.Equal(tc.responseData, response)
-			} else {
-				s.Error(err)
-				s.Contains(err.Error(), tc.expectedErr)
-			}
+			))
 		})
 	}
 }
 
 func (s *KVPublicTestSuite) TestWatchKV() {
 	tests := []struct {
-		name          string
-		pattern       string
-		setupMocks    func() *mocks.MockKeyWatcher
-		testBehavior  func(ch <-chan jetstream.KeyValueEntry)
-		expectedError string
+		name         string
+		pattern      string
+		setupMocks   func() *mocks.MockKeyWatcher
+		validateFunc func(<-chan jetstream.KeyValueEntry, error)
 	}{
 		{
 			name:    "successfully creates watcher and forwards entries",
@@ -480,7 +502,10 @@ func (s *KVPublicTestSuite) TestWatchKV() {
 
 				return mockWatcher
 			},
-			testBehavior: func(ch <-chan jetstream.KeyValueEntry) {
+			validateFunc: func(ch <-chan jetstream.KeyValueEntry, err error) {
+				s.NoError(err)
+				s.NotNil(ch)
+
 				// Wait for the entry to be forwarded through the goroutine
 				select {
 				case entry := <-ch:
@@ -526,7 +551,10 @@ func (s *KVPublicTestSuite) TestWatchKV() {
 
 				return mockWatcher
 			},
-			testBehavior: func(ch <-chan jetstream.KeyValueEntry) {
+			validateFunc: func(ch <-chan jetstream.KeyValueEntry, err error) {
+				s.NoError(err)
+				s.NotNil(ch)
+
 				// Channel should close when context is cancelled
 				select {
 				case _, ok := <-ch:
@@ -571,7 +599,10 @@ func (s *KVPublicTestSuite) TestWatchKV() {
 
 				return mockWatcher
 			},
-			testBehavior: func(ch <-chan jetstream.KeyValueEntry) {
+			validateFunc: func(ch <-chan jetstream.KeyValueEntry, err error) {
+				s.NoError(err)
+				s.NotNil(ch)
+
 				// Should only receive the non-nil entry (nil entries are filtered out)
 				select {
 				case entry := <-ch:
@@ -623,7 +654,10 @@ func (s *KVPublicTestSuite) TestWatchKV() {
 
 				return mockWatcher
 			},
-			testBehavior: func(ch <-chan jetstream.KeyValueEntry) {
+			validateFunc: func(ch <-chan jetstream.KeyValueEntry, err error) {
+				s.NoError(err)
+				s.NotNil(ch)
+
 				// Create a context that we can cancel
 				// Don't read from the channel immediately - this creates backpressure
 				// so when the goroutine tries to send the entry, it will block
@@ -651,9 +685,13 @@ func (s *KVPublicTestSuite) TestWatchKV() {
 			},
 		},
 		{
-			name:          "error creating watcher",
-			pattern:       "invalid.*",
-			expectedError: "failed to create watcher",
+			name:    "error creating watcher",
+			pattern: "invalid.*",
+			validateFunc: func(ch <-chan jetstream.KeyValueEntry, err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "failed to create watcher")
+				s.Nil(ch)
+			},
 			setupMocks: func() *mocks.MockKeyWatcher {
 				s.mockKV.EXPECT().
 					Watch(gomock.Any(), "invalid.*").
@@ -665,7 +703,7 @@ func (s *KVPublicTestSuite) TestWatchKV() {
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
-			mockWatcher := tc.setupMocks()
+			_ = tc.setupMocks()
 
 			ctx, cancel := context.WithCancel(context.Background())
 
@@ -687,35 +725,19 @@ func (s *KVPublicTestSuite) TestWatchKV() {
 				defer cancel()
 			}
 
-			ch, err := s.client.WatchKV(ctx, s.mockKV, tc.pattern)
-
-			if tc.expectedError != "" {
-				s.Error(err)
-				s.Contains(err.Error(), tc.expectedError)
-				s.Nil(ch)
-			} else {
-				s.NoError(err)
-				s.NotNil(ch)
-
-				// Test the goroutine behavior if we have a test function
-				if tc.testBehavior != nil {
-					tc.testBehavior(ch)
-				}
-
-				_ = mockWatcher // Use the watcher to avoid unused variable
-			}
+			tc.validateFunc(s.client.WatchKV(ctx, s.mockKV, tc.pattern))
 		})
 	}
 }
 
 func (s *KVPublicTestSuite) TestKVPut() {
 	tests := []struct {
-		name        string
-		bucket      string
-		key         string
-		value       []byte
-		mockSetup   func()
-		expectedErr string
+		name         string
+		bucket       string
+		key          string
+		value        []byte
+		mockSetup    func()
+		validateFunc func(error)
 	}{
 		{
 			name:   "successfully puts value in KV bucket",
@@ -733,7 +755,9 @@ func (s *KVPublicTestSuite) TestKVPut() {
 					Return(uint64(1), nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(err error) {
+				s.NoError(err)
+			},
 		},
 		{
 			name:   "error creating KV bucket for put",
@@ -746,7 +770,12 @@ func (s *KVPublicTestSuite) TestKVPut() {
 					Return(nil, errors.New("bucket creation failed")).
 					Times(1)
 			},
-			expectedErr: "failed to get KV bucket bad-bucket: failed to create/update KV bucket bad-bucket: bucket creation failed",
+			validateFunc: func(err error) {
+				s.EqualError(
+					err,
+					"failed to get KV bucket bad-bucket: failed to create/update KV bucket bad-bucket: bucket creation failed",
+				)
+			},
 		},
 		{
 			name:   "error putting value in KV bucket",
@@ -764,7 +793,9 @@ func (s *KVPublicTestSuite) TestKVPut() {
 					Return(uint64(0), errors.New("put failed")).
 					Times(1)
 			},
-			expectedErr: "failed to put key bad-key in bucket test-bucket: put failed",
+			validateFunc: func(err error) {
+				s.EqualError(err, "failed to put key bad-key in bucket test-bucket: put failed")
+			},
 		},
 	}
 
@@ -772,13 +803,7 @@ func (s *KVPublicTestSuite) TestKVPut() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			err := s.client.KVPut(tc.bucket, tc.key, tc.value)
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-			} else {
-				s.EqualError(err, tc.expectedErr)
-			}
+			tc.validateFunc(s.client.KVPut(tc.bucket, tc.key, tc.value))
 		})
 	}
 }
@@ -789,8 +814,7 @@ func (s *KVPublicTestSuite) TestKVGet() {
 		bucket       string
 		key          string
 		mockSetup    func()
-		expectedData []byte
-		expectedErr  string
+		validateFunc func([]byte, error)
 	}{
 		{
 			name:   "successfully gets value from KV bucket",
@@ -813,8 +837,10 @@ func (s *KVPublicTestSuite) TestKVGet() {
 					Return(mockEntry, nil).
 					Times(1)
 			},
-			expectedData: []byte("test-value"),
-			expectedErr:  "",
+			validateFunc: func(data []byte, err error) {
+				s.NoError(err)
+				s.Equal([]byte("test-value"), data)
+			},
 		},
 		{
 			name:   "error creating KV bucket for get",
@@ -826,8 +852,14 @@ func (s *KVPublicTestSuite) TestKVGet() {
 					Return(nil, errors.New("bucket creation failed")).
 					Times(1)
 			},
-			expectedData: nil,
-			expectedErr:  "failed to get KV bucket bad-bucket: failed to create/update KV bucket bad-bucket: bucket creation failed",
+			validateFunc: func(data []byte, err error) {
+				s.Error(err)
+				s.Contains(
+					err.Error(),
+					"failed to get KV bucket bad-bucket: failed to create/update KV bucket bad-bucket: bucket creation failed",
+				)
+				s.Nil(data)
+			},
 		},
 		{
 			name:   "error getting value from KV bucket",
@@ -844,8 +876,14 @@ func (s *KVPublicTestSuite) TestKVGet() {
 					Return(nil, jetstream.ErrKeyNotFound).
 					Times(1)
 			},
-			expectedData: nil,
-			expectedErr:  "failed to get key missing-key from bucket test-bucket: nats: key not found",
+			validateFunc: func(data []byte, err error) {
+				s.Error(err)
+				s.Contains(
+					err.Error(),
+					"failed to get key missing-key from bucket test-bucket: nats: key not found",
+				)
+				s.Nil(data)
+			},
 		},
 	}
 
@@ -853,27 +891,18 @@ func (s *KVPublicTestSuite) TestKVGet() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			data, err := s.client.KVGet(tc.bucket, tc.key)
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-				s.Equal(tc.expectedData, data)
-			} else {
-				s.Error(err)
-				s.Contains(err.Error(), tc.expectedErr)
-				s.Nil(data)
-			}
+			tc.validateFunc(s.client.KVGet(tc.bucket, tc.key))
 		})
 	}
 }
 
 func (s *KVPublicTestSuite) TestKVDelete() {
 	tests := []struct {
-		name        string
-		bucket      string
-		key         string
-		mockSetup   func()
-		expectedErr string
+		name         string
+		bucket       string
+		key          string
+		mockSetup    func()
+		validateFunc func(error)
 	}{
 		{
 			name:   "successfully deletes key from KV bucket",
@@ -890,7 +919,9 @@ func (s *KVPublicTestSuite) TestKVDelete() {
 					Return(nil).
 					Times(1)
 			},
-			expectedErr: "",
+			validateFunc: func(err error) {
+				s.NoError(err)
+			},
 		},
 		{
 			name:   "error creating KV bucket for delete",
@@ -902,7 +933,12 @@ func (s *KVPublicTestSuite) TestKVDelete() {
 					Return(nil, errors.New("bucket creation failed")).
 					Times(1)
 			},
-			expectedErr: "failed to get KV bucket bad-bucket: failed to create/update KV bucket bad-bucket: bucket creation failed",
+			validateFunc: func(err error) {
+				s.EqualError(
+					err,
+					"failed to get KV bucket bad-bucket: failed to create/update KV bucket bad-bucket: bucket creation failed",
+				)
+			},
 		},
 		{
 			name:   "error deleting key from KV bucket",
@@ -919,7 +955,12 @@ func (s *KVPublicTestSuite) TestKVDelete() {
 					Return(errors.New("delete failed")).
 					Times(1)
 			},
-			expectedErr: "failed to delete key bad-key from bucket test-bucket: delete failed",
+			validateFunc: func(err error) {
+				s.EqualError(
+					err,
+					"failed to delete key bad-key from bucket test-bucket: delete failed",
+				)
+			},
 		},
 	}
 
@@ -927,13 +968,7 @@ func (s *KVPublicTestSuite) TestKVDelete() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			err := s.client.KVDelete(tc.bucket, tc.key)
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-			} else {
-				s.EqualError(err, tc.expectedErr)
-			}
+			tc.validateFunc(s.client.KVDelete(tc.bucket, tc.key))
 		})
 	}
 }
@@ -943,8 +978,7 @@ func (s *KVPublicTestSuite) TestKVKeys() {
 		name         string
 		bucket       string
 		mockSetup    func()
-		expectedKeys []string
-		expectedErr  string
+		validateFunc func([]string, error)
 	}{
 		{
 			name:   "successfully gets keys from KV bucket",
@@ -972,8 +1006,10 @@ func (s *KVPublicTestSuite) TestKVKeys() {
 					Return(keysChan).
 					Times(1)
 			},
-			expectedKeys: []string{"key1", "key2", "key3"},
-			expectedErr:  "",
+			validateFunc: func(keys []string, err error) {
+				s.NoError(err)
+				s.Equal([]string{"key1", "key2", "key3"}, keys)
+			},
 		},
 		{
 			name:   "successfully gets empty keys from KV bucket",
@@ -998,8 +1034,10 @@ func (s *KVPublicTestSuite) TestKVKeys() {
 					Return(keysChan).
 					Times(1)
 			},
-			expectedKeys: nil,
-			expectedErr:  "",
+			validateFunc: func(keys []string, err error) {
+				s.NoError(err)
+				s.Nil(keys)
+			},
 		},
 		{
 			name:   "error creating KV bucket for keys",
@@ -1010,8 +1048,14 @@ func (s *KVPublicTestSuite) TestKVKeys() {
 					Return(nil, errors.New("bucket creation failed")).
 					Times(1)
 			},
-			expectedKeys: nil,
-			expectedErr:  "failed to get KV bucket bad-bucket: failed to create/update KV bucket bad-bucket: bucket creation failed",
+			validateFunc: func(keys []string, err error) {
+				s.Error(err)
+				s.Contains(
+					err.Error(),
+					"failed to get KV bucket bad-bucket: failed to create/update KV bucket bad-bucket: bucket creation failed",
+				)
+				s.Nil(keys)
+			},
 		},
 		{
 			name:   "error getting keys from KV bucket",
@@ -1027,8 +1071,11 @@ func (s *KVPublicTestSuite) TestKVKeys() {
 					Return(nil, errors.New("keys failed")).
 					Times(1)
 			},
-			expectedKeys: nil,
-			expectedErr:  "failed to get keys from bucket test-bucket: keys failed",
+			validateFunc: func(keys []string, err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "failed to get keys from bucket test-bucket: keys failed")
+				s.Nil(keys)
+			},
 		},
 	}
 
@@ -1036,16 +1083,7 @@ func (s *KVPublicTestSuite) TestKVKeys() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			keys, err := s.client.KVKeys(tc.bucket)
-
-			if tc.expectedErr == "" {
-				s.NoError(err)
-				s.Equal(tc.expectedKeys, keys)
-			} else {
-				s.Error(err)
-				s.Contains(err.Error(), tc.expectedErr)
-				s.Nil(keys)
-			}
+			tc.validateFunc(s.client.KVKeys(tc.bucket))
 		})
 	}
 }

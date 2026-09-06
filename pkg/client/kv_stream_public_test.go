@@ -13,8 +13,9 @@
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, EXPRESS OR IMPLIED,
-// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
 package client_test
@@ -62,14 +63,13 @@ func (s *KVStreamPublicTestSuite) TearDownTest() {
 
 func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 	tests := []struct {
-		name           string
-		kvBucket       string
-		key            string
-		data           []byte
-		notifySubject  string
-		mockSetup      func()
-		expectedResult uint64
-		expectedError  string
+		name          string
+		kvBucket      string
+		key           string
+		data          []byte
+		notifySubject string
+		mockSetup     func()
+		validateFunc  func(uint64, error)
 	}{
 		{
 			name:          "successfully stores and notifies",
@@ -93,7 +93,10 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 					Publish(gomock.Any(), "notify.subject", []byte("test-key")).
 					Return(nil, nil)
 			},
-			expectedResult: 42,
+			validateFunc: func(revision uint64, err error) {
+				s.NoError(err)
+				s.Equal(uint64(42), revision)
+			},
 		},
 		{
 			name:          "error getting KV bucket",
@@ -106,7 +109,14 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "bad-bucket"}).
 					Return(nil, errors.New("bucket not found"))
 			},
-			expectedError: "failed to get KV bucket 'bad-bucket': failed to create/update KV bucket bad-bucket: bucket not found",
+			validateFunc: func(revision uint64, err error) {
+				s.Error(err)
+				s.Contains(
+					err.Error(),
+					"failed to get KV bucket 'bad-bucket': failed to create/update KV bucket bad-bucket: bucket not found",
+				)
+				s.Equal(uint64(0), revision)
+			},
 		},
 		{
 			name:          "error storing in KV",
@@ -125,7 +135,11 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 					Put(gomock.Any(), "test-key", []byte(`{"test": "data"}`)).
 					Return(uint64(0), errors.New("put failed"))
 			},
-			expectedError: "failed to store data in KV: put failed",
+			validateFunc: func(revision uint64, err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "failed to store data in KV: put failed")
+				s.Equal(uint64(0), revision)
+			},
 		},
 		{
 			name:          "error sending notification",
@@ -148,7 +162,11 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 					Publish(gomock.Any(), "notify.subject", []byte("test-key")).
 					Return(nil, errors.New("publish failed"))
 			},
-			expectedError: "failed to send notification: publish failed",
+			validateFunc: func(revision uint64, err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "failed to send notification: publish failed")
+				s.Equal(uint64(0), revision)
+			},
 		},
 		{
 			name:          "handles empty data",
@@ -169,7 +187,10 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 					Publish(gomock.Any(), "notify.empty", []byte("empty-key")).
 					Return(nil, nil)
 			},
-			expectedResult: 1,
+			validateFunc: func(revision uint64, err error) {
+				s.NoError(err)
+				s.Equal(uint64(1), revision)
+			},
 		},
 		{
 			name:          "handles nil data",
@@ -190,7 +211,10 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 					Publish(gomock.Any(), "notify.nil", []byte("nil-key")).
 					Return(nil, nil)
 			},
-			expectedResult: 2,
+			validateFunc: func(revision uint64, err error) {
+				s.NoError(err)
+				s.Equal(uint64(2), revision)
+			},
 		},
 	}
 
@@ -198,22 +222,13 @@ func (s *KVStreamPublicTestSuite) TestKVPutAndPublish() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 
-			revision, err := s.client.KVPutAndPublish(
+			tc.validateFunc(s.client.KVPutAndPublish(
 				context.TODO(),
 				tc.kvBucket,
 				tc.key,
 				tc.data,
 				tc.notifySubject,
-			)
-
-			if tc.expectedError != "" {
-				s.Error(err)
-				s.Contains(err.Error(), tc.expectedError)
-				s.Equal(uint64(0), revision)
-			} else {
-				s.NoError(err)
-				s.Equal(tc.expectedResult, revision)
-			}
+			))
 		})
 	}
 }

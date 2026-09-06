@@ -64,11 +64,10 @@ func (s *CorePublicTestSuite) SetupSubTest() {
 
 func (s *CorePublicTestSuite) TestSubscribe() {
 	tests := []struct {
-		name        string
-		subject     string
-		setupMock   func()
-		wantErr     bool
-		errContains string
+		name         string
+		subject      string
+		setupMock    func()
+		validateFunc func(*nats.Subscription, error)
 	}{
 		{
 			name:    "when subscribe succeeds returns subscription",
@@ -77,6 +76,10 @@ func (s *CorePublicTestSuite) TestSubscribe() {
 				s.mockNATS.EXPECT().
 					Subscribe("test.subject", gomock.Any()).
 					Return(&nats.Subscription{}, nil)
+			},
+			validateFunc: func(sub *nats.Subscription, err error) {
+				s.NoError(err)
+				s.NotNil(sub)
 			},
 		},
 		{
@@ -87,8 +90,11 @@ func (s *CorePublicTestSuite) TestSubscribe() {
 					Subscribe("test.subject", gomock.Any()).
 					Return(nil, errors.New("connection closed"))
 			},
-			wantErr:     true,
-			errContains: "failed to subscribe",
+			validateFunc: func(sub *nats.Subscription, err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "failed to subscribe")
+				s.Nil(sub)
+			},
 		},
 		{
 			name:    "when NC is nil returns error",
@@ -96,8 +102,11 @@ func (s *CorePublicTestSuite) TestSubscribe() {
 			setupMock: func() {
 				s.client.NC = nil
 			},
-			wantErr:     true,
-			errContains: "NATS connection not established",
+			validateFunc: func(sub *nats.Subscription, err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "NATS connection not established")
+				s.Nil(sub)
+			},
 		},
 	}
 
@@ -105,28 +114,18 @@ func (s *CorePublicTestSuite) TestSubscribe() {
 		s.Run(tt.name, func() {
 			tt.setupMock()
 
-			sub, err := s.client.Subscribe(tt.subject, func(_ *nats.Msg) {})
-
-			if tt.wantErr {
-				s.Error(err)
-				s.Contains(err.Error(), tt.errContains)
-				s.Nil(sub)
-			} else {
-				s.NoError(err)
-				s.NotNil(sub)
-			}
+			tt.validateFunc(s.client.Subscribe(tt.subject, func(_ *nats.Msg) {}))
 		})
 	}
 }
 
 func (s *CorePublicTestSuite) TestPublishCore() {
 	tests := []struct {
-		name        string
-		subject     string
-		data        []byte
-		setupClient func()
-		wantErr     bool
-		errContains string
+		name         string
+		subject      string
+		data         []byte
+		setupClient  func()
+		validateFunc func(error)
 	}{
 		{
 			name:    "when publish succeeds",
@@ -136,6 +135,9 @@ func (s *CorePublicTestSuite) TestPublishCore() {
 				s.mockNATS.EXPECT().
 					Publish("test.subject", []byte("test data")).
 					Return(nil)
+			},
+			validateFunc: func(err error) {
+				s.NoError(err)
 			},
 		},
 		{
@@ -147,8 +149,10 @@ func (s *CorePublicTestSuite) TestPublishCore() {
 					Publish("test.subject", []byte("test data")).
 					Return(errors.New("connection closed"))
 			},
-			wantErr:     true,
-			errContains: "failed to publish",
+			validateFunc: func(err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "failed to publish")
+			},
 		},
 		{
 			name:    "when NC is nil returns error",
@@ -157,8 +161,10 @@ func (s *CorePublicTestSuite) TestPublishCore() {
 			setupClient: func() {
 				s.client.NC = nil
 			},
-			wantErr:     true,
-			errContains: "NATS connection not established",
+			validateFunc: func(err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "NATS connection not established")
+			},
 		},
 	}
 
@@ -168,14 +174,7 @@ func (s *CorePublicTestSuite) TestPublishCore() {
 				tt.setupClient()
 			}
 
-			err := s.client.PublishCore(tt.subject, tt.data)
-
-			if tt.wantErr {
-				s.Error(err)
-				s.Contains(err.Error(), tt.errContains)
-			} else {
-				s.NoError(err)
-			}
+			tt.validateFunc(s.client.PublishCore(tt.subject, tt.data))
 		})
 	}
 }

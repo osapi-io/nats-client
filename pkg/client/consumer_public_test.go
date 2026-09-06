@@ -91,15 +91,23 @@ func (s *ConsumerPublicTestSuite) resetMocks() (
 	return ctrl, mockExt, mockConsumer, mockMessageBatch, c
 }
 
+// contextEnded is the validateFunc for cases that consume until their context
+// runs out, which is how ConsumeMessages returns when nothing else stops it.
+func (s *ConsumerPublicTestSuite) contextEnded() func(error) {
+	return func(err error) {
+		s.Error(err)
+		s.True(errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled))
+	}
+}
+
 func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 	type testCase struct {
 		name           string
 		setupMocks     func(ctx context.Context, ctrl *gomock.Controller, mockExt *mocks.MockJetStream, mockConsumer *mocks.MockConsumer, mockMessageBatch *mocks.MockMessageBatch)
 		handler        client.JetStreamMessageHandler
 		opts           *client.ConsumeOptions
-		expectedError  string
 		contextTimeout time.Duration
-		assertFn       func(err error)
+		validateFunc   func(error)
 	}
 
 	testCases := []testCase{
@@ -125,7 +133,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				MaxInFlight: 5,
 			},
 			contextTimeout: 100 * time.Millisecond,
-			assertFn: func(err error) {
+			validateFunc: func(err error) {
 				s.Error(err)
 				s.Contains(err.Error(), "failed to get consumer")
 				s.Contains(err.Error(), "consumer not found")
@@ -150,7 +158,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			},
 			opts:           nil,
 			contextTimeout: 100 * time.Millisecond,
-			assertFn: func(err error) {
+			validateFunc: func(err error) {
 				s.Error(err)
 				s.Contains(err.Error(), "failed to get consumer")
 			},
@@ -203,6 +211,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				MaxInFlight: 5,
 			},
 			contextTimeout: 100 * time.Millisecond,
+			validateFunc:   s.contextEnded(),
 		},
 		{
 			name: "message processing error no ack",
@@ -248,6 +257,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			},
 			opts:           &client.ConsumeOptions{MaxInFlight: 10},
 			contextTimeout: 100 * time.Millisecond,
+			validateFunc:   s.contextEnded(),
 		},
 		{
 			name: "ack error handling",
@@ -293,6 +303,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				return nil
 			},
 			contextTimeout: 100 * time.Millisecond,
+			validateFunc:   s.contextEnded(),
 		},
 		{
 			name: "fetch error non timeout",
@@ -316,6 +327,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				return nil
 			},
 			contextTimeout: 100 * time.Millisecond,
+			validateFunc:   s.contextEnded(),
 		},
 		{
 			name: "context cancellation during fetch",
@@ -342,7 +354,10 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				return nil
 			},
 			contextTimeout: 50 * time.Millisecond,
-			expectedError:  "context",
+			validateFunc: func(err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "context")
+			},
 		},
 		{
 			name: "handler panic recovery",
@@ -388,6 +403,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				panic("handler panic")
 			},
 			contextTimeout: 200 * time.Millisecond,
+			validateFunc:   s.contextEnded(),
 		},
 		{
 			name: "exact timeout error handling",
@@ -411,6 +427,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				return nil
 			},
 			contextTimeout: 100 * time.Millisecond,
+			validateFunc:   s.contextEnded(),
 		},
 		{
 			name: "non timeout fetch error with logging",
@@ -441,6 +458,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				return nil
 			},
 			contextTimeout: 200 * time.Millisecond,
+			validateFunc:   s.contextEnded(),
 		},
 		{
 			name: "non timeout fetch error with ordered expectations",
@@ -472,6 +490,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			},
 			opts:           nil,
 			contextTimeout: 50 * time.Millisecond,
+			validateFunc:   s.contextEnded(),
 		},
 		{
 			name: "message processing error with logging",
@@ -517,6 +536,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				return errors.New("processing failed")
 			},
 			contextTimeout: 200 * time.Millisecond,
+			validateFunc:   s.contextEnded(),
 		},
 		{
 			name: "focused message processing error logging",
@@ -562,6 +582,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			},
 			opts:           nil,
 			contextTimeout: 100 * time.Millisecond,
+			validateFunc:   s.contextEnded(),
 		},
 		{
 			name: "focused ack error logging",
@@ -608,6 +629,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			},
 			opts:           nil,
 			contextTimeout: 100 * time.Millisecond,
+			validateFunc:   s.contextEnded(),
 		},
 		{
 			name: "focused panic recovery logging",
@@ -653,6 +675,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 			},
 			opts:           nil,
 			contextTimeout: 100 * time.Millisecond,
+			validateFunc:   s.contextEnded(),
 		},
 		{
 			name: "ack error with logging",
@@ -699,6 +722,7 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 				return nil
 			},
 			contextTimeout: 200 * time.Millisecond,
+			validateFunc:   s.contextEnded(),
 		},
 	}
 
@@ -712,23 +736,13 @@ func (s *ConsumerPublicTestSuite) TestConsumeMessages() {
 
 			tc.setupMocks(ctx, ctrl, mockExt, mockConsumer, mockMessageBatch)
 
-			err := c.ConsumeMessages(
+			tc.validateFunc(c.ConsumeMessages(
 				ctx,
 				"TEST-STREAM",
 				"test-consumer",
 				tc.handler,
 				tc.opts,
-			)
-
-			if tc.assertFn != nil {
-				tc.assertFn(err)
-			} else if tc.expectedError != "" {
-				s.Error(err)
-				s.Contains(err.Error(), tc.expectedError)
-			} else {
-				s.Error(err)
-				s.True(errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled))
-			}
+			))
 		})
 	}
 }
