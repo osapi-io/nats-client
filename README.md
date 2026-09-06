@@ -48,7 +48,7 @@ Each example is a standalone Go program you can read and run.
 
 ## Documentation
 
-See the [package documentation] on pkg.go.dev for API details.
+- [Package documentation] on pkg.go.dev. API reference.
 
 ## Contributing
 
