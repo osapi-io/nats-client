@@ -1,17 +1,35 @@
-[![release](https://img.shields.io/github/release/osapi-io/nats-client.svg?style=for-the-badge)](https://github.com/osapi-io/nats-client/releases/latest)
-[![codecov](https://img.shields.io/codecov/c/github/osapi-io/nats-client?token=8RICN0QCTT&style=for-the-badge)](https://codecov.io/gh/osapi-io/nats-cllient)
-[![license](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=for-the-badge)](LICENSE)
-[![build](https://img.shields.io/github/actions/workflow/status/osapi-io/nats-client/go.yml?style=for-the-badge)](https://github.com/osapi-io/nats-client/actions/workflows/go.yml)
-[![powered by](https://img.shields.io/badge/powered%20by-goreleaser-green.svg?style=for-the-badge)](https://github.com/goreleaser)
-[![conventional commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg?style=for-the-badge)](https://conventionalcommits.org)
-[![nats](https://img.shields.io/badge/NATS-27AAE1?style=for-the-badge&logo=natsdotio&logoColor=white)](https://nats.io)
-[![built with just](https://img.shields.io/badge/Built_with-Just-black?style=for-the-badge&logo=just&logoColor=white)](https://just.systems)
-![gitHub commit activity](https://img.shields.io/github/commit-activity/m/osapi-io/nats-client?style=for-the-badge)
-[![go reference](https://img.shields.io/badge/go-reference-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://pkg.go.dev/github.com/osapi-io/nats-client/pkg/client)
+<p align="center">
+  <picture>
+    <source srcset="asset/logo-dark.svg" media="(prefers-color-scheme: dark)">
+    <source srcset="asset/logo-light.svg" media="(prefers-color-scheme: light)">
+    <img src="asset/logo-dark.svg" alt="nats-client" width="582">
+  </picture>
+</p>
 
-# NATS client
+<p align="center">A Go package for connecting to and interacting with a NATS server.</p>
 
-A Go package for connecting to and interacting with a NATS server.
+<p align="center">
+  <a href="https://github.com/osapi-io/nats-client/releases/latest"><img alt="release" src="https://img.shields.io/github/release/osapi-io/nats-client.svg?style=for-the-badge"></a>
+  <a href="https://codecov.io/gh/osapi-io/nats-cllient"><img alt="codecov" src="https://img.shields.io/codecov/c/github/osapi-io/nats-client?token=8RICN0QCTT&style=for-the-badge"></a>
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-brightgreen.svg?style=for-the-badge"></a>
+  <a href="https://github.com/osapi-io/nats-client/actions/workflows/go.yml"><img alt="build" src="https://img.shields.io/github/actions/workflow/status/osapi-io/nats-client/go.yml?style=for-the-badge"></a>
+  <a href="https://github.com/goreleaser"><img alt="powered by" src="https://img.shields.io/badge/powered%20by-goreleaser-green.svg?style=for-the-badge"></a>
+  <a href="https://conventionalcommits.org"><img alt="conventional commits" src="https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg?style=for-the-badge"></a>
+  <a href="https://nats.io"><img alt="nats" src="https://img.shields.io/badge/NATS-27AAE1?style=for-the-badge&logo=natsdotio&logoColor=white"></a>
+  <a href="https://just.systems"><img alt="built with just" src="https://img.shields.io/badge/Built_with-Just-black?style=for-the-badge&logo=just&logoColor=white"></a>
+  <img alt="gitHub commit activity" src="https://img.shields.io/github/commit-activity/m/osapi-io/nats-client?style=for-the-badge">
+  <a href="https://pkg.go.dev/github.com/osapi-io/nats-client/pkg/client"><img alt="go reference" src="https://img.shields.io/badge/go-reference-00ADD8?style=for-the-badge&logo=go&logoColor=white"></a>
+</p>
+
+<p align="center">
+<b>One client, connection and JetStream together.</b>
+</p>
+
+<p align="center">
+Connection management, JetStream, KV buckets and consumers behind one client
+and one constructor. Three authentication modes, and create-or-update helpers
+so setup is idempotent.
+</p>
 
 ## Install
 
