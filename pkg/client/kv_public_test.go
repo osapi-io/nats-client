@@ -296,10 +296,18 @@ func (s *KVPublicTestSuite) TestPublishAndWaitKV() {
 					Times(1)
 
 				// Mock KV get returns not found repeatedly (simulating timeout)
+				//
+				// MinTimes(2) needs at least two ticks inside the timeout, so
+				// the budget has to exceed twice the poll interval by a margin.
+				// At 20ms against a 10ms interval the second tick and the
+				// deadline were scheduled for the same instant, and select over
+				// two ready channels picks pseudorandomly, so this expectation
+				// raced the clock and lost on a loaded runner. The 100ms
+				// default leaves room for ten.
 				s.mockKV.EXPECT().
 					Get(gomock.Any(), "timeout-123").
 					Return(nil, jetstream.ErrKeyNotFound).
-					MinTimes(2) // At least 2 calls due to polling
+					MinTimes(2)
 			},
 			validateFunc: func(response []byte, err error) {
 				s.Error(err)
@@ -436,9 +444,6 @@ func (s *KVPublicTestSuite) TestPublishAndWaitKV() {
 				}
 
 				switch tc.name {
-				case "timeout waiting for response":
-					// Use a very short timeout to trigger timeout quickly
-					opts.Timeout = 20 * time.Millisecond
 				case "context cancelled during wait":
 					// Create a context that gets cancelled immediately
 					var cancel context.CancelFunc
