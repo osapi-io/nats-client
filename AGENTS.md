@@ -28,14 +28,6 @@ The symptom is a check that fails here but passes in CI, on a file that nobody
 changed. If this occurs, find the version that ran. Do this before you accept
 the failure as real.
 
-## Design pages first
-
-The design is in the design pages. Write or change the page in
-[osapi-io/specs](https://github.com/osapi-io/specs) before you build. If the
-build shows that the page is wrong, correct the page. A design page in this
-repository becomes incorrect when the code changes. No check finds the
-difference.
-
 ## Where the rules come from
 
 [CONTRIBUTING.md](CONTRIBUTING.md#before-you-start) names the design pages. If a
