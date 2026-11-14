@@ -37,6 +37,10 @@ const (
 	UserPassAuth
 	// NKeyAuth represents authentication using NATS NKEYs (Ed25519 public-private key pairs).
 	NKeyAuth
+	// CredsAuth represents authentication with a NATS credentials file: a user
+	// JWT signed by an account, and the user's NKEY seed. It is how a client
+	// joins a NATS server running in operator (decentralized JWT) mode.
+	CredsAuth
 )
 
 // Options holds the configuration for connecting to a NATS server,
@@ -54,7 +58,8 @@ type Options struct {
 
 // AuthOptions holds authentication-related settings for connecting to NATS.
 type AuthOptions struct {
-	// AuthType specifies the authentication method to use (NoAuth, UserPassAuth, or NKeyAuth).
+	// AuthType specifies the authentication method to use (NoAuth, UserPassAuth,
+	// NKeyAuth, or CredsAuth).
 	AuthType AuthType
 	// Username is required for UserPassAuth and represents the NATS username.
 	Username string
@@ -63,6 +68,9 @@ type AuthOptions struct {
 	// NKeyFile is required for NKeyAuth and specifies the path to the NKEY private seed file.
 	// This file should contain an Ed25519 private key (starting with "S").
 	NKeyFile string
+	// CredsFile is required for CredsAuth and specifies the path to a NATS
+	// credentials file, such as one `nsc generate creds` writes.
+	CredsFile string
 }
 
 // Client provides an implementation for interacting with an embedded NATS server.

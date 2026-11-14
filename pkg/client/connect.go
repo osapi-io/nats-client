@@ -88,6 +88,14 @@ func (c *Client) Connect() error {
 		}))
 
 		nc, err = c.NC.Connect(natsURL, opts...)
+	case CredsAuth:
+		// nats.UserCredentials reads the file on each connect, so a missing
+		// file is reported here rather than as a failed handshake.
+		if _, statErr := os.Stat(c.Opts.Auth.CredsFile); statErr != nil {
+			return fmt.Errorf("failed to read creds file: %w", statErr)
+		}
+		opts = append(opts, nats.UserCredentials(c.Opts.Auth.CredsFile))
+		nc, err = c.NC.Connect(natsURL, opts...)
 	default:
 		return fmt.Errorf("unsupported authentication method")
 	}
@@ -116,6 +124,8 @@ func (c *Client) getAuthTypeName() string {
 		return "user_pass"
 	case NKeyAuth:
 		return "nkey"
+	case CredsAuth:
+		return "creds"
 	default:
 		return "unknown"
 	}
