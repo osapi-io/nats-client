@@ -5,14 +5,16 @@ delete the keys in a bucket.
 
 ## Methods
 
-| Method                                          | Description                                                 |
-| ----------------------------------------------- | ----------------------------------------------------------- |
-| `CreateOrUpdateKVBucket(ctx, name)`             | Create or update a KV bucket with the default configuration |
-| `CreateOrUpdateKVBucketWithConfig(ctx, config)` | Create or update a KV bucket with a configuration           |
-| `KVGet(ctx, bucket, key)`                       | Read a value from a KV bucket                               |
-| `KVPut(ctx, bucket, key, data)`                 | Write a value to a KV bucket                                |
-| `KVDelete(ctx, bucket, key)`                    | Delete a key from a KV bucket                               |
-| `KVKeys(ctx, bucket)`                           | List all keys in a KV bucket                                |
+| Method                                                 | Description                                                      |
+| ------------------------------------------------------ | ---------------------------------------------------------------- |
+| `CreateOrUpdateKVBucket(ctx, name)`                    | Create or update a KV bucket with the default configuration      |
+| `CreateOrUpdateKVBucketWithConfig(ctx, config)`        | Create or update a KV bucket with a configuration                |
+| `KVGet(ctx, bucket, key)`                              | Read a value from a KV bucket                                    |
+| `KVPut(ctx, bucket, key, data)`                        | Write a value to a KV bucket                                     |
+| `KVDelete(ctx, bucket, key)`                           | Delete a key from a KV bucket                                    |
+| `KVKeys(ctx, bucket)`                                  | List all keys in a KV bucket                                     |
+| `WatchKV(ctx, kv, pattern)`                            | Send each change to the keys that match the pattern on a channel |
+| `PublishAndWaitKV(ctx, subject, data, kvBucket, opts)` | Publish a request, then wait for the reply in a KV bucket        |
 
 ## Usage
 
