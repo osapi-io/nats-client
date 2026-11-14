@@ -1,8 +1,8 @@
 # NATS client
 
-The `client` package provides a NATS JetStream client with connection
-management, KV stores, KV-backed streams, and consumer helpers. Create a client
-with `New()` and call `Connect()` to establish the connection.
+The `client` package gives a NATS JetStream client. The client has connection
+management, KV stores, KV-backed streams, consumer helpers, and object stores.
+To make a client, call `New()`. Then call `Connect()` to open the connection.
 
 ## Quick start
 
@@ -20,19 +20,19 @@ if err := c.Connect(); err != nil {
 
 ## Features
 
-| Feature                             | Description                                  | Source           |
-| ----------------------------------- | -------------------------------------------- | ---------------- |
-| [`Connection`](connection.md)       | Connect to NATS with configurable auth modes | `connect.go`     |
-| [`JetStream`](jetstream.md)         | Create and manage JetStream streams          | `jetstream.go`   |
-| [`Key-Value`](kv.md)                | CRUD operations on NATS KV buckets           | `kv.go`          |
-| [`KV-Backed Streams`](kv-stream.md) | KV storage with stream notifications         | `kv_stream.go`   |
-| [`Consumer`](consumer.md)           | JetStream consumer message processing        | `consumer.go`    |
-| [`Object Store`](objectstore.md)    | Large blob storage with automatic chunking   | `objectstore.go` |
+| Feature                             | Description                                   | Source           |
+| ----------------------------------- | --------------------------------------------- | ---------------- |
+| [`Connection`](connection.md)       | Connect to NATS with authentication modes     | `connect.go`     |
+| [`JetStream`](jetstream.md)         | Create and update streams, and publish        | `jetstream.go`   |
+| [`Key-Value`](kv.md)                | Create, read, update and delete in KV         | `kv.go`          |
+| [`KV-Backed Streams`](kv-stream.md) | Write to KV and publish a notification        | `kv_stream.go`   |
+| [`Consumer`](consumer.md)           | Process messages with JetStream consumers     | `consumer.go`    |
+| [`Object Store`](objectstore.md)    | Store large blobs that NATS divides in chunks | `objectstore.go` |
 
 ## Authentication
 
-| Type          | Description                      | Constant       |
-| ------------- | -------------------------------- | -------------- |
-| No auth       | Connect without authentication   | `NoAuth`       |
-| Username/pass | Username and password            | `UserPassAuth` |
-| NKey          | Ed25519 public-private key pairs | `NKeyAuth`     |
+| Type          | Description                            | Constant       |
+| ------------- | -------------------------------------- | -------------- |
+| No auth       | Connect without authentication         | `NoAuth`       |
+| Username/pass | Username and password                  | `UserPassAuth` |
+| NKey          | An Ed25519 public and private key pair | `NKeyAuth`     |

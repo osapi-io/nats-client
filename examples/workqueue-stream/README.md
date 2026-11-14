@@ -1,19 +1,19 @@
 # Workqueue stream
 
-A worker consumer to interact with a work queue stream.
+A worker that receives messages from a work queue stream through a consumer.
 
-Adapted from [14-jetstream-workqueues].
+This example is adapted from [14-jetstream-workqueues].
 
 ## Usage
 
-Publishing to the stream:
+Publish to the stream:
 
 ```bash
 $ nats bench --pub 10 jobs.high.my_job_id --syncpub --msgs 5000
 $ nats bench --pub 10 jobs.low.my_job_id --syncpub --msgs 5000
 ```
 
-Running the worker:
+Run the workers:
 
 ```bash
 # Run 10 high priority workers
@@ -23,7 +23,7 @@ $ seq 10 | xargs -P10 -I {} go run main.go high {}
 $ seq 2 | xargs -P2 -I {} go run main.go low {}
 ```
 
-Get Stream Report:
+Get the stream report:
 
 ```bash
 $ nats stream report

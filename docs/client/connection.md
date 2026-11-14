@@ -1,13 +1,13 @@
 # Connection management
 
-Connect to a NATS server with configurable authentication.
+The client connects to a NATS server. You can select the authentication mode.
 
 ## Methods
 
-| Method      | Description                                           |
-| ----------- | ----------------------------------------------------- |
-| `Connect()` | Establish connection to NATS and initialize JetStream |
-| `Close()`   | Close the underlying NATS connection                  |
+| Method      | Description                                             |
+| ----------- | ------------------------------------------------------- |
+| `Connect()` | Open the connection to NATS and make a JetStream handle |
+| `Close()`   | Close the NATS connection                               |
 
 ## Usage
 

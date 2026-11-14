@@ -2,36 +2,36 @@
 
 Test: `just test` | Before committing: `just ready`
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) first. It covers prerequisites, setup,
-code style, test conventions, and the pull request workflow. All of it applies
-to agents exactly as they apply to people. This file carries only what is
-specific to agents.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) first. It gives the prerequisites, the
+setup, the code style, the test conventions, and the PR workflow. All of these
+rules apply to agents the same as to people. This file has only the rules that
+are specific to agents.
 
 ## Running tools
 
-Invoke tools through `mise`, not from your path:
+Run tools through `mise`, not from your path:
 
 ```bash
 mise exec -- just test
 ```
 
-`mise` is active in a person's shell and supplies the versions `.mise.toml`
-declares. An agent's shell has no activation, so a bare `just` resolves to
-whatever is installed globally, usually an older version.
+`mise` is active in the shell of a person. It supplies the versions that
+`.mise.toml` declares. The shell of an agent does not activate `mise`. Thus a
+bare `just` runs the version that is installed globally, which is usually older.
 
 The symptom is a check that fails here and passes in continuous integration, on
-a file nobody edited. When that happens, establish which version ran before
-treating the failure as real.
+a file that nobody changed. If this occurs, find which version ran. Do this
+before you accept the failure as real.
 
 ## Where the rules come from
 
-[CONTRIBUTING.md](CONTRIBUTING.md#before-you-start) names the specification.
-When a convention here and the specification disagree, the specification wins.
-Say so rather than following the code.
+[CONTRIBUTING.md](CONTRIBUTING.md#before-you-start) names the specification. If
+a convention here and the specification do not agree, obey the specification.
+Say that they do not agree. Do not follow the code.
 
 ## Commit trailer
 
-When committing via Claude Code, end the message with:
+When you commit with Claude Code, end the message with this text:
 
 ```
 🤖 Generated with [Claude Code](https://claude.ai/code)
@@ -41,7 +41,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 ## Task tracking
 
-**Design happens in the design docs.** Write or change the page in
-[osapi-io/specs](https://github.com/osapi-io/specs) before building, and correct
-it where building proves it wrong. A design document kept in this repository
-goes stale the moment the code moves past it, and nothing catches the drift.
+**The design is in the design documents.** Write or change the page in
+[osapi-io/specs](https://github.com/osapi-io/specs) before you build. If the
+build shows that the page is wrong, correct the page. A design document in this
+repository becomes incorrect when the code changes, and no check finds the
+difference.

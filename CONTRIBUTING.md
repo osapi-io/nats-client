@@ -1,26 +1,26 @@
 # Contributing
 
-Contributions to nats-client are very welcome, but we ask that you read this
-document before submitting a PR. It covers everything you need: prerequisites,
-setup, the conventions code follows, and the pull request workflow.
+We welcome contributions to nats-client. Read this document before you submit a
+PR. It gives the prerequisites, the setup, the conventions for code, and the PR
+workflow.
 
 ## Before you start
 
-- Read the [Code of Conduct](CODE_OF_CONDUCT.md). It applies to every
-  interaction in this repo.
-- **Design docs.** How this repository is built is documented in
-  [osapi-io/specs](https://github.com/osapi-io/specs) under
-  `components/nats-client/`. Read it before changing behaviour, and change it
-  when you do. A design doc kept in this repository goes stale the moment the
-  code moves past it, and nothing catches the drift.
-- **Check existing work.** Is there an existing PR? Are there issues discussing
-  the feature/change you want to make? Please make sure you consider/address
-  these discussions in your work.
-- **Backwards compatibility.** Will your change break existing consumers of
-  nats-client? It is much more likely that your change will be merged if it is
-  backwards compatible. Is there an approach you can take that maintains this
-  compatibility? If not, consider opening an issue first so that API changes can
-  be discussed before you invest your time into a PR.
+- Read the [Code of Conduct](CODE_OF_CONDUCT.md). It applies to all
+  communication in this repository.
+- **Design docs.** The design of this repository is in
+  [osapi-io/specs](https://github.com/osapi-io/specs), under
+  `components/nats-client/`. Read it before you change the behavior. When you
+  change the behavior, change the design doc too. A design doc in this
+  repository becomes incorrect when the code changes, and no check finds the
+  difference.
+- **Check existing work.** Look for an open PR or issue about the same change.
+  If you find one, read its discussion and use it in your work.
+- **Backwards compatibility.** Find out if your change breaks programs that
+  import nats-client. We are more likely to merge a change that is backwards
+  compatible. Look for a way to keep the compatibility. If there is no way, open
+  an issue first. The issue lets us discuss the API change before you start work
+  on a PR.
 
 ## Prerequisites
 
@@ -30,33 +30,33 @@ Install tools using [mise]:
 mise install
 ```
 
-- **[Go].** nats-client is written in Go. We always support the latest two major
-  Go versions, so make sure your version is recent enough.
-- **[uv].** Python package runner. `just md-fmt` formats markdown with
-  [mdformat] through `uvx`; nothing is installed into the repository.
-- **[just].** Task runner used for building, testing, formatting, and other
-  development workflows. Install with `brew install just`.
+- **[Go].** nats-client is written in Go. We support the latest two major Go
+  versions. Make sure that your version is one of them.
+- **[uv].** A Python package runner. `just md-fmt` formats markdown with
+  [mdformat] through `uvx`. It does not install packages into the repository.
+- **[just].** A task runner. It builds, tests, formats, and runs other
+  development tasks. To install it, run `brew install just`.
 
 ### Claude Code
 
-If you use [Claude Code] for development, install this plugin from the default
-marketplace:
+If you use [Claude Code], install this plugin from the default marketplace:
 
 ```
 /plugin install commit-commands@claude-plugins-official
 ```
 
-- **commit-commands.** provides `/commit` and `/commit-push-pr` slash commands
-  that follow the project's commit conventions automatically.
+- **commit-commands.** It gives the `/commit` and `/commit-push-pr` slash
+  commands. These commands follow the commit conventions of the project.
 
-**Design happens in the design docs.** Write or change the page in
-[osapi-io/specs](https://github.com/osapi-io/specs) before building, and correct
-it where building proves it wrong. A design document kept in this repository
-goes stale the moment the code moves past it, and nothing catches the drift.
+**The design is in the design docs.** Write or change the page in
+[osapi-io/specs](https://github.com/osapi-io/specs) before you build. If the
+build shows that the page is wrong, correct the page. A design doc in this
+repository becomes incorrect when the code changes, and no check finds the
+difference.
 
 ## Setup
 
-Fetch shared justfiles and install all dependencies:
+Fetch the shared justfiles and install all dependencies:
 
 ```bash
 just fetch
@@ -65,27 +65,29 @@ just deps
 
 ## Project structure
 
-- **`pkg/client/`.** Public SDK. The only package consumers import.
+- **`pkg/client/`.** The public SDK. It is the only package that other programs
+  import.
   - `types.go`. `Client`, `Options`, `AuthOptions`, `AuthType`. Type
     declarations only.
   - `client.go`. `New()`.
-  - `connect.go`. `Connect()` and auth-type resolution.
+  - `connect.go`. `Connect()`, and the code that selects the auth type.
   - `connection.go`. Connection lifecycle and accessors: `Close()`,
     `ConnectedURL()`, `KeyValue()`, `Stream()`.
-  - `connect_wrapper.go`. `NATSConnector`, the seam over `*nats.Conn` that lets
-    tests substitute the connection.
+  - `connect_wrapper.go`. `NATSConnector`, an interface in front of
+    `*nats.Conn`. Tests use it to replace the connection.
   - `core.go`. Core NATS: `Subscribe()`, `PublishCore()`.
   - `jetstream.go`. Stream and consumer management.
-  - `consumer.go`. Message consumption and handler dispatch.
+  - `consumer.go`. Message consumption, and calls to the handler.
   - `kv.go`, `kv_stream.go`. Key-value buckets, and request/reply over KV.
   - `objectstore.go`. Object store buckets.
   - `mocks/`. Generated mocks. See [Test doubles](#test-doubles).
-- **`examples/`.** Runnable programs, one per auth mode and workload.
+- **`examples/`.** Programs that you can run, one for each auth mode and
+  workload.
 
 ## Code style
 
-Go code is formatted by [gofumpt] and linted using [golangci-lint], enforced by
-CI.
+[gofumpt] formats the Go code and [golangci-lint] examines it. CI makes these
+checks mandatory.
 
 ```bash
 just go-fmt-check   # Check formatting
@@ -93,15 +95,14 @@ just go-fmt         # Auto-fix formatting
 just go-vet         # Run linter
 ```
 
-The linters that run are declared in `.golangci.yml`. Read them there rather
-than looking for a list here. A copied list goes stale the first time the
-configuration changes. Generated files (`*.gen.go`, `*.pb.go`) are excluded from
-formatting.
+`.golangci.yml` declares the linters that run. Read the list there, not here. A
+copy of the list becomes incorrect when the configuration changes. The formatter
+does not format generated files (`*.gen.go`, `*.pb.go`).
 
 ### Documentation
 
-Markdown files are formatted with [mdformat] through `uvx`. This style is
-enforced by CI.
+[mdformat] formats the markdown files through `uvx`. CI makes this format
+mandatory.
 
 ```bash
 just md-fmt-check   # Check formatting
@@ -112,8 +113,9 @@ just md-fmt         # Auto-fix formatting
 
 ### Function signatures
 
-Functions with parameters use multi-line format, one parameter per line, with
-the closing parenthesis and the return types on a line of their own:
+A function with parameters uses more than one line. Put each parameter on its
+own line. Put the closing parenthesis and the return types on a line of their
+own:
 
 ```go
 func FunctionName(
@@ -123,46 +125,48 @@ func FunctionName(
 }
 ```
 
-Functions taking no parameters stay on one line:
+A function with no parameters stays on one line:
 
 ```go
 func Name() string {
 }
 ```
 
-Adding a parameter then shows as one added line rather than a rewritten
+When you add a parameter, the diff shows one new line. It does not show a new
 signature.
 
 ### File naming
 
-Name a file for what it holds. Avoid `helpers.go`, `utils.go`, and names of that
-kind: they describe where code was put rather than what it is, and they
-accumulate whatever has no other home.
+Give a file a name that tells what it holds. Do not use `helpers.go`,
+`utils.go`, or names of that type. These names tell where the code is, not what
+it is. Over time, they collect all code that has no other file.
 
 `types.go` holds only type declarations: structs, interfaces, constants, and
-aliases. A function belongs in a file named for what it does.
+aliases. Put a function in a file with a name that tells what the function does.
 
-A test file is named for the production file it tests. Where tests grow too
-large to read, split the production file first so each test file keeps a
-counterpart, rather than splitting tests away from the file they cover.
+A test file has the name of the production file that it tests. If the tests
+become too large to read, split the production file first. Then each test file
+keeps one production file. Do not split the tests away from the file that they
+test.
 
 ### Go patterns
 
-- Error wrapping: `fmt.Errorf("context: %w", err)`, so the chain names each
-  layer it passed through and stays inspectable with `errors.Is` and
-  `errors.As`.
-- Early returns rather than nesting the successful path inside conditionals.
-- Unused parameters: rename to `_`.
-- Import order: standard library, third party, then local, separated by blank
-  lines.
+- Error wrapping: `fmt.Errorf("context: %w", err)`. Then the chain names each
+  layer that the error went through. `errors.Is` and `errors.As` can still
+  examine the chain.
+- Return early. Do not put the successful path inside conditionals.
+- Unused parameters: change the name to `_`.
+- Import order: standard library, third party, then local. Put a blank line
+  between each group.
 
 ### Test doubles
 
-A double for an interface this organization defines is generated with `mockgen`
-and committed. Do not write a struct by hand to satisfy one.
+Use `mockgen` to generate a double for an interface that this organization
+defines, and commit the double. Do not write a struct by hand to satisfy the
+interface.
 
-Generated mocks live in a `mocks` package beside the code they mock, produced by
-a `generate.go` holding the directive:
+Generated mocks are in a `mocks` package next to the code that they mock. A
+`generate.go` file holds the directive that generates them:
 
 ```go
 package mocks
@@ -170,16 +174,16 @@ package mocks
 //go:generate go tool go.uber.org/mock/mockgen -source=../types.go -destination=types.gen.go -package=mocks
 ```
 
-The generator is resolved through the module's tool dependencies, so every
-checkout runs the version `go.mod` records. Destination files end in `.gen.go`
-and are committed. Do not use `gen/` for mocks. That name is taken by API code
-generation.
+Go finds the generator through the tool dependencies of the module. Thus each
+checkout runs the version that `go.mod` records. The destination files end in
+`.gen.go`, and you commit them. Do not use `gen/` for mocks. API code generation
+uses that name.
 
-When the interface is **unexported**, a sibling package cannot work: the mock
-has to import the package to name the types in the interface, and the package's
-own tests have to import the mock. Generate it into the package instead, with a
-destination scoped to tests so the mocking library stays out of the dependency
-graph of anything that imports the package:
+If the interface is **unexported**, a sibling package does not work. The mock
+must import the package to name the types in the interface. The tests of the
+package must import the mock. Thus, generate the mock into the package. Use a
+destination file that only tests compile. Then the mocking library is not in the
+dependency graph of code that imports the package:
 
 ```go
 // generate.go, in the package that declares the interface
@@ -188,28 +192,29 @@ package thispackage
 //go:generate go tool go.uber.org/mock/mockgen -source=thing.go -destination=thing.gen_test.go -package=thispackage
 ```
 
-Either way the directives live in a `generate.go` that holds no code, and the
-generated file carries `.gen` so a reader knows not to edit it.
+In both cases, the directives are in a `generate.go` that holds no code. The
+generated file has `.gen` in its name. This tells a reader not to edit it.
 
-Where call sites would otherwise repeat the same expectations, write a
-constructor returning a configured mock rather than introducing a hand-written
-type. The generated mock is still what satisfies the interface.
+If many call sites set the same expectations, write a constructor that returns a
+configured mock. Do not write a type by hand. The generated mock still satisfies
+the interface.
 
-Three doubles are written by hand, because generating them buys nothing:
+Write these three doubles by hand, because a generated double gives no
+advantage:
 
-- One standing in for a standard library interface: `net.Conn`, `fs.File`,
-  `io.Writer`, `slog.Handler`. Those do not move when our code does.
-- One carrying a real implementation of the behavior under test, such as signing
-  with a genuinely generated key pair.
-- A recorder for a dependency called from a goroutine the test cannot join,
-  where a generated mock would assert a call count at a moment the test cannot
-  establish. State that reason where the recorder is defined.
+- A double for a standard library interface: `net.Conn`, `fs.File`, `io.Writer`,
+  `slog.Handler`. These interfaces do not change when our code changes.
+- A double that has a real implementation of the behavior under test. An example
+  is a double that signs with a key pair that the test really generates.
+- A recorder for a dependency that a goroutine calls, if the test cannot join
+  that goroutine. A generated mock would assert a call count at a time that the
+  test cannot control. Write this reason where you define the recorder.
 
 ### File headers
 
-Every `.go` file MUST start with the MIT license header. See any existing Go
-file in the repo for the exact format. Build-tagged files put `//go:build` on
-line 1, blank line, then the header.
+Each `.go` file MUST start with the MIT license header. For the exact format,
+look at a Go file in the repository. A file with a build tag has `//go:build` on
+line 1, then a blank line, then the header.
 
 ## Testing
 
@@ -220,38 +225,39 @@ just go-unit-cov   # Generate coverage report
 go test -run TestName -v ./pkg/client/...  # Run a single test
 ```
 
-Coverage is gated at 100%. `just test` fails if total coverage drops below it,
-so a change that adds untested code fails locally and in CI:
+The coverage gate is 100%. `just test` fails if the total coverage is less than
+100%. Thus a change that adds code with no tests fails locally and in CI:
 
 ```bash
 just go-unit-cov-check   # Report coverage and fail below the target
 ```
 
-The target is declared in `.github/codecov.yml` and in the shared `go` justfile
-module. Change both together.
+`.github/codecov.yml` and the shared `go` justfile module both declare the
+target. Change the two at the same time.
 
 ### Test file conventions
 
-- Public tests: `*_public_test.go` in the package's `_test` package, exercising
-  the exported surface. This is the default.
-- Internal tests: `*_test.go` in the same package, for what the exported surface
-  cannot reach.
+- Public tests: `*_public_test.go` in the external `_test` package. They test
+  the exported API. Use this type of test first.
+- Internal tests: `*_test.go` in the same package. They test the code that the
+  exported API cannot reach.
 - Suite naming: `*_public_test.go` → `{Name}PublicTestSuite`, `*_test.go` →
   `{Name}TestSuite`.
 - `testify/suite` with table-driven cases.
-- One suite method per function under test. Success, errors, and edge cases are
-  rows in one table, not separate methods.
-- `export_test.go` exposes unexported symbols to external tests, by alias or by
-  setter. Do not use an alias to re-cover behavior the caller's own test already
-  reaches; a helper with its own contract is what the pattern is for.
+- One suite method for each function under test. Success, errors, and edge cases
+  are rows in one table. They are not different methods.
+- `export_test.go` gives external tests access to unexported symbols, through an
+  alias or a setter. Do not use an alias to test behavior again that the test of
+  the caller already reaches. Use this pattern for a helper that has its own
+  contract.
 
-External tests in this repository live in `package client_test`, and tables
-carry `validateFunc` callbacks.
+External tests in this repository are in `package client_test`. Their tables
+have `validateFunc` callbacks.
 
 ## Before committing
 
-Run `just ready` before committing to ensure generated code, package docs,
-formatting, and lint are all up to date:
+Run `just ready` before you commit. It makes sure that the generated code, the
+package docs, the format, and the lint are all current:
 
 ```bash
 just ready
@@ -259,9 +265,8 @@ just ready
 
 ## Branching
 
-All changes should be developed on feature branches. Create a branch from `main`
-using the naming convention `type/short-description`, where `type` matches the
-[Conventional Commits] type:
+Make all changes on feature branches. Create a branch from `main`. Use the name
+format `type/short-description`. The `type` is the [Conventional Commits] type:
 
 - `feat/add-retry-logic`
 - `fix/null-pointer-crash`
@@ -269,49 +274,50 @@ using the naming convention `type/short-description`, where `type` matches the
 - `refactor/simplify-handler`
 - `chore/update-dependencies`
 
-When using Claude Code's `/commit` command, a branch will be created
-automatically if you are on `main`.
+If you are on `main`, the Claude Code `/commit` command creates a branch for
+you.
 
 ## Commit messages
 
 Follow [Conventional Commits] with the 50/72 rule:
 
-- **Subject line**: max 50 characters, imperative mood, capitalized, no period
-- **Body**: wrap at 72 characters, separated from subject by a blank line
+- **Subject line**: 50 characters maximum, imperative mood, a capital letter
+  first, no period
+- **Body**: lines of 72 characters maximum, with a blank line between it and the
+  subject
 - **Format**: `type(scope): description`
 - **Types**: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`
-- Summarize the "what" and "why", not the "how"
+- Give the "what" and the "why", not the "how"
 
-Try to write meaningful commit messages and avoid having too many commits on a
-PR. Most PRs should likely have a single commit (although for bigger PRs it may
-be reasonable to split it in a few). Git squash and rebase is your friend!
+Write commit messages that tell what changed. Do not put too many commits on a
+PR. Usually a PR has one commit. A large PR can have a small number of commits.
+Use git squash and git rebase to combine commits.
 
 ## Submitting a PR
 
-- **Describe your changes.** Say what changed and why. A reviewer should not
-  have to read the diff to learn the reason for it.
-- **Issue/PR links.** Link any previous work such as related issues or PRs.
-  Please describe how your changes differ to/extend this work.
-- **Examples.** Add any examples or screenshots that you think are useful to
-  demonstrate the effect of your changes.
-- **Draft PRs.** If your changes are incomplete, but you would like to discuss
-  them, open the PR as a draft and add a comment to start a discussion. Using
-  comments rather than the PR description allows the description to be updated
-  later while preserving any discussions.
+- **Describe your changes.** Tell what changed and why. A reviewer must not have
+  to read the diff to learn the reason.
+- **Issue/PR links.** Link to related work, for example issues or PRs. Tell how
+  your changes are different from that work, or how they add to it.
+- **Examples.** Add examples or screenshots that show the effect of your
+  changes.
+- **Draft PRs.** If your changes are not complete and you want to discuss them,
+  open the PR as a draft. Then add a comment to start the discussion. Use
+  comments, not the PR description. Then you can change the description later,
+  and the discussion stays.
 
 ## AI usage
 
-This repo is written with AI assistance. All contributions are subject to the
-[AI Usage Policy](AI_POLICY.md). Disclose the tool you used, and make sure you
-can explain what your change does without the aid of AI tools.
+We write this repository with help from AI. The [AI Usage Policy](AI_POLICY.md)
+applies to all contributions. Tell which tool you used. Make sure that you can
+explain your change without help from AI tools.
 
 ## FAQ
 
 > I want to contribute, where do I start?
 
-All kinds of contributions are welcome, whether it's a typo fix or a shiny new
-feature. You can also contribute by upvoting/commenting on issues or helping to
-answer questions.
+We welcome all types of contributions, for example a typo fix or a new feature.
+You can also vote on issues, comment on issues, or help to answer questions.
 
 > I'm stuck, where can I get help?
 

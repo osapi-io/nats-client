@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-<p align="center">A Go package for connecting to and interacting with a NATS server.</p>
+<p align="center">A Go package that connects to a NATS server and operates on it.</p>
 
 <p align="center">
   <a href="https://github.com/osapi-io/nats-client/releases/latest"><img alt="release" src="https://img.shields.io/github/release/osapi-io/nats-client.svg?style=for-the-badge"></a>
@@ -22,13 +22,13 @@
 </p>
 
 <p align="center">
-<b>One client, connection and JetStream together.</b>
+<b>One client for the connection and for JetStream.</b>
 </p>
 
 <p align="center">
-Connection management, JetStream, KV buckets and consumers behind one client
-and one constructor. Three authentication modes, and create-or-update helpers
-so setup is idempotent.
+One client and one constructor give connection management, JetStream, KV
+buckets and consumers. The client has three authentication modes. Its
+create-or-update helpers make the setup idempotent.
 </p>
 
 ## Install
@@ -39,38 +39,38 @@ go get github.com/osapi-io/nats-client
 
 ## Features
 
-See the [client docs](docs/client/README.md) for quick start, authentication,
-and per-feature reference.
+The [client docs](docs/client/README.md) give a quick start, the authentication
+modes, and a reference for each feature.
 
-| Feature               | Description                                              | Docs                               | Source                                        |
-| --------------------- | -------------------------------------------------------- | ---------------------------------- | --------------------------------------------- |
-| Connection management | Connect to NATS with configurable options and auth modes | [docs](docs/client/connection.md)  | [`connect.go`](pkg/client/connect.go)         |
-| JetStream             | Create and manage JetStream streams                      | [docs](docs/client/jetstream.md)   | [`jetstream.go`](pkg/client/jetstream.go)     |
-| Key-Value stores      | CRUD operations on NATS KV buckets                       | [docs](docs/client/kv.md)          | [`kv.go`](pkg/client/kv.go)                   |
-| KV-backed streams     | KV storage with stream notifications                     | [docs](docs/client/kv-stream.md)   | [`kv_stream.go`](pkg/client/kv_stream.go)     |
-| Consumer helpers      | JetStream consumer message processing                    | [docs](docs/client/consumer.md)    | [`consumer.go`](pkg/client/consumer.go)       |
-| Object Store          | Large blob storage with automatic chunking               | [docs](docs/client/objectstore.md) | [`objectstore.go`](pkg/client/objectstore.go) |
+| Feature               | Description                                            | Docs                               | Source                                        |
+| --------------------- | ------------------------------------------------------ | ---------------------------------- | --------------------------------------------- |
+| Connection management | Connect to NATS with options and authentication modes  | [docs](docs/client/connection.md)  | [`connect.go`](pkg/client/connect.go)         |
+| JetStream             | Create and update JetStream streams, and publish       | [docs](docs/client/jetstream.md)   | [`jetstream.go`](pkg/client/jetstream.go)     |
+| Key-Value stores      | Create, read, update and delete in NATS KV buckets     | [docs](docs/client/kv.md)          | [`kv.go`](pkg/client/kv.go)                   |
+| KV-backed streams     | Write to a KV bucket and publish a stream notification | [docs](docs/client/kv-stream.md)   | [`kv_stream.go`](pkg/client/kv_stream.go)     |
+| Consumer helpers      | Process messages with JetStream consumers              | [docs](docs/client/consumer.md)    | [`consumer.go`](pkg/client/consumer.go)       |
+| Object Store          | Store large blobs, which NATS divides into chunks      | [docs](docs/client/objectstore.md) | [`objectstore.go`](pkg/client/objectstore.go) |
 
 ## Examples
 
-Each example is a standalone Go program you can read and run.
+Each example is a standalone Go program. You can read it and run it.
 
-| Example                                                         | What it shows                                   |
-| --------------------------------------------------------------- | ----------------------------------------------- |
-| [auth-none-stream](examples/auth-none-stream/main.go)           | Stream publish/subscribe without authentication |
-| [auth-none-kv](examples/auth-none-kv/main.go)                   | KV store operations without authentication      |
-| [auth-user-pass-stream](examples/auth-user-pass-stream/main.go) | Stream with username/password authentication    |
-| [auth-nkeys-stream](examples/auth-nkeys-stream/main.go)         | Stream with NKey authentication                 |
-| [workqueue-stream](examples/workqueue-stream/main.go)           | Work queue pattern with consumer groups         |
+| Example                                                         | What it shows                                          |
+| --------------------------------------------------------------- | ------------------------------------------------------ |
+| [auth-none-stream](examples/auth-none-stream/main.go)           | Stream publish and subscribe, no authentication        |
+| [auth-none-kv](examples/auth-none-kv/main.go)                   | KV store operations, no authentication                 |
+| [auth-user-pass-stream](examples/auth-user-pass-stream/main.go) | Stream with username and password authentication       |
+| [auth-nkeys-stream](examples/auth-nkeys-stream/main.go)         | Stream with NKey authentication                        |
+| [workqueue-stream](examples/workqueue-stream/main.go)           | Work queue with one durable consumer for each priority |
 
 ## Documentation
 
-- [Package documentation] on pkg.go.dev. API reference.
+- [Package documentation] on pkg.go.dev. This is the API reference.
 
 ## Contributing
 
-See the [Contributing](CONTRIBUTING.md) guide for prerequisites, setup,
-conventions, and the PR workflow.
+The [Contributing](CONTRIBUTING.md) guide gives the prerequisites, the setup,
+the conventions, and the PR workflow.
 
 ## License
 

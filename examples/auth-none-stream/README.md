@@ -1,7 +1,6 @@
 # NATS streaming without authentication
 
-This example demonstrates how to interact with NATS by creating streams and
-consumers withouth Auth.
+This example creates streams and consumers in NATS. It uses no authentication.
 
 ## Usage
 
@@ -11,13 +10,13 @@ Run the client:
 $ go run main.go
 ```
 
-Get stream information:
+Get the stream information:
 
 ```bats
 $ nats s info STREAM2
 ```
 
-Get consumer information:
+Get the consumer information:
 
 ```bash
 $ nats c info STREAM2 consumer3
