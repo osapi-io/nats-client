@@ -1,6 +1,7 @@
 # JetStream
 
-Create and update JetStream streams, and publish messages to them.
+These methods create and update JetStream streams. They also publish messages to
+the streams.
 
 ## Methods
 

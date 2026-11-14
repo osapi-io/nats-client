@@ -1,7 +1,6 @@
-# NATS key-value store without authentication
+# NATS KV bucket without authentication
 
-This example creates a NATS Key-Value (KV) store and operates on it. It uses no
-authentication.
+This example creates a NATS key-value (KV) bucket. It uses no authentication.
 
 ## Usage
 

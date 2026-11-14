@@ -1,6 +1,7 @@
 # Consumer helpers
 
-Create JetStream consumers, and use them to process messages.
+These methods create JetStream consumers. A consumer gives each message to a
+handler that processes it.
 
 ## Methods
 

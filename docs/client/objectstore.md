@@ -1,14 +1,14 @@
 # Object store
 
-Create and open NATS Object Store buckets. A bucket stores large blobs. NATS
-divides each blob into chunks.
+These methods create NATS Object Store buckets and get a handle to a bucket. A
+bucket stores large blobs. NATS divides each blob into chunks.
 
 ## Methods
 
-| Method                                   | Description                              |
-| ---------------------------------------- | ---------------------------------------- |
-| `CreateOrUpdateObjectStore(ctx, config)` | Create or update an Object Store bucket  |
-| `ObjectStore(ctx, name)`                 | Get a handle to an existing Object Store |
+| Method                                   | Description                                        |
+| ---------------------------------------- | -------------------------------------------------- |
+| `CreateOrUpdateObjectStore(ctx, config)` | Create or update an Object Store bucket            |
+| `ObjectStore(ctx, name)`                 | Get a handle to an Object Store bucket that exists |
 
 ## Usage
 

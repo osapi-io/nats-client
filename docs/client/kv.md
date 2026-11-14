@@ -1,6 +1,7 @@
-# Key-value stores
+# Key-value buckets
 
-Create, read, update and delete keys in NATS KV buckets.
+These methods create and update NATS KV buckets. They also read, write and
+delete the keys in a bucket.
 
 ## Methods
 
@@ -8,8 +9,8 @@ Create, read, update and delete keys in NATS KV buckets.
 | ------------------------------------------------------ | ---------------------------------------------------------------- |
 | `CreateOrUpdateKVBucket(ctx, name)`                    | Create or update a KV bucket with the default configuration      |
 | `CreateOrUpdateKVBucketWithConfig(ctx, config)`        | Create or update a KV bucket with a configuration                |
-| `KVGet(ctx, bucket, key)`                              | Get a value from a KV bucket                                     |
-| `KVPut(ctx, bucket, key, data)`                        | Put a value into a KV bucket                                     |
+| `KVGet(ctx, bucket, key)`                              | Read a value from a KV bucket                                    |
+| `KVPut(ctx, bucket, key, data)`                        | Write a value to a KV bucket                                     |
 | `KVDelete(ctx, bucket, key)`                           | Delete a key from a KV bucket                                    |
 | `KVKeys(ctx, bucket)`                                  | List all keys in a KV bucket                                     |
 | `WatchKV(ctx, kv, pattern)`                            | Send each change to the keys that match the pattern on a channel |
