@@ -1,6 +1,6 @@
 # Consumer helpers
 
-Create and manage JetStream consumers for message processing.
+Create JetStream consumers, and use them to process messages.
 
 ## Methods
 
@@ -11,10 +11,10 @@ Create and manage JetStream consumers for message processing.
 
 ## Types
 
-| Type                      | Description                                 |
-| ------------------------- | ------------------------------------------- |
-| `JetStreamMessageHandler` | `func(msg jetstream.Msg) error` callback    |
-| `ConsumeOptions`          | Queue group and max in-flight configuration |
+| Type                      | Description                                                  |
+| ------------------------- | ------------------------------------------------------------ |
+| `JetStreamMessageHandler` | `func(msg jetstream.Msg) error` callback                     |
+| `ConsumeOptions`          | The queue group and the maximum number of messages in flight |
 
 ## Usage
 

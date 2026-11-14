@@ -1,7 +1,7 @@
 # NATS key-value store without authentication
 
-This example demonstrates how to create and interact with a NATS Key-Value (KV)
-store without authentication.
+This example creates a NATS Key-Value (KV) store and operates on it. It uses no
+authentication.
 
 ## Usage
 
@@ -11,7 +11,7 @@ Run the client:
 $ go run main.go
 ```
 
-Get key value information:
+Get the KV bucket information:
 
 ```bats
 $ nats kv info responses

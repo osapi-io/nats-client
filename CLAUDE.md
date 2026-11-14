@@ -1,7 +1,7 @@
 # Claude Code
 
-All agent guidance lives in [AGENTS.md](AGENTS.md): where the rules come from,
-the commit trailer, and task tracking. This file exists so Claude Code finds it;
-the content is upstream.
+The guidance for agents is in [AGENTS.md](AGENTS.md). It tells where the rules
+come from, which commit trailer to use, and how to track tasks. Claude Code
+reads this file, and this file includes [AGENTS.md](AGENTS.md).
 
 @AGENTS.md

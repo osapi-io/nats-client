@@ -1,13 +1,13 @@
 # KV-backed streams
 
-Store data in KV and send a stream notification in a single operation. Useful
-for workflow systems that need persistent storage plus event notification.
+Write data to a KV bucket and publish a stream notification in one operation.
+Use it when a workflow system must keep the data and must also send an event.
 
 ## Methods
 
-| Method                                             | Description                           |
-| -------------------------------------------------- | ------------------------------------- |
-| `KVPutAndPublish(ctx, bucket, key, data, subject)` | Store in KV then publish notification |
+| Method                                             | Description                              |
+| -------------------------------------------------- | ---------------------------------------- |
+| `KVPutAndPublish(ctx, bucket, key, data, subject)` | Write to KV, then publish a notification |
 
 ## Usage
 
