@@ -187,6 +187,39 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			},
 		},
 		{
+			name:     "successfully connects (CredsAuth)",
+			authType: client.CredsAuth,
+			mockSetup: func() {
+				creds := fmt.Sprintf("%s/user.creds", s.T().TempDir())
+				require.NoError(s.T(), os.WriteFile(creds, []byte("creds"), 0o600))
+				s.client.Opts.Auth.CredsFile = creds
+
+				s.mockNATS.EXPECT().
+					Connect(gomock.Any(), gomock.Any()).
+					Return(&nats.Conn{}, nil).
+					Times(1)
+				originalGetJetStream := client.GetJetStream
+				client.GetJetStream = func(_ *nats.Conn) (jetstream.JetStream, error) {
+					return mocks.NewMockJetStream(s.mockCtrl), nil
+				}
+				s.T().Cleanup(func() { client.GetJetStream = originalGetJetStream })
+			},
+			validateFunc: func(err error) {
+				s.NoError(err)
+			},
+		},
+		{
+			name:     "fails to read creds file",
+			authType: client.CredsAuth,
+			mockSetup: func() {
+				s.client.Opts.Auth.CredsFile = "/invalid/path"
+			},
+			validateFunc: func(err error) {
+				s.Error(err)
+				s.Contains(err.Error(), "failed to read creds file")
+			},
+		},
+		{
 			name:     "fails to read NKey file",
 			authType: client.NKeyAuth,
 			mockSetup: func() {
