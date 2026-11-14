@@ -71,6 +71,11 @@ func (s *ConnectTestSuite) TestGetAuthTypeName() {
 			expected: "nkey",
 		},
 		{
+			name:     "creds auth returns creds",
+			authType: CredsAuth,
+			expected: "creds",
+		},
+		{
 			name:     "unknown auth type returns unknown",
 			authType: AuthType(99),
 			expected: "unknown",
