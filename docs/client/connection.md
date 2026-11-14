@@ -42,6 +42,17 @@ c := client.New(logger, &client.Options{
     },
 })
 
+// Credentials file authentication, for a server in operator (JWT) mode
+c := client.New(logger, &client.Options{
+    Host: "localhost",
+    Port: 4222,
+    Name: "my-app",
+    Auth: client.AuthOptions{
+        AuthType:  client.CredsAuth,
+        CredsFile: "/path/to/user.creds",
+    },
+})
+
 if err := c.Connect(); err != nil {
     log.Fatal(err)
 }
