@@ -61,6 +61,7 @@ Each example is a standalone Go program. You can read it and run it.
 | [auth-none-kv](examples/auth-none-kv/main.go)                   | KV store operations, no authentication                 |
 | [auth-user-pass-stream](examples/auth-user-pass-stream/main.go) | Stream with username and password authentication       |
 | [auth-nkeys-stream](examples/auth-nkeys-stream/main.go)         | Stream with NKey authentication                        |
+| [auth-creds-stream](examples/auth-creds-stream/main.go)         | Stream with a credentials file (JWT)                   |
 | [workqueue-stream](examples/workqueue-stream/main.go)           | Work queue with one durable consumer for each priority |
 
 ## Documentation
