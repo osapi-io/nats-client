@@ -36,3 +36,4 @@ if err := c.Connect(); err != nil {
 | No auth       | Connect without authentication         | `NoAuth`       |
 | Username/pass | Username and password                  | `UserPassAuth` |
 | NKey          | An Ed25519 public and private key pair | `NKeyAuth`     |
+| Credentials   | A user JWT and NKEY seed in one file   | `CredsAuth`    |

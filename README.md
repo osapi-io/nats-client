@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/osapi-io/nats-client/releases/latest"><img alt="release" src="https://img.shields.io/github/release/osapi-io/nats-client.svg?style=for-the-badge"></a>
-  <a href="https://codecov.io/gh/osapi-io/nats-cllient"><img alt="codecov" src="https://img.shields.io/codecov/c/github/osapi-io/nats-client?token=8RICN0QCTT&style=for-the-badge"></a>
+  <a href="https://codecov.io/gh/osapi-io/nats-client"><img alt="codecov" src="https://img.shields.io/codecov/c/github/osapi-io/nats-client?token=8RICN0QCTT&style=for-the-badge"></a>
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-brightgreen.svg?style=for-the-badge"></a>
   <a href="https://github.com/osapi-io/nats-client/actions/workflows/go.yml"><img alt="build" src="https://img.shields.io/github/actions/workflow/status/osapi-io/nats-client/go.yml?style=for-the-badge"></a>
   <a href="https://github.com/goreleaser"><img alt="powered by" src="https://img.shields.io/badge/powered%20by-goreleaser-green.svg?style=for-the-badge"></a>
@@ -27,7 +27,7 @@
 
 <p align="center">
 One client and one constructor give connection management, JetStream, KV
-buckets and consumers. The client has three authentication modes. Its
+buckets and consumers. The client has four authentication modes. Its
 create-or-update helpers make the setup idempotent.
 </p>
 
