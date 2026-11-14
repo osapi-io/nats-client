@@ -1,8 +1,8 @@
-# Workqueue stream
+# Work queue stream
 
 A worker that receives messages from a work queue stream through a consumer.
 
-This example is adapted from [14-jetstream-workqueues].
+This example is a changed copy of [14-jetstream-workqueues].
 
 ## Usage
 

@@ -1,7 +1,8 @@
 # KV-backed streams
 
-Write data to a KV bucket and publish a stream notification in one operation.
-Use it when a workflow system must keep the data and must also send an event.
+`KVPutAndPublish` writes data to a KV bucket. Then it publishes a stream
+notification. One call does the two steps. It is for a workflow system that must
+keep the data and also send a notification.
 
 ## Methods
 

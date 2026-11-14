@@ -1,4 +1,4 @@
-# NATS streaming with user/password authentication
+# NATS streams with username and password authentication
 
 This example creates streams and consumers in NATS. It uses
 [User and Password Auth].
