@@ -41,9 +41,8 @@ mise install
 
 ### Coding agents
 
-This repository works with any coding agent that reads `AGENTS.md`. Claude Code
-and Codex read the same skills: `.claude/skills` holds them, and
-`.agents/skills` is a link to it. `CLAUDE.md` only points to `AGENTS.md`.
+This repository works with any coding agent that reads `AGENTS.md`. `CLAUDE.md`
+only points to `AGENTS.md`.
 
 For [Claude Code], install this plugin from the default marketplace:
 
