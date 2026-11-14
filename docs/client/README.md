@@ -28,6 +28,7 @@ if err := c.Connect(); err != nil {
 | [`KV-Backed Streams`](kv-stream.md) | Write to KV and publish a notification        | `kv_stream.go`   |
 | [`Consumer`](consumer.md)           | Process messages with JetStream consumers     | `consumer.go`    |
 | [`Object Store`](objectstore.md)    | Store large blobs that NATS divides in chunks | `objectstore.go` |
+| [`Core NATS`](core.md)              | Publish and subscribe without JetStream       | `core.go`        |
 
 ## Authentication
 

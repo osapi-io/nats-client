@@ -4,10 +4,14 @@ The client connects to a NATS server. You can select the authentication mode.
 
 ## Methods
 
-| Method      | Description                                             |
-| ----------- | ------------------------------------------------------- |
-| `Connect()` | Open the connection to NATS and make a JetStream handle |
-| `Close()`   | Close the NATS connection                               |
+| Method                     | Description                                                  |
+| -------------------------- | ------------------------------------------------------------ |
+| `Connect()`                | Open the connection to NATS and make a JetStream handle      |
+| `Close()`                  | Close the NATS connection                                    |
+| `ConnectedURL()`           | The URL of the connected server, or empty when not connected |
+| `ConnectedServerVersion()` | The version of the connected server, or empty when not known |
+| `KeyValue(ctx, bucket)`    | A handle to a KV bucket that exists                          |
+| `Stream(ctx, name)`        | A handle to a stream that exists                             |
 
 ## Usage
 
