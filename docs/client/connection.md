@@ -1,6 +1,6 @@
 # Connection management
 
-The client connects to a NATS server. You can select the authentication mode.
+The client connects to a NATS server. You select the authentication type.
 
 ## Methods
 

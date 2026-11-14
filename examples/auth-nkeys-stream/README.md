@@ -1,4 +1,4 @@
-# NATS streaming with NKEY authentication
+# NATS streams with NKey authentication
 
 This example creates streams and consumers in NATS. It uses [NKey Auth].
 

@@ -1,13 +1,13 @@
 # AGENTS.md
 
-Test: `just test` | Before committing: `just ready`
+Test: `just test` | Before you commit: `just ready`
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) first. It gives the prerequisites, the
-setup, the code style, the test conventions, and the PR workflow. All of these
-rules apply to agents the same as to people. This file has only the rules that
-are specific to agents.
+setup, the code style, the test conventions, and the pull request workflow. All
+of these rules apply to agents the same as to people. This file has only the
+rules that are specific to agents.
 
-## Running tools
+## Run tools
 
 Run tools through `mise`, not from your path:
 
@@ -25,9 +25,9 @@ before you accept the failure as real.
 
 ## Where the rules come from
 
-[CONTRIBUTING.md](CONTRIBUTING.md#before-you-start) names the specification. If
-a convention here and the specification do not agree, obey the specification.
-Say that they do not agree. Do not follow the code.
+[CONTRIBUTING.md](CONTRIBUTING.md#before-you-start) names the design pages. If a
+convention here and the design pages do not agree, obey the design pages. Say
+that they do not agree. Do not follow the code.
 
 ## Commit trailer
 
@@ -39,10 +39,10 @@ When you commit with Claude Code, end the message with this text:
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
-## Task tracking
+## Design pages first
 
-**The design is in the design documents.** Write or change the page in
+The design is in the design pages. Write or change the page in
 [osapi-io/specs](https://github.com/osapi-io/specs) before you build. If the
-build shows that the page is wrong, correct the page. A design document in this
-repository becomes incorrect when the code changes, and no check finds the
+build shows that the page is wrong, correct the page. A design page in this
+repository becomes incorrect when the code changes. No check finds the
 difference.
