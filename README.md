@@ -31,13 +31,13 @@ buckets and consumers. The client has four authentication types. Its
 create-or-update helpers make the setup idempotent.
 </p>
 
-## Install
+## 📦 Install
 
 ```bash
 go get github.com/osapi-io/nats-client
 ```
 
-## Features
+## ✨ Features
 
 The [client documentation](docs/client/README.md) gives a quick start, the
 authentication types, and a reference for each feature.
@@ -51,7 +51,7 @@ authentication types, and a reference for each feature.
 | Consumer helpers      | Process messages with JetStream consumers               | [docs](docs/client/consumer.md)    | [`consumer.go`](pkg/client/consumer.go)       |
 | Object Store          | Store large blobs, which NATS divides into chunks       | [docs](docs/client/objectstore.md) | [`objectstore.go`](pkg/client/objectstore.go) |
 
-## Examples
+## 🧪 Examples
 
 Each example is a standalone Go program. You can read it and run it.
 
@@ -64,16 +64,16 @@ Each example is a standalone Go program. You can read it and run it.
 | [auth-creds-stream](examples/auth-creds-stream/main.go)         | Stream with a credentials file (JWT)                   |
 | [workqueue-stream](examples/workqueue-stream/main.go)           | Work queue with one durable consumer for each priority |
 
-## Documentation
+## 📚 Documentation
 
 - [Package documentation] on pkg.go.dev. This is the API reference.
 
-## Contributing
+## 🤝 Contributing
 
 The [Contributing](CONTRIBUTING.md) guide gives the prerequisites, the setup,
 the conventions, and the pull request workflow.
 
-## License
+## 📄 License
 
 The [MIT] License.
 
