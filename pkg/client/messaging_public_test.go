@@ -22,7 +22,6 @@ package client_test
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"testing"
 
@@ -190,10 +189,10 @@ func (s *MessagingPublicTestSuite) TestConsume() {
 
 		consumer := mocks.NewMockConsumer(s.ctrl)
 		gomock.InOrder(
-			consumer.EXPECT().Fetch(1).Return(nil, errors.New("nats: timeout")),
-			consumer.EXPECT().Fetch(1).Return(nil, errBoom),
+			consumer.EXPECT().Fetch(1, gomock.Any()).Return(nil, nats.ErrTimeout),
+			consumer.EXPECT().Fetch(1, gomock.Any()).Return(nil, errBoom),
 			consumer.EXPECT().
-				Fetch(1).
+				Fetch(1, gomock.Any()).
 				DoAndReturn(func(int, ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
 					// The loop stops after this batch.
 					cancel()

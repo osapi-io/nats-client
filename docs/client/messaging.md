@@ -51,4 +51,6 @@ defer sub.Unsubscribe()
 - `Consume` acknowledges a message when the handler returns nil. When the
   handler returns an error or panics, `Consume` does not acknowledge the
   message. Then JetStream sends it again.
-- `Consume` runs until `ctx` ends, and then returns `ctx.Err()`.
+- `Consume` runs until `ctx` ends, and then returns `ctx.Err()`. A wait for a
+  message also stops when `ctx` ends. Thus a shutdown does not wait for the pull
+  request to expire.

@@ -22,6 +22,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -200,7 +201,8 @@ func (c *Client) Subscribe(
 }
 
 // Consume fetches the messages of the durable consumer on stream, and calls
-// handler for each, until ctx ends. A message is acknowledged when handler
+// handler for each, until ctx ends. A wait for a message also ends when ctx
+// ends. A message is acknowledged when handler
 // returns nil. A handler that returns an error or panics leaves it
 // unacknowledged, so that JetStream delivers it again.
 func (c *Client) Consume(
@@ -241,9 +243,11 @@ func (c *Client) Consume(
 			return ctx.Err()
 
 		default:
-			msgs, err := cons.Fetch(1)
+			// FetchContext ends the wait for a message when ctx ends, so
+			// a shutdown does not wait for the expiry of the pull request.
+			msgs, err := cons.Fetch(1, jetstream.FetchContext(ctx))
 			if err != nil {
-				if err.Error() == "nats: timeout" {
+				if errors.Is(err, nats.ErrTimeout) {
 					continue // Normal timeout, try again
 				}
 				c.logger.Error(
