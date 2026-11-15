@@ -21,13 +21,10 @@
 package client_test
 
 import (
-	"context"
-	"errors"
 	"log/slog"
 	"os"
 	"testing"
 
-	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
 
@@ -164,96 +161,6 @@ func (s *ConnectionPublicTestSuite) TestConnectedServerVersion() {
 		s.Run(tc.name, func() {
 			tc.setupFunc()
 			tc.validateFunc(s.client.ConnectedServerVersion())
-		})
-	}
-}
-
-func (s *ConnectionPublicTestSuite) TestKeyValue() {
-	tests := []struct {
-		name         string
-		bucket       string
-		setupFunc    func()
-		validateFunc func(jetstream.KeyValue, error)
-	}{
-		{
-			name:   "returns KV bucket handle",
-			bucket: "test-bucket",
-			setupFunc: func() {
-				mockKV := mocks.NewMockKeyValue(s.mockCtrl)
-				s.mockJS.EXPECT().
-					KeyValue(gomock.Any(), "test-bucket").
-					Return(mockKV, nil)
-			},
-			validateFunc: func(kv jetstream.KeyValue, err error) {
-				s.NoError(err)
-				s.NotNil(kv)
-			},
-		},
-		{
-			name:   "returns error when bucket not found",
-			bucket: "missing",
-			setupFunc: func() {
-				s.mockJS.EXPECT().
-					KeyValue(gomock.Any(), "missing").
-					Return(nil, errors.New("bucket not found"))
-			},
-			validateFunc: func(kv jetstream.KeyValue, err error) {
-				s.Error(err)
-				s.Nil(kv)
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			tc.setupFunc()
-			kv, err := s.client.KeyValue(context.Background(), tc.bucket)
-			tc.validateFunc(kv, err)
-		})
-	}
-}
-
-func (s *ConnectionPublicTestSuite) TestStream() {
-	tests := []struct {
-		name         string
-		streamName   string
-		setupFunc    func()
-		validateFunc func(jetstream.Stream, error)
-	}{
-		{
-			name:       "returns stream handle",
-			streamName: "JOBS",
-			setupFunc: func() {
-				mockStream := mocks.NewMockStream(s.mockCtrl)
-				s.mockJS.EXPECT().
-					Stream(gomock.Any(), "JOBS").
-					Return(mockStream, nil)
-			},
-			validateFunc: func(stream jetstream.Stream, err error) {
-				s.NoError(err)
-				s.NotNil(stream)
-			},
-		},
-		{
-			name:       "returns error when stream not found",
-			streamName: "MISSING",
-			setupFunc: func() {
-				s.mockJS.EXPECT().
-					Stream(gomock.Any(), "MISSING").
-					Return(nil, errors.New("stream not found"))
-			},
-			validateFunc: func(stream jetstream.Stream, err error) {
-				s.Error(err)
-				s.Nil(stream)
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			tc.setupFunc()
-			stream, err := s.client.Stream(context.Background(), tc.streamName)
-			tc.validateFunc(stream, err)
 		})
 	}
 }

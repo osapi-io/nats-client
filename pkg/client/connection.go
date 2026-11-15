@@ -20,12 +20,6 @@
 
 package client
 
-import (
-	"context"
-
-	"github.com/nats-io/nats.go/jetstream"
-)
-
 // Close closes the underlying NATS connection.
 func (c *Client) Close() {
 	if c.NC != nil {
@@ -56,20 +50,4 @@ func (c *Client) ConnectedServerVersion() string {
 	}
 
 	return wrapper.Conn.ConnectedServerVersion()
-}
-
-// KeyValue returns a handle to a JetStream Key-Value bucket by name.
-func (c *Client) KeyValue(
-	ctx context.Context,
-	bucket string,
-) (jetstream.KeyValue, error) {
-	return c.ExtJS.KeyValue(ctx, bucket)
-}
-
-// Stream returns a handle to a JetStream stream by name.
-func (c *Client) Stream(
-	ctx context.Context,
-	name string,
-) (jetstream.Stream, error) {
-	return c.ExtJS.Stream(ctx, name)
 }

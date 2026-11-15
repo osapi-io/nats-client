@@ -75,8 +75,15 @@ func main() {
 
 	ctx := context.Background()
 
-	if err := c.CreateOrUpdateJetStreamWithConfig(ctx, streamConfig, consumerConfigs...); err != nil {
+	if err := c.StreamCreateOrUpdate(ctx, streamConfig); err != nil {
 		logger.Error("failed setting up jetstream", "error", err)
 		os.Exit(1)
+	}
+
+	for _, consumerConfig := range consumerConfigs {
+		if err := c.ConsumerCreateOrUpdate(ctx, streamConfig.Name, consumerConfig); err != nil {
+			logger.Error("failed setting up consumer", "error", err)
+			os.Exit(1)
+		}
 	}
 }

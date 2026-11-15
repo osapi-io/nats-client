@@ -25,6 +25,8 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/nats-io/nats.go/jetstream"
+
 	"github.com/osapi-io/nats-client/pkg/client"
 )
 
@@ -52,11 +54,10 @@ func main() {
 
 	ctx := context.Background()
 
-	kv, err := c.CreateOrUpdateKVBucket(ctx, kvBucketName)
-	if err != nil {
+	if err := c.KVCreateOrUpdate(ctx, jetstream.KeyValueConfig{Bucket: kvBucketName}); err != nil {
 		logger.Error("failed to create KV store", "error", err)
 		os.Exit(1)
 	}
 
-	logger.Info("kv bucket created", "bucket", kv.Bucket())
+	logger.Info("kv bucket created", "bucket", kvBucketName)
 }

@@ -21,11 +21,10 @@
 package client_test
 
 import (
+	"bytes"
 	"context"
-	"errors"
 	"log/slog"
 	"testing"
-	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/suite"
@@ -38,214 +37,211 @@ import (
 type ObjectStorePublicTestSuite struct {
 	suite.Suite
 
-	mockCtrl    *gomock.Controller
-	mockExt     *mocks.MockJetStream
-	mockObjStor *mocks.MockObjectStore
-	client      *client.Client
+	ctrl   *gomock.Controller
+	js     *mocks.MockJetStream
+	store  *mocks.MockObjectStore
+	client *client.Client
+	ctx    context.Context
 }
 
 func (s *ObjectStorePublicTestSuite) SetupTest() {
-	s.mockCtrl = gomock.NewController(s.T())
-	s.mockExt = mocks.NewMockJetStream(s.mockCtrl)
-	s.mockObjStor = mocks.NewMockObjectStore(s.mockCtrl)
-	s.client = client.New(slog.Default(), &client.Options{
-		Host: "localhost",
-		Port: 4222,
-		Auth: client.AuthOptions{
-			AuthType: client.NoAuth,
-		},
-	})
-	s.client.ExtJS = s.mockExt
-}
-
-func (s *ObjectStorePublicTestSuite) TearDownTest() {
-	s.mockCtrl.Finish()
+	s.ctrl = gomock.NewController(s.T())
+	s.js = mocks.NewMockJetStream(s.ctrl)
+	s.store = mocks.NewMockObjectStore(s.ctrl)
+	s.client = client.New(slog.Default(), &client.Options{})
+	s.client.ExtJS = s.js
+	s.ctx = context.Background()
 }
 
 func (s *ObjectStorePublicTestSuite) SetupSubTest() {
 	s.SetupTest()
 }
 
-func (s *ObjectStorePublicTestSuite) TestCreateOrUpdateObjectStore() {
+// open makes the server return the handle of the bucket "b" once.
+func (s *ObjectStorePublicTestSuite) open() {
+	s.js.EXPECT().ObjectStore(gomock.Any(), "b").Return(s.store, nil)
+}
+
+func (s *ObjectStorePublicTestSuite) TestObjectStoreCreateOrUpdate() {
+	cfg := jetstream.ObjectStoreConfig{Bucket: "b"}
+
 	tests := []struct {
-		name         string
-		config       jetstream.ObjectStoreConfig
-		mockSetup    func()
-		validateFunc func(jetstream.ObjectStore, error)
+		name    string
+		setup   func()
+		wantErr string
 	}{
 		{
-			name: "successfully creates Object Store bucket",
-			config: jetstream.ObjectStoreConfig{
-				Bucket: "file-uploads",
-			},
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateObjectStore(
-						gomock.Any(),
-						jetstream.ObjectStoreConfig{Bucket: "file-uploads"},
-					).
-					Return(s.mockObjStor, nil).
-					Times(1)
-			},
-			validateFunc: func(os jetstream.ObjectStore, err error) {
-				s.NoError(err)
-				s.NotNil(os)
+			name: "when the bucket is made keeps its handle",
+			setup: func() {
+				s.js.EXPECT().CreateOrUpdateObjectStore(gomock.Any(), cfg).Return(s.store, nil)
 			},
 		},
 		{
-			name: "successfully creates Object Store bucket with custom config",
-			config: jetstream.ObjectStoreConfig{
-				Bucket:      "file-uploads",
-				Description: "Storage for file uploads",
-				TTL:         1 * time.Hour,
-				MaxBytes:    500 * 1024 * 1024,
-				Storage:     jetstream.FileStorage,
-				Replicas:    1,
-			},
-			mockSetup: func() {
-				expectedConfig := jetstream.ObjectStoreConfig{
-					Bucket:      "file-uploads",
-					Description: "Storage for file uploads",
-					TTL:         1 * time.Hour,
-					MaxBytes:    500 * 1024 * 1024,
-					Storage:     jetstream.FileStorage,
-					Replicas:    1,
-				}
-				s.mockExt.EXPECT().
-					CreateOrUpdateObjectStore(gomock.Any(), expectedConfig).
-					Return(s.mockObjStor, nil).
-					Times(1)
-			},
-			validateFunc: func(os jetstream.ObjectStore, err error) {
-				s.NoError(err)
-				s.NotNil(os)
+			name: "when only the storage type differs keeps the bucket",
+			setup: func() {
+				s.js.EXPECT().
+					CreateOrUpdateObjectStore(gomock.Any(), cfg).
+					Return(nil, errStorageType)
+				s.js.EXPECT().ObjectStore(gomock.Any(), "b").Return(s.store, nil)
 			},
 		},
 		{
-			name: "when storage type conflict returns existing bucket",
-			config: jetstream.ObjectStoreConfig{
-				Bucket:  "existing-bucket",
-				Storage: jetstream.MemoryStorage,
+			name: "when the bucket that is kept cannot be read returns the error",
+			setup: func() {
+				s.js.EXPECT().
+					CreateOrUpdateObjectStore(gomock.Any(), cfg).
+					Return(nil, errStorageType)
+				s.js.EXPECT().ObjectStore(gomock.Any(), "b").Return(nil, errBoom)
 			},
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateObjectStore(gomock.Any(), gomock.Any()).
-					Return(nil, &jetstream.APIError{Code: 500, ErrorCode: 10052, Description: "stream configuration update can not change storage type"}).
-					Times(1)
-				s.mockExt.EXPECT().
-					ObjectStore(gomock.Any(), "existing-bucket").
-					Return(s.mockObjStor, nil).
-					Times(1)
-			},
-			validateFunc: func(os jetstream.ObjectStore, err error) {
-				s.NoError(err)
-				s.NotNil(os)
-			},
+			wantErr: "failed to create/update Object Store bucket b: boom",
 		},
 		{
-			name: "when storage type conflict and get fails returns original error",
-			config: jetstream.ObjectStoreConfig{
-				Bucket:  "bad-bucket",
-				Storage: jetstream.MemoryStorage,
+			name: "when the server refuses returns the error",
+			setup: func() {
+				s.js.EXPECT().CreateOrUpdateObjectStore(gomock.Any(), cfg).Return(nil, errBoom)
 			},
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateObjectStore(gomock.Any(), gomock.Any()).
-					Return(nil, &jetstream.APIError{Code: 500, ErrorCode: 10052, Description: "stream configuration update can not change storage type"}).
-					Times(1)
-				s.mockExt.EXPECT().
-					ObjectStore(gomock.Any(), "bad-bucket").
-					Return(nil, errors.New("bucket not found")).
-					Times(1)
-			},
-			validateFunc: func(os jetstream.ObjectStore, err error) {
-				s.EqualError(
-					err,
-					"failed to create/update Object Store bucket bad-bucket: nats: API error: code=500 err_code=10052 description=stream configuration update can not change storage type",
-				)
-				s.Nil(os)
-			},
-		},
-		{
-			name: "error creating Object Store bucket",
-			config: jetstream.ObjectStoreConfig{
-				Bucket: "bad-bucket",
-			},
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateObjectStore(
-						gomock.Any(),
-						jetstream.ObjectStoreConfig{Bucket: "bad-bucket"},
-					).
-					Return(nil, errors.New("object store creation failed")).
-					Times(1)
-			},
-			validateFunc: func(os jetstream.ObjectStore, err error) {
-				s.EqualError(
-					err,
-					"failed to create/update Object Store bucket bad-bucket: object store creation failed",
-				)
-				s.Nil(os)
-			},
+			wantErr: "failed to create/update Object Store bucket b: boom",
 		},
 	}
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
-			tc.mockSetup()
+			tc.setup()
 
-			tc.validateFunc(s.client.CreateOrUpdateObjectStore(context.Background(), tc.config))
+			err := s.client.ObjectStoreCreateOrUpdate(s.ctx, cfg)
+			if tc.wantErr != "" {
+				s.EqualError(err, tc.wantErr)
+				return
+			}
+			s.Require().NoError(err)
+
+			// The next call uses the handle, and does not ask the server.
+			s.store.EXPECT().Delete(gomock.Any(), "o").Return(nil)
+			s.NoError(s.client.ObjectDelete(s.ctx, "b", "o"))
 		})
 	}
 }
 
-func (s *ObjectStorePublicTestSuite) TestObjectStore() {
+func (s *ObjectStorePublicTestSuite) TestHandle() {
+	s.Run("when the bucket is not there returns the error", func() {
+		s.js.EXPECT().ObjectStore(gomock.Any(), "b").Return(nil, jetstream.ErrBucketNotFound)
+
+		_, err := s.client.ObjectGetBytes(s.ctx, "b", "o")
+		s.ErrorIs(err, jetstream.ErrBucketNotFound)
+		s.ErrorContains(err, "failed to get Object Store bucket b")
+	})
+
+	s.Run("asks the server for the handle once", func() {
+		s.open()
+		s.store.EXPECT().Delete(gomock.Any(), "o").Return(nil).Times(2)
+
+		s.NoError(s.client.ObjectDelete(s.ctx, "b", "o"))
+		s.NoError(s.client.ObjectDelete(s.ctx, "b", "o"))
+	})
+}
+
+func (s *ObjectStorePublicTestSuite) TestCalls() {
+	info := &jetstream.ObjectInfo{ObjectMeta: jetstream.ObjectMeta{Name: "o"}}
+	meta := jetstream.ObjectMeta{Name: "o"}
+	reader := bytes.NewReader([]byte("data"))
+
 	tests := []struct {
-		name         string
-		bucketName   string
-		mockSetup    func()
-		validateFunc func(jetstream.ObjectStore, error)
+		name  string
+		setup func(*mocks.MockObjectStore, error)
+		call  func(*client.Client) (any, error)
+		want  any
 	}{
 		{
-			name:       "successfully gets Object Store bucket",
-			bucketName: "file-uploads",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					ObjectStore(gomock.Any(), "file-uploads").
-					Return(s.mockObjStor, nil).
-					Times(1)
+			name: "ObjectPut",
+			setup: func(st *mocks.MockObjectStore, err error) {
+				st.EXPECT().Put(gomock.Any(), meta, reader).Return(info, err)
 			},
-			validateFunc: func(os jetstream.ObjectStore, err error) {
-				s.NoError(err)
-				s.NotNil(os)
-			},
+			call: func(c *client.Client) (any, error) { return c.ObjectPut(s.ctx, "b", meta, reader) },
+			want: info,
 		},
 		{
-			name:       "error getting non-existent Object Store bucket",
-			bucketName: "missing-bucket",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					ObjectStore(gomock.Any(), "missing-bucket").
-					Return(nil, errors.New("object store not found")).
-					Times(1)
+			name: "ObjectPutBytes",
+			setup: func(st *mocks.MockObjectStore, err error) {
+				st.EXPECT().PutBytes(gomock.Any(), "o", []byte("data")).Return(info, err)
 			},
-			validateFunc: func(os jetstream.ObjectStore, err error) {
-				s.EqualError(
-					err,
-					"failed to get Object Store bucket missing-bucket: object store not found",
-				)
-				s.Nil(os)
+			call: func(c *client.Client) (any, error) {
+				return c.ObjectPutBytes(s.ctx, "b", "o", []byte("data"))
+			},
+			want: info,
+		},
+		{
+			name: "ObjectGetBytes",
+			setup: func(st *mocks.MockObjectStore, err error) {
+				st.EXPECT().GetBytes(gomock.Any(), "o").Return([]byte("data"), err)
+			},
+			call: func(c *client.Client) (any, error) { return c.ObjectGetBytes(s.ctx, "b", "o") },
+			want: []byte("data"),
+		},
+		{
+			name: "ObjectInfo",
+			setup: func(st *mocks.MockObjectStore, err error) {
+				st.EXPECT().GetInfo(gomock.Any(), "o").Return(info, err)
+			},
+			call: func(c *client.Client) (any, error) { return c.ObjectInfo(s.ctx, "b", "o") },
+			want: info,
+		},
+		{
+			name: "ObjectList",
+			setup: func(st *mocks.MockObjectStore, err error) {
+				st.EXPECT().List(gomock.Any()).Return([]*jetstream.ObjectInfo{info}, err)
+			},
+			call: func(c *client.Client) (any, error) { return c.ObjectList(s.ctx, "b") },
+			want: []*jetstream.ObjectInfo{info},
+		},
+		{
+			name: "ObjectDelete",
+			setup: func(st *mocks.MockObjectStore, err error) {
+				st.EXPECT().Delete(gomock.Any(), "o").Return(err)
+			},
+			call: func(c *client.Client) (any, error) { return nil, c.ObjectDelete(s.ctx, "b", "o") },
+		},
+		{
+			name: "ObjectStoreStatus",
+			setup: func(st *mocks.MockObjectStore, err error) {
+				st.EXPECT().Status(gomock.Any()).Return(nil, err)
+			},
+			call: func(c *client.Client) (any, error) {
+				st, err := c.ObjectStoreStatus(s.ctx, "b")
+				if st == nil {
+					return nil, err
+				}
+
+				return st, err
 			},
 		},
 	}
 
 	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			tc.mockSetup()
+		s.Run(tc.name+" returns the answer of the bucket", func() {
+			s.open()
+			tc.setup(s.store, nil)
 
-			tc.validateFunc(s.client.ObjectStore(context.Background(), tc.bucketName))
+			got, err := tc.call(s.client)
+			s.NoError(err)
+			s.Equal(tc.want, got)
+		})
+		s.Run(tc.name+" returns the error of the bucket", func() {
+			s.open()
+			tc.setup(s.store, errBoom)
+
+			_, err := tc.call(s.client)
+			s.ErrorIs(err, errBoom)
 		})
 	}
+
+	s.Run("ObjectList of an empty bucket returns an empty list", func() {
+		s.open()
+		s.store.EXPECT().List(gomock.Any()).Return(nil, jetstream.ErrNoObjectsFound)
+
+		got, err := s.client.ObjectList(s.ctx, "b")
+		s.NoError(err)
+		s.Equal([]*jetstream.ObjectInfo{}, got)
+	})
 }
 
 func TestObjectStorePublicTestSuite(t *testing.T) {

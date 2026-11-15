@@ -1,31 +1,45 @@
 # Key-value buckets
 
-These methods create and update NATS KV buckets. They also read, write and
-delete the keys in a bucket.
+These methods create KV buckets, and read, write and delete the keys in them.
+Each method takes the name of the bucket. The client keeps a handle for each
+bucket that it uses. Thus it asks the server for the handle one time only.
 
 ## Methods
 
-| Method                                                 | Description                                                      |
-| ------------------------------------------------------ | ---------------------------------------------------------------- |
-| `CreateOrUpdateKVBucket(ctx, name)`                    | Create or update a KV bucket with the default configuration      |
-| `CreateOrUpdateKVBucketWithConfig(ctx, config)`        | Create or update a KV bucket with a configuration                |
-| `KVGet(ctx, bucket, key)`                              | Read a value from a KV bucket                                    |
-| `KVPut(ctx, bucket, key, data)`                        | Write a value to a KV bucket                                     |
-| `KVDelete(ctx, bucket, key)`                           | Delete a key from a KV bucket                                    |
-| `KVKeys(ctx, bucket)`                                  | List all keys in a KV bucket                                     |
-| `WatchKV(ctx, kv, pattern)`                            | Send each change to the keys that match the pattern on a channel |
-| `PublishAndWaitKV(ctx, subject, data, kvBucket, opts)` | Publish a request, then wait for the reply in a KV bucket        |
+| Method                                        | Description                                                           |
+| --------------------------------------------- | --------------------------------------------------------------------- |
+| `KVCreateOrUpdate(ctx, config)`               | Create a KV bucket, or change it to agree with the configuration      |
+| `KVGet(ctx, bucket, key)`                     | Read the entry of a key                                               |
+| `KVPut(ctx, bucket, key, value)`              | Write a value to a key, and return the new revision                   |
+| `KVCreate(ctx, bucket, key, value)`           | Write a value only when the key is not there                          |
+| `KVUpdate(ctx, bucket, key, value, revision)` | Write a value only when the key is at that revision                   |
+| `KVDelete(ctx, bucket, key)`                  | Delete a key                                                          |
+| `KVKeys(ctx, bucket, filters...)`             | Return the keys that agree with a filter, or all keys with no filter  |
+| `KVWatch(ctx, bucket, pattern, opts...)`      | Send each change to the keys that agree with the pattern on a channel |
+| `KVStatus(ctx, bucket)`                       | Return the status of the bucket, for example its count of values      |
 
 ## Usage
 
 ```go
-kv, err := c.CreateOrUpdateKVBucketWithConfig(ctx, jetstream.KeyValueConfig{
+err := c.KVCreateOrUpdate(ctx, jetstream.KeyValueConfig{
     Bucket:   "job-queue",
     TTL:      1 * time.Hour,
     MaxBytes: 100 * 1024 * 1024,
     Storage:  jetstream.FileStorage,
 })
 
-revision, err := kv.Put(ctx, "job-123", jobData)
-entry, err := kv.Get(ctx, "job-123")
+revision, err := c.KVPut(ctx, "job-queue", "jobs.123", jobData)
+entry, err := c.KVGet(ctx, "job-queue", "jobs.123")
+keys, err := c.KVKeys(ctx, "job-queue", "jobs.>")
 ```
+
+## Behavior to know
+
+- A key that is not there makes `KVGet` return `jetstream.ErrKeyNotFound`.
+- A bucket with no keys makes `KVKeys` return an empty list, not an error.
+- `KVWatch` sends the current values first, then each change. NATS sends a nil
+  entry after the current values. The channel does not send it. The channel
+  closes when `ctx` ends, or when the watch stops.
+- NATS cannot change the storage type of a bucket that exists. When only the
+  storage type is different, `KVCreateOrUpdate` keeps the bucket as it is, and
+  does not apply the other changes.
