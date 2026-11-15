@@ -45,10 +45,6 @@ This repository works with any coding agent that reads `AGENTS.md`. `CLAUDE.md`
 only points to `AGENTS.md`. Prepare your agent as its documentation tells you.
 This repository does not need a plugin or an extension.
 
-Write the design page first. Write or change the page in
-[osapi-io/specs](https://github.com/osapi-io/specs) before you build. If the
-build shows that the page is incorrect, correct the page.
-
 ## Setup
 
 Download the shared justfiles and install the dependencies:
