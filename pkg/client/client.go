@@ -19,7 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 // Package client provides a NATS JetStream client with connection management,
-// KV stores, KV-backed streams, and consumer helpers.
+// KV buckets, Object Store buckets, streams, messaging, and OpenTelemetry
+// spans and metrics for each call.
 package client
 
 import (
@@ -31,10 +32,20 @@ func New(
 	logger *slog.Logger,
 	opts *Options,
 ) *Client {
-	return &Client{
+	c := &Client{
 		logger: logger,
 		Opts:   opts,
 		NC:     &NATSConnWrapper{},
 		// NC, NativeJS, and ExtJS will be set in the Connect method.
 	}
+
+	tel, err := newTelemetry(opts)
+	if err != nil {
+		// A meter provider that cannot make a histogram leaves the client
+		// without telemetry; the calls to NATS still work.
+		logger.Warn("telemetry is off", slog.String("error", err.Error()))
+	}
+	c.tel = tel
+
+	return c
 }

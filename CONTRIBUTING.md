@@ -63,14 +63,14 @@ just deps
   - `client.go`. `New()`.
   - `connect.go`. `Connect()`, and the code that selects the auth type.
   - `connection.go`. Connection lifecycle and accessors: `Close()`,
-    `ConnectedURL()`, `KeyValue()`, `Stream()`.
+    `ConnectedURL()`, `ConnectedServerVersion()`.
   - `connect_wrapper.go`. `NATSConnector`, an interface in front of
     `*nats.Conn`. Tests use it to replace the connection.
-  - `core.go`. Core NATS: `Subscribe()`, `PublishCore()`.
-  - `jetstream.go`. Stream and consumer management.
-  - `consumer.go`. Message consumption, and calls to the handler.
-  - `kv.go`, `kv_stream.go`. Key-value buckets, and request/reply over KV.
-  - `objectstore.go`. Object store buckets.
+  - `kv.go`. Key-value buckets and their keys.
+  - `objectstore.go`. Object store buckets and their objects.
+  - `stream.go`. Streams, durable consumers, and reads of a stream.
+  - `messaging.go`. `Publish()`, `PublishCore()`, `Subscribe()`, `Consume()`.
+  - `telemetry.go`. OpenTelemetry spans and metrics, and `MessageContext()`.
   - `mocks/`. Generated mocks. See [Test doubles](#test-doubles).
 - **`examples/`.** Programs that you can run, one for each auth type and
   workload.

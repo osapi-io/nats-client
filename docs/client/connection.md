@@ -10,8 +10,6 @@ The client connects to a NATS server. You select the authentication type.
 | `Close()`                  | Close the NATS connection                                    |
 | `ConnectedURL()`           | The URL of the connected server, or empty when not connected |
 | `ConnectedServerVersion()` | The version of the connected server, or empty when not known |
-| `KeyValue(ctx, bucket)`    | A handle to a KV bucket that exists                          |
-| `Stream(ctx, name)`        | A handle to a stream that exists                             |
 
 ## Usage
 

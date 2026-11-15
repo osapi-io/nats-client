@@ -1,4 +1,4 @@
-// Copyright (c) 2025 John Dewey
+// Copyright (c) 2026 John Dewey
 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -35,1061 +35,362 @@ import (
 	"github.com/osapi-io/nats-client/pkg/client/mocks"
 )
 
+var errBoom = errors.New("boom")
+
+// errStorageType is the error NATS returns for a change of the storage type
+// of a bucket or a stream.
+var errStorageType = &jetstream.APIError{ErrorCode: 10052, Description: "storage type change"}
+
 type KVPublicTestSuite struct {
 	suite.Suite
 
-	mockCtrl *gomock.Controller
-	mockExt  *mocks.MockJetStream
-	mockKV   *mocks.MockKeyValue
-	client   *client.Client
+	ctrl   *gomock.Controller
+	js     *mocks.MockJetStream
+	kv     *mocks.MockKeyValue
+	client *client.Client
+	ctx    context.Context
 }
 
 func (s *KVPublicTestSuite) SetupTest() {
-	s.mockCtrl = gomock.NewController(s.T())
-	s.mockExt = mocks.NewMockJetStream(s.mockCtrl)
-	s.mockKV = mocks.NewMockKeyValue(s.mockCtrl)
-	s.client = client.New(slog.Default(), &client.Options{
-		Host: "localhost",
-		Port: 4222,
-		Auth: client.AuthOptions{
-			AuthType: client.NoAuth,
-		},
-	})
-	s.client.ExtJS = s.mockExt
-}
-
-func (s *KVPublicTestSuite) TearDownTest() {
-	s.mockCtrl.Finish()
+	s.ctrl = gomock.NewController(s.T())
+	s.js = mocks.NewMockJetStream(s.ctrl)
+	s.kv = mocks.NewMockKeyValue(s.ctrl)
+	s.client = client.New(slog.Default(), &client.Options{})
+	s.client.ExtJS = s.js
+	s.ctx = context.Background()
 }
 
 func (s *KVPublicTestSuite) SetupSubTest() {
 	s.SetupTest()
 }
 
-func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucket() {
-	tests := []struct {
-		name         string
-		bucketName   string
-		mockSetup    func()
-		validateFunc func(jetstream.KeyValue, error)
-	}{
-		{
-			name:       "successfully creates KV bucket",
-			bucketName: "responses",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "responses"}).
-					Return(s.mockKV, nil).
-					Times(1)
-			},
-			validateFunc: func(kv jetstream.KeyValue, err error) {
-				s.NoError(err)
-				s.NotNil(kv)
-			},
-		},
-		{
-			name:       "error creating KV bucket",
-			bucketName: "responses",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "responses"}).
-					Return(nil, errors.New("kv creation failed")).
-					Times(1)
-			},
-			validateFunc: func(kv jetstream.KeyValue, err error) {
-				s.EqualError(err, "failed to create/update KV bucket responses: kv creation failed")
-				s.Nil(kv)
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			tc.mockSetup()
-
-			tc.validateFunc(s.client.CreateOrUpdateKVBucket(context.Background(), tc.bucketName))
-		})
-	}
+// open makes the server return the handle of the bucket "b" once.
+func (s *KVPublicTestSuite) open() {
+	s.js.EXPECT().KeyValue(gomock.Any(), "b").Return(s.kv, nil)
 }
 
-func (s *KVPublicTestSuite) TestCreateOrUpdateKVBucketWithConfig() {
+func (s *KVPublicTestSuite) TestKVCreateOrUpdate() {
+	cfg := jetstream.KeyValueConfig{Bucket: "b"}
+
 	tests := []struct {
-		name         string
-		config       jetstream.KeyValueConfig
-		mockSetup    func()
-		validateFunc func(jetstream.KeyValue, error)
+		name    string
+		setup   func()
+		wantErr string
 	}{
 		{
-			name: "successfully creates KV bucket with custom config",
-			config: jetstream.KeyValueConfig{
-				Bucket:      "job-responses",
-				Description: "Storage for job responses",
-				TTL:         1 * time.Hour,
-				MaxBytes:    100 * 1024 * 1024,
-				Storage:     jetstream.FileStorage,
-				Replicas:    1,
-			},
-			mockSetup: func() {
-				expectedConfig := jetstream.KeyValueConfig{
-					Bucket:      "job-responses",
-					Description: "Storage for job responses",
-					TTL:         1 * time.Hour,
-					MaxBytes:    100 * 1024 * 1024,
-					Storage:     jetstream.FileStorage,
-					Replicas:    1,
-				}
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), expectedConfig).
-					Return(s.mockKV, nil).
-					Times(1)
-			},
-			validateFunc: func(kv jetstream.KeyValue, err error) {
-				s.NoError(err)
-				s.NotNil(kv)
+			name: "when the bucket is made keeps its handle",
+			setup: func() {
+				s.js.EXPECT().CreateOrUpdateKeyValue(gomock.Any(), cfg).Return(s.kv, nil)
 			},
 		},
 		{
-			name: "when storage type conflict returns existing bucket",
-			config: jetstream.KeyValueConfig{
-				Bucket:  "existing-bucket",
-				Storage: jetstream.MemoryStorage,
-			},
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), gomock.Any()).
-					Return(nil, &jetstream.APIError{Code: 500, ErrorCode: 10052, Description: "stream configuration update can not change storage type"}).
-					Times(1)
-				s.mockExt.EXPECT().
-					KeyValue(gomock.Any(), "existing-bucket").
-					Return(s.mockKV, nil).
-					Times(1)
-			},
-			validateFunc: func(kv jetstream.KeyValue, err error) {
-				s.NoError(err)
-				s.NotNil(kv)
+			name: "when only the storage type differs keeps the bucket",
+			setup: func() {
+				s.js.EXPECT().CreateOrUpdateKeyValue(gomock.Any(), cfg).Return(nil, errStorageType)
+				s.js.EXPECT().KeyValue(gomock.Any(), "b").Return(s.kv, nil)
 			},
 		},
 		{
-			name: "when storage type conflict and get fails returns original error",
-			config: jetstream.KeyValueConfig{
-				Bucket:  "bad-bucket",
-				Storage: jetstream.MemoryStorage,
+			name: "when the bucket that is kept cannot be read returns the error",
+			setup: func() {
+				s.js.EXPECT().CreateOrUpdateKeyValue(gomock.Any(), cfg).Return(nil, errStorageType)
+				s.js.EXPECT().KeyValue(gomock.Any(), "b").Return(nil, errBoom)
 			},
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), gomock.Any()).
-					Return(nil, &jetstream.APIError{Code: 500, ErrorCode: 10052, Description: "stream configuration update can not change storage type"}).
-					Times(1)
-				s.mockExt.EXPECT().
-					KeyValue(gomock.Any(), "bad-bucket").
-					Return(nil, errors.New("bucket not found")).
-					Times(1)
-			},
-			validateFunc: func(kv jetstream.KeyValue, err error) {
-				s.EqualError(
-					err,
-					"failed to create/update KV bucket bad-bucket: nats: API error: code=500 err_code=10052 description=stream configuration update can not change storage type",
-				)
-				s.Nil(kv)
-			},
+			wantErr: "failed to create/update KV bucket b: boom",
 		},
 		{
-			name: "error creating KV bucket with config",
-			config: jetstream.KeyValueConfig{
-				Bucket: "invalid-bucket",
+			name: "when the server refuses returns the error",
+			setup: func() {
+				s.js.EXPECT().CreateOrUpdateKeyValue(gomock.Any(), cfg).Return(nil, errBoom)
 			},
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "invalid-bucket"}).
-					Return(nil, errors.New("invalid bucket configuration")).
-					Times(1)
-			},
-			validateFunc: func(kv jetstream.KeyValue, err error) {
-				s.EqualError(
-					err,
-					"failed to create/update KV bucket invalid-bucket: invalid bucket configuration",
-				)
-				s.Nil(kv)
-			},
+			wantErr: "failed to create/update KV bucket b: boom",
 		},
 	}
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
-			tc.mockSetup()
+			tc.setup()
 
-			tc.validateFunc(
-				s.client.CreateOrUpdateKVBucketWithConfig(context.Background(), tc.config),
-			)
-		})
-	}
-}
-
-func (s *KVPublicTestSuite) TestPublishAndWaitKV() {
-	tests := []struct {
-		name         string
-		subject      string
-		data         []byte
-		requestID    string
-		mockSetup    func()
-		validateFunc func([]byte, error)
-	}{
-		{
-			name:      "successfully publishes and receives response",
-			subject:   "test.subject",
-			data:      []byte(`{"test": "data"}`),
-			requestID: "test-123",
-			mockSetup: func() {
-				// Mock publish
-				s.mockExt.EXPECT().
-					PublishMsg(gomock.Any(), gomock.Any()).
-					Return(nil, nil).
-					Times(1)
-
-				// Mock KV get (first call returns not found, second returns data)
-				s.mockKV.EXPECT().
-					Get(gomock.Any(), "test-123").
-					Return(nil, jetstream.ErrKeyNotFound).
-					Times(1)
-
-				mockEntry := mocks.NewMockKeyValueEntry(s.mockCtrl)
-				mockEntry.EXPECT().Value().Return([]byte(`{"status": "ok"}`))
-				mockEntry.EXPECT().Revision().Return(uint64(1))
-
-				s.mockKV.EXPECT().
-					Get(gomock.Any(), "test-123").
-					Return(mockEntry, nil).
-					Times(1)
-			},
-			validateFunc: func(response []byte, err error) {
-				s.NoError(err)
-				s.Equal([]byte(`{"status": "ok"}`), response)
-			},
-		},
-		{
-			name:      "error publishing message",
-			subject:   "test.subject",
-			data:      []byte(`{"test": "data"}`),
-			requestID: "test-123",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					PublishMsg(gomock.Any(), gomock.Any()).
-					Return(nil, errors.New("publish failed")).
-					Times(1)
-			},
-			validateFunc: func(response []byte, err error) {
-				s.Error(err)
-				s.Contains(err.Error(), "failed to publish: publish failed")
-				s.Nil(response)
-			},
-		},
-		{
-			name:      "timeout waiting for response",
-			subject:   "test.timeout",
-			data:      []byte(`{"test": "timeout"}`),
-			requestID: "timeout-123",
-			mockSetup: func() {
-				// Mock successful publish
-				s.mockExt.EXPECT().
-					PublishMsg(gomock.Any(), gomock.Any()).
-					Return(nil, nil).
-					Times(1)
-
-				// Mock KV get returns not found repeatedly (simulating timeout)
-				//
-				// MinTimes(2) needs at least two ticks inside the timeout, so
-				// the budget has to exceed twice the poll interval by a margin.
-				// At 20ms against a 10ms interval the second tick and the
-				// deadline were scheduled for the same instant, and select over
-				// two ready channels picks pseudorandomly, so this expectation
-				// raced the clock and lost on a loaded runner. The 100ms
-				// default leaves room for ten.
-				s.mockKV.EXPECT().
-					Get(gomock.Any(), "timeout-123").
-					Return(nil, jetstream.ErrKeyNotFound).
-					MinTimes(2)
-			},
-			validateFunc: func(response []byte, err error) {
-				s.Error(err)
-				s.Contains(err.Error(), "context deadline exceeded")
-				s.Nil(response)
-			},
-		},
-		{
-			name:      "context cancelled during wait",
-			subject:   "test.cancel",
-			data:      []byte(`{"test": "cancel"}`),
-			requestID: "cancel-123",
-			mockSetup: func() {
-				// Mock successful publish
-				s.mockExt.EXPECT().
-					PublishMsg(gomock.Any(), gomock.Any()).
-					Return(nil, nil).
-					Times(1)
-
-				// Mock KV get returns not found (will be cancelled)
-				s.mockKV.EXPECT().
-					Get(gomock.Any(), "cancel-123").
-					Return(nil, jetstream.ErrKeyNotFound).
-					AnyTimes()
-			},
-			validateFunc: func(response []byte, err error) {
-				s.Error(err)
-				s.Contains(err.Error(), "context canceled")
-				s.Nil(response)
-			},
-		},
-		{
-			name:      "error during KV get",
-			subject:   "test.kv_error",
-			data:      []byte(`{"test": "kv_error"}`),
-			requestID: "kv-error-123",
-			mockSetup: func() {
-				// Mock successful publish
-				s.mockExt.EXPECT().
-					PublishMsg(gomock.Any(), gomock.Any()).
-					Return(nil, nil).
-					Times(1)
-
-				// Mock KV get returns an actual error (not ErrKeyNotFound)
-				s.mockKV.EXPECT().
-					Get(gomock.Any(), "kv-error-123").
-					Return(nil, errors.New("kv store error")).
-					Times(1)
-			},
-			validateFunc: func(response []byte, err error) {
-				s.Error(err)
-				s.Contains(err.Error(), "failed to get response: kv store error")
-				s.Nil(response)
-			},
-		},
-		{
-			name:      "nil options uses defaults",
-			subject:   "test.defaults",
-			data:      []byte(`{"test": "defaults"}`),
-			requestID: "", // Will be generated
-			mockSetup: func() {
-				// Mock publish
-				s.mockExt.EXPECT().
-					PublishMsg(gomock.Any(), gomock.Any()).
-					Return(nil, nil).
-					Times(1)
-
-				// Mock KV get returns response immediately
-				mockEntry := mocks.NewMockKeyValueEntry(s.mockCtrl)
-				mockEntry.EXPECT().Value().Return([]byte(`{"status": "ok"}`))
-				mockEntry.EXPECT().Revision().Return(uint64(1))
-
-				s.mockKV.EXPECT().
-					Get(gomock.Any(), gomock.Any()).
-					Return(mockEntry, nil).
-					Times(1)
-			},
-			validateFunc: func(response []byte, err error) {
-				s.NoError(err)
-				s.Equal([]byte(`{"status": "ok"}`), response)
-			},
-		},
-		{
-			name:      "empty RequestID gets generated",
-			subject:   "test.generate_id",
-			data:      []byte(`{"test": "generate_id"}`),
-			requestID: "", // Will be generated
-			mockSetup: func() {
-				// Mock publish
-				s.mockExt.EXPECT().
-					PublishMsg(gomock.Any(), gomock.Any()).
-					Return(nil, nil).
-					Times(1)
-
-				// Mock KV get returns response immediately
-				mockEntry := mocks.NewMockKeyValueEntry(s.mockCtrl)
-				mockEntry.EXPECT().Value().Return([]byte(`{"status": "ok"}`))
-				mockEntry.EXPECT().Revision().Return(uint64(1))
-
-				s.mockKV.EXPECT().
-					Get(gomock.Any(), gomock.Any()).
-					Return(mockEntry, nil).
-					Times(1)
-			},
-			validateFunc: func(response []byte, err error) {
-				s.NoError(err)
-				s.Equal([]byte(`{"status": "ok"}`), response)
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			tc.mockSetup()
-
-			ctx := context.Background()
-			var opts *client.RequestReplyOptions
-
-			// Handle special test cases
-			switch tc.name {
-			case "nil options uses defaults":
-				opts = nil // Test nil options path
-			case "empty RequestID gets generated":
-				opts = &client.RequestReplyOptions{
-					Timeout:      100 * time.Millisecond,
-					PollInterval: 10 * time.Millisecond,
-					// RequestID left empty to test generation
-				}
-			default:
-				opts = &client.RequestReplyOptions{
-					RequestID:    tc.requestID,
-					Timeout:      100 * time.Millisecond,
-					PollInterval: 10 * time.Millisecond,
-				}
-
-				switch tc.name {
-				case "context cancelled during wait":
-					// Create a context that gets cancelled immediately
-					var cancel context.CancelFunc
-					ctx, cancel = context.WithCancel(ctx)
-					go func() {
-						time.Sleep(5 * time.Millisecond) // Give publish time to complete
-						cancel()
-					}()
-				}
+			err := s.client.KVCreateOrUpdate(s.ctx, cfg)
+			if tc.wantErr != "" {
+				s.EqualError(err, tc.wantErr)
+				return
 			}
+			s.Require().NoError(err)
 
-			tc.validateFunc(s.client.PublishAndWaitKV(
-				ctx,
-				tc.subject,
-				tc.data,
-				s.mockKV,
-				opts,
-			))
+			// The next call uses the handle, and does not ask the server.
+			s.kv.EXPECT().Put(gomock.Any(), "k", []byte("v")).Return(uint64(1), nil)
+			_, err = s.client.KVPut(s.ctx, "b", "k", []byte("v"))
+			s.NoError(err)
 		})
 	}
 }
 
-func (s *KVPublicTestSuite) TestWatchKV() {
+func (s *KVPublicTestSuite) TestHandle() {
+	s.Run("when the bucket is not there returns the error", func() {
+		s.js.EXPECT().KeyValue(gomock.Any(), "b").Return(nil, jetstream.ErrBucketNotFound)
+
+		_, err := s.client.KVGet(s.ctx, "b", "k")
+		s.ErrorIs(err, jetstream.ErrBucketNotFound)
+		s.ErrorContains(err, "failed to get KV bucket b")
+	})
+
+	s.Run("asks the server for the handle once", func() {
+		s.open()
+		s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil).Times(2)
+
+		s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
+		s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
+	})
+}
+
+func (s *KVPublicTestSuite) TestCalls() {
+	entry := mocks.NewMockKeyValueEntry(gomock.NewController(s.T()))
+
 	tests := []struct {
-		name         string
-		pattern      string
-		setupMocks   func() *mocks.MockKeyWatcher
-		validateFunc func(<-chan jetstream.KeyValueEntry, error)
+		name  string
+		setup func(*mocks.MockKeyValue, error)
+		call  func(*client.Client) (any, error)
+		want  any
 	}{
 		{
-			name:    "successfully creates watcher and forwards entries",
-			pattern: "test.*",
-			setupMocks: func() *mocks.MockKeyWatcher {
-				mockWatcher := mocks.NewMockKeyWatcher(s.mockCtrl)
-
-				// Create a channel that will send a test entry
-				updatesChan := make(chan jetstream.KeyValueEntry, 2)
-
-				// Create a mock entry
-				mockEntry := mocks.NewMockKeyValueEntry(s.mockCtrl)
-				mockEntry.EXPECT().Key().Return("test.key").AnyTimes()
-				mockEntry.EXPECT().Value().Return([]byte("test value")).AnyTimes()
-
-				// Send the entry and then close the channel to test proper cleanup
-				updatesChan <- mockEntry
-				close(updatesChan)
-
-				s.mockKV.EXPECT().
-					Watch(gomock.Any(), "test.*").
-					Return(mockWatcher, nil)
-
-				mockWatcher.EXPECT().
-					Updates().
-					Return(updatesChan).
-					AnyTimes()
-
-				mockWatcher.EXPECT().
-					Stop().
-					Return(nil).
-					AnyTimes()
-
-				return mockWatcher
+			name: "KVGet",
+			setup: func(kv *mocks.MockKeyValue, err error) {
+				kv.EXPECT().Get(gomock.Any(), "k").Return(entry, err)
 			},
-			validateFunc: func(ch <-chan jetstream.KeyValueEntry, err error) {
-				s.NoError(err)
-				s.NotNil(ch)
-
-				// Wait for the entry to be forwarded through the goroutine
-				select {
-				case entry := <-ch:
-					s.NotNil(entry)
-					s.Equal("test.key", entry.Key())
-					s.Equal([]byte("test value"), entry.Value())
-				case <-time.After(100 * time.Millisecond):
-					s.Fail("Expected to receive an entry but timed out")
-				}
-
-				// Now the goroutine should exit when the updates channel closes
-				// This will cause our output channel to close
-				select {
-				case _, ok := <-ch:
-					s.False(ok, "Channel should be closed when updates channel closes")
-				case <-time.After(100 * time.Millisecond):
-					s.Fail("Expected channel to close but timed out")
-				}
-			},
+			call: func(c *client.Client) (any, error) { return c.KVGet(s.ctx, "b", "k") },
+			want: entry,
 		},
 		{
-			name:    "goroutine stops on context cancellation",
-			pattern: "test.*",
-			setupMocks: func() *mocks.MockKeyWatcher {
-				mockWatcher := mocks.NewMockKeyWatcher(s.mockCtrl)
-
-				// Create a channel that never closes naturally
-				updatesChan := make(chan jetstream.KeyValueEntry)
-
-				s.mockKV.EXPECT().
-					Watch(gomock.Any(), "test.*").
-					Return(mockWatcher, nil)
-
-				mockWatcher.EXPECT().
-					Updates().
-					Return(updatesChan).
-					AnyTimes()
-
-				mockWatcher.EXPECT().
-					Stop().
-					Return(nil).
-					AnyTimes()
-
-				return mockWatcher
+			name: "KVPut",
+			setup: func(kv *mocks.MockKeyValue, err error) {
+				kv.EXPECT().Put(gomock.Any(), "k", []byte("v")).Return(uint64(2), err)
 			},
-			validateFunc: func(ch <-chan jetstream.KeyValueEntry, err error) {
-				s.NoError(err)
-				s.NotNil(ch)
-
-				// Channel should close when context is cancelled
-				select {
-				case _, ok := <-ch:
-					s.False(ok, "Channel should be closed due to context cancellation")
-				case <-time.After(100 * time.Millisecond):
-					s.Fail("Expected channel to close due to context cancellation but timed out")
-				}
-			},
+			call: func(c *client.Client) (any, error) { return c.KVPut(s.ctx, "b", "k", []byte("v")) },
+			want: uint64(2),
 		},
 		{
-			name:    "handles nil entries gracefully",
-			pattern: "test.*",
-			setupMocks: func() *mocks.MockKeyWatcher {
-				mockWatcher := mocks.NewMockKeyWatcher(s.mockCtrl)
-
-				// Create a channel that sends nil then a real entry
-				updatesChan := make(chan jetstream.KeyValueEntry, 3)
-
-				// Send nil (should be ignored), then real entry, then close
-				updatesChan <- nil
-
-				mockEntry := mocks.NewMockKeyValueEntry(s.mockCtrl)
-				mockEntry.EXPECT().Key().Return("test.key").AnyTimes()
-				mockEntry.EXPECT().Value().Return([]byte("test value")).AnyTimes()
-				updatesChan <- mockEntry
-
-				close(updatesChan)
-
-				s.mockKV.EXPECT().
-					Watch(gomock.Any(), "test.*").
-					Return(mockWatcher, nil)
-
-				mockWatcher.EXPECT().
-					Updates().
-					Return(updatesChan).
-					AnyTimes()
-
-				mockWatcher.EXPECT().
-					Stop().
-					Return(nil).
-					AnyTimes()
-
-				return mockWatcher
+			name: "KVCreate",
+			setup: func(kv *mocks.MockKeyValue, err error) {
+				kv.EXPECT().Create(gomock.Any(), "k", []byte("v")).Return(uint64(3), err)
 			},
-			validateFunc: func(ch <-chan jetstream.KeyValueEntry, err error) {
-				s.NoError(err)
-				s.NotNil(ch)
-
-				// Should only receive the non-nil entry (nil entries are filtered out)
-				select {
-				case entry := <-ch:
-					s.NotNil(entry)
-					s.Equal("test.key", entry.Key())
-				case <-time.After(100 * time.Millisecond):
-					s.Fail("Expected to receive a non-nil entry but timed out")
-				}
-
-				// The goroutine should exit when the updates channel closes
-				select {
-				case _, ok := <-ch:
-					s.False(ok, "Channel should be closed when updates channel closes")
-				case <-time.After(100 * time.Millisecond):
-					s.Fail("Expected channel to close but timed out")
-				}
-			},
+			call: func(c *client.Client) (any, error) { return c.KVCreate(s.ctx, "b", "k", []byte("v")) },
+			want: uint64(3),
 		},
 		{
-			name:    "context cancelled while forwarding entry",
-			pattern: "test.*",
-			setupMocks: func() *mocks.MockKeyWatcher {
-				mockWatcher := mocks.NewMockKeyWatcher(s.mockCtrl)
-
-				// Create a channel that will send entries
-				updatesChan := make(chan jetstream.KeyValueEntry, 1)
-
-				// Create a mock entry
-				mockEntry := mocks.NewMockKeyValueEntry(s.mockCtrl)
-				mockEntry.EXPECT().Key().Return("test.key").AnyTimes()
-				mockEntry.EXPECT().Value().Return([]byte("test value")).AnyTimes()
-
-				// Send the entry but don't close the channel
-				updatesChan <- mockEntry
-
-				s.mockKV.EXPECT().
-					Watch(gomock.Any(), "test.*").
-					Return(mockWatcher, nil)
-
-				mockWatcher.EXPECT().
-					Updates().
-					Return(updatesChan).
-					AnyTimes()
-
-				mockWatcher.EXPECT().
-					Stop().
-					Return(nil).
-					AnyTimes()
-
-				return mockWatcher
+			name: "KVUpdate",
+			setup: func(kv *mocks.MockKeyValue, err error) {
+				kv.EXPECT().Update(gomock.Any(), "k", []byte("v"), uint64(3)).Return(uint64(4), err)
 			},
-			validateFunc: func(ch <-chan jetstream.KeyValueEntry, err error) {
-				s.NoError(err)
-				s.NotNil(ch)
-
-				// Create a context that we can cancel
-				// Don't read from the channel immediately - this creates backpressure
-				// so when the goroutine tries to send the entry, it will block
-				// and then we can cancel the context
-
-				time.Sleep(
-					10 * time.Millisecond,
-				) // Give goroutine time to receive entry and try to send
-
-				// The channel should close due to context cancellation
-				// without us ever receiving the entry (because context was cancelled
-				// while the goroutine was trying to send it)
-				select {
-				case _, ok := <-ch:
-					if !ok {
-						// Channel closed due to context cancellation - this is what we want
-						s.True(true, "Channel closed due to context cancellation while forwarding")
-					} else {
-						// We might get the entry if timing is different, that's also fine
-						s.True(true, "Entry received before context cancellation")
-					}
-				case <-time.After(200 * time.Millisecond):
-					s.Fail("Expected channel to close or receive entry but timed out")
-				}
+			call: func(c *client.Client) (any, error) {
+				return c.KVUpdate(s.ctx, "b", "k", []byte("v"), 3)
 			},
+			want: uint64(4),
 		},
 		{
-			name:    "error creating watcher",
-			pattern: "invalid.*",
-			validateFunc: func(ch <-chan jetstream.KeyValueEntry, err error) {
-				s.Error(err)
-				s.Contains(err.Error(), "failed to create watcher")
-				s.Nil(ch)
+			name: "KVDelete",
+			setup: func(kv *mocks.MockKeyValue, err error) {
+				kv.EXPECT().Delete(gomock.Any(), "k").Return(err)
 			},
-			setupMocks: func() *mocks.MockKeyWatcher {
-				s.mockKV.EXPECT().
-					Watch(gomock.Any(), "invalid.*").
-					Return(nil, errors.New("watch error"))
-				return nil
+			call: func(c *client.Client) (any, error) { return nil, c.KVDelete(s.ctx, "b", "k") },
+		},
+		{
+			name: "KVStatus",
+			setup: func(kv *mocks.MockKeyValue, err error) {
+				kv.EXPECT().Status(gomock.Any()).Return(nil, err)
+			},
+			call: func(c *client.Client) (any, error) {
+				st, err := c.KVStatus(s.ctx, "b")
+				if st == nil {
+					return nil, err
+				}
+
+				return st, err
 			},
 		},
 	}
 
 	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			_ = tc.setupMocks()
+		s.Run(tc.name+" returns the answer of the bucket", func() {
+			s.open()
+			tc.setup(s.kv, nil)
 
-			ctx, cancel := context.WithCancel(context.Background())
+			got, err := tc.call(s.client)
+			s.NoError(err)
+			s.Equal(tc.want, got)
+		})
+		s.Run(tc.name+" returns the error of the bucket", func() {
+			s.open()
+			tc.setup(s.kv, errBoom)
 
-			// For context cancellation tests, cancel after a short delay
-			switch tc.name {
-			case "goroutine stops on context cancellation":
-				go func() {
-					time.Sleep(10 * time.Millisecond)
-					cancel()
-				}()
-			case "context cancelled while forwarding entry":
-				// Cancel context after giving time for goroutine to receive entry
-				// but before we read from output channel (creating backpressure)
-				go func() {
-					time.Sleep(5 * time.Millisecond)
-					cancel()
-				}()
-			default:
-				defer cancel()
-			}
-
-			tc.validateFunc(s.client.WatchKV(ctx, s.mockKV, tc.pattern))
+			_, err := tc.call(s.client)
+			s.ErrorIs(err, errBoom)
 		})
 	}
 }
 
-func (s *KVPublicTestSuite) TestKVPut() {
-	tests := []struct {
-		name         string
-		bucket       string
-		key          string
-		value        []byte
-		mockSetup    func()
-		validateFunc func(error)
-	}{
-		{
-			name:   "successfully puts value in KV bucket",
-			bucket: "test-bucket",
-			key:    "test-key",
-			value:  []byte("test-value"),
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "test-bucket"}).
-					Return(s.mockKV, nil).
-					Times(1)
-
-				s.mockKV.EXPECT().
-					Put(gomock.Any(), "test-key", []byte("test-value")).
-					Return(uint64(1), nil).
-					Times(1)
-			},
-			validateFunc: func(err error) {
-				s.NoError(err)
-			},
-		},
-		{
-			name:   "error creating KV bucket for put",
-			bucket: "bad-bucket",
-			key:    "test-key",
-			value:  []byte("test-value"),
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "bad-bucket"}).
-					Return(nil, errors.New("bucket creation failed")).
-					Times(1)
-			},
-			validateFunc: func(err error) {
-				s.EqualError(
-					err,
-					"failed to get KV bucket bad-bucket: failed to create/update KV bucket bad-bucket: bucket creation failed",
-				)
-			},
-		},
-		{
-			name:   "error putting value in KV bucket",
-			bucket: "test-bucket",
-			key:    "bad-key",
-			value:  []byte("test-value"),
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "test-bucket"}).
-					Return(s.mockKV, nil).
-					Times(1)
-
-				s.mockKV.EXPECT().
-					Put(gomock.Any(), "bad-key", []byte("test-value")).
-					Return(uint64(0), errors.New("put failed")).
-					Times(1)
-			},
-			validateFunc: func(err error) {
-				s.EqualError(err, "failed to put key bad-key in bucket test-bucket: put failed")
-			},
-		},
+// lister returns a lister that yields keys, then closes.
+func (s *KVPublicTestSuite) lister(
+	keys ...string,
+) *mocks.MockKeyLister {
+	ch := make(chan string, len(keys))
+	for _, k := range keys {
+		ch <- k
 	}
+	close(ch)
+	l := mocks.NewMockKeyLister(s.ctrl)
+	l.EXPECT().Keys().Return(ch)
 
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			tc.mockSetup()
-
-			tc.validateFunc(s.client.KVPut(tc.bucket, tc.key, tc.value))
-		})
-	}
-}
-
-func (s *KVPublicTestSuite) TestKVGet() {
-	tests := []struct {
-		name         string
-		bucket       string
-		key          string
-		mockSetup    func()
-		validateFunc func([]byte, error)
-	}{
-		{
-			name:   "successfully gets value from KV bucket",
-			bucket: "test-bucket",
-			key:    "test-key",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "test-bucket"}).
-					Return(s.mockKV, nil).
-					Times(1)
-
-				mockEntry := mocks.NewMockKeyValueEntry(s.mockCtrl)
-				mockEntry.EXPECT().
-					Value().
-					Return([]byte("test-value")).
-					Times(1)
-
-				s.mockKV.EXPECT().
-					Get(gomock.Any(), "test-key").
-					Return(mockEntry, nil).
-					Times(1)
-			},
-			validateFunc: func(data []byte, err error) {
-				s.NoError(err)
-				s.Equal([]byte("test-value"), data)
-			},
-		},
-		{
-			name:   "error creating KV bucket for get",
-			bucket: "bad-bucket",
-			key:    "test-key",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "bad-bucket"}).
-					Return(nil, errors.New("bucket creation failed")).
-					Times(1)
-			},
-			validateFunc: func(data []byte, err error) {
-				s.Error(err)
-				s.Contains(
-					err.Error(),
-					"failed to get KV bucket bad-bucket: failed to create/update KV bucket bad-bucket: bucket creation failed",
-				)
-				s.Nil(data)
-			},
-		},
-		{
-			name:   "error getting value from KV bucket",
-			bucket: "test-bucket",
-			key:    "missing-key",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "test-bucket"}).
-					Return(s.mockKV, nil).
-					Times(1)
-
-				s.mockKV.EXPECT().
-					Get(gomock.Any(), "missing-key").
-					Return(nil, jetstream.ErrKeyNotFound).
-					Times(1)
-			},
-			validateFunc: func(data []byte, err error) {
-				s.Error(err)
-				s.Contains(
-					err.Error(),
-					"failed to get key missing-key from bucket test-bucket: nats: key not found",
-				)
-				s.Nil(data)
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			tc.mockSetup()
-
-			tc.validateFunc(s.client.KVGet(tc.bucket, tc.key))
-		})
-	}
-}
-
-func (s *KVPublicTestSuite) TestKVDelete() {
-	tests := []struct {
-		name         string
-		bucket       string
-		key          string
-		mockSetup    func()
-		validateFunc func(error)
-	}{
-		{
-			name:   "successfully deletes key from KV bucket",
-			bucket: "test-bucket",
-			key:    "test-key",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "test-bucket"}).
-					Return(s.mockKV, nil).
-					Times(1)
-
-				s.mockKV.EXPECT().
-					Delete(gomock.Any(), "test-key").
-					Return(nil).
-					Times(1)
-			},
-			validateFunc: func(err error) {
-				s.NoError(err)
-			},
-		},
-		{
-			name:   "error creating KV bucket for delete",
-			bucket: "bad-bucket",
-			key:    "test-key",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "bad-bucket"}).
-					Return(nil, errors.New("bucket creation failed")).
-					Times(1)
-			},
-			validateFunc: func(err error) {
-				s.EqualError(
-					err,
-					"failed to get KV bucket bad-bucket: failed to create/update KV bucket bad-bucket: bucket creation failed",
-				)
-			},
-		},
-		{
-			name:   "error deleting key from KV bucket",
-			bucket: "test-bucket",
-			key:    "bad-key",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "test-bucket"}).
-					Return(s.mockKV, nil).
-					Times(1)
-
-				s.mockKV.EXPECT().
-					Delete(gomock.Any(), "bad-key").
-					Return(errors.New("delete failed")).
-					Times(1)
-			},
-			validateFunc: func(err error) {
-				s.EqualError(
-					err,
-					"failed to delete key bad-key from bucket test-bucket: delete failed",
-				)
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			tc.mockSetup()
-
-			tc.validateFunc(s.client.KVDelete(tc.bucket, tc.key))
-		})
-	}
+	return l
 }
 
 func (s *KVPublicTestSuite) TestKVKeys() {
 	tests := []struct {
-		name         string
-		bucket       string
-		mockSetup    func()
-		validateFunc func([]string, error)
+		name    string
+		filters []string
+		setup   func()
+		want    []string
+		wantErr bool
 	}{
 		{
-			name:   "successfully gets keys from KV bucket",
-			bucket: "test-bucket",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "test-bucket"}).
-					Return(s.mockKV, nil).
-					Times(1)
-
-				mockLister := mocks.NewMockKeyLister(s.mockCtrl)
-				keysChan := make(chan string, 3)
-				keysChan <- "key1"
-				keysChan <- "key2"
-				keysChan <- "key3"
-				close(keysChan)
-
-				s.mockKV.EXPECT().
-					ListKeys(gomock.Any()).
-					Return(mockLister, nil).
-					Times(1)
-
-				mockLister.EXPECT().
-					Keys().
-					Return(keysChan).
-					Times(1)
+			name: "with no filter returns each key",
+			setup: func() {
+				s.kv.EXPECT().ListKeys(gomock.Any()).Return(s.lister("a", "b"), nil)
 			},
-			validateFunc: func(keys []string, err error) {
-				s.NoError(err)
-				s.Equal([]string{"key1", "key2", "key3"}, keys)
-			},
+			want: []string{"a", "b"},
 		},
 		{
-			name:   "successfully gets empty keys from KV bucket",
-			bucket: "empty-bucket",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "empty-bucket"}).
-					Return(s.mockKV, nil).
-					Times(1)
-
-				mockLister := mocks.NewMockKeyLister(s.mockCtrl)
-				keysChan := make(chan string)
-				close(keysChan)
-
-				s.mockKV.EXPECT().
-					ListKeys(gomock.Any()).
-					Return(mockLister, nil).
-					Times(1)
-
-				mockLister.EXPECT().
-					Keys().
-					Return(keysChan).
-					Times(1)
+			name:    "with filters returns the keys that match",
+			filters: []string{"jobs.>", "status.>"},
+			setup: func() {
+				s.kv.EXPECT().
+					ListKeysFiltered(gomock.Any(), "jobs.>", "status.>").
+					Return(s.lister("jobs.1"), nil)
 			},
-			validateFunc: func(keys []string, err error) {
-				s.NoError(err)
-				s.Nil(keys)
-			},
+			want: []string{"jobs.1"},
 		},
 		{
-			name:   "error creating KV bucket for keys",
-			bucket: "bad-bucket",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "bad-bucket"}).
-					Return(nil, errors.New("bucket creation failed")).
-					Times(1)
+			name: "when the bucket is empty returns an empty list",
+			setup: func() {
+				s.kv.EXPECT().ListKeys(gomock.Any()).Return(s.lister(), nil)
 			},
-			validateFunc: func(keys []string, err error) {
-				s.Error(err)
-				s.Contains(
-					err.Error(),
-					"failed to get KV bucket bad-bucket: failed to create/update KV bucket bad-bucket: bucket creation failed",
-				)
-				s.Nil(keys)
-			},
+			want: []string{},
 		},
 		{
-			name:   "error getting keys from KV bucket",
-			bucket: "test-bucket",
-			mockSetup: func() {
-				s.mockExt.EXPECT().
-					CreateOrUpdateKeyValue(gomock.Any(), jetstream.KeyValueConfig{Bucket: "test-bucket"}).
-					Return(s.mockKV, nil).
-					Times(1)
-
-				s.mockKV.EXPECT().
-					ListKeys(gomock.Any()).
-					Return(nil, errors.New("keys failed")).
-					Times(1)
+			name: "when the list fails returns the error",
+			setup: func() {
+				s.kv.EXPECT().ListKeys(gomock.Any()).Return(nil, errBoom)
 			},
-			validateFunc: func(keys []string, err error) {
-				s.Error(err)
-				s.Contains(err.Error(), "failed to get keys from bucket test-bucket: keys failed")
-				s.Nil(keys)
-			},
+			wantErr: true,
 		},
 	}
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
-			tc.mockSetup()
+			s.open()
+			tc.setup()
 
-			tc.validateFunc(s.client.KVKeys(tc.bucket))
+			got, err := s.client.KVKeys(s.ctx, "b", tc.filters...)
+			if tc.wantErr {
+				s.ErrorIs(err, errBoom)
+				return
+			}
+			s.Require().NoError(err)
+			s.Equal(tc.want, got)
 		})
+	}
+}
+
+func (s *KVPublicTestSuite) TestKVWatch() {
+	s.Run("when the watch cannot start returns the error", func() {
+		s.open()
+		s.kv.EXPECT().Watch(gomock.Any(), "jobs.>").Return(nil, errBoom)
+
+		ch, err := s.client.KVWatch(s.ctx, "b", "jobs.>")
+		s.ErrorIs(err, errBoom)
+		s.Nil(ch)
+	})
+
+	s.Run("sends each entry and drops the marker after the current values", func() {
+		updates := make(chan jetstream.KeyValueEntry, 3)
+		first := mocks.NewMockKeyValueEntry(s.ctrl)
+		second := mocks.NewMockKeyValueEntry(s.ctrl)
+		updates <- first
+		updates <- nil
+		updates <- second
+		close(updates)
+
+		watcher := mocks.NewMockKeyWatcher(s.ctrl)
+		watcher.EXPECT().Updates().Return(updates).AnyTimes()
+		watcher.EXPECT().Stop().Return(nil)
+		s.open()
+		s.kv.EXPECT().Watch(gomock.Any(), ">", gomock.Any()).Return(watcher, nil)
+
+		ch, err := s.client.KVWatch(s.ctx, "b", ">", jetstream.IncludeHistory())
+		s.Require().NoError(err)
+
+		var got []jetstream.KeyValueEntry
+		for e := range ch {
+			got = append(got, e)
+		}
+		s.Equal([]jetstream.KeyValueEntry{first, second}, got)
+	})
+
+	s.Run("when ctx ends stops the watch and closes the channel", func() {
+		watcher := mocks.NewMockKeyWatcher(s.ctrl)
+		watcher.EXPECT().Updates().Return(make(chan jetstream.KeyValueEntry)).AnyTimes()
+		stopped := make(chan struct{})
+		watcher.EXPECT().Stop().DoAndReturn(func() error {
+			close(stopped)
+			return nil
+		})
+		s.open()
+		s.kv.EXPECT().Watch(gomock.Any(), ">").Return(watcher, nil)
+
+		ctx, cancel := context.WithCancel(s.ctx)
+		ch, err := s.client.KVWatch(ctx, "b", ">")
+		s.Require().NoError(err)
+		cancel()
+
+		s.closes(ch)
+		<-stopped
+	})
+
+	s.Run("when ctx ends while an entry waits closes the channel", func() {
+		updates := make(chan jetstream.KeyValueEntry, 1)
+		updates <- mocks.NewMockKeyValueEntry(s.ctrl)
+		watcher := mocks.NewMockKeyWatcher(s.ctrl)
+		watcher.EXPECT().Updates().Return(updates).AnyTimes()
+		watcher.EXPECT().Stop().Return(nil)
+		s.open()
+		s.kv.EXPECT().Watch(gomock.Any(), ">").Return(watcher, nil)
+
+		ctx, cancel := context.WithCancel(s.ctx)
+		ch, err := s.client.KVWatch(ctx, "b", ">")
+		s.Require().NoError(err)
+		// Nobody reads the entry, so the send waits until ctx ends.
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+
+		s.closes(ch)
+	})
+}
+
+// closes waits for ch to close, and fails when it does not.
+func (s *KVPublicTestSuite) closes(
+	ch <-chan jetstream.KeyValueEntry,
+) {
+	timeout := time.After(5 * time.Second)
+	for {
+		select {
+		case _, ok := <-ch:
+			if !ok {
+				return
+			}
+		case <-timeout:
+			s.Fail("the channel did not close")
+			return
+		}
 	}
 }
 

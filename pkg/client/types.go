@@ -22,9 +22,12 @@ package client
 
 import (
 	"log/slog"
+	"sync"
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/nats-io/nkeys"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // AuthType defines the different authentication methods supported by the client.
@@ -54,6 +57,17 @@ type Options struct {
 	Auth AuthOptions
 	// Name is a human-readable name for this client connection.
 	Name string
+	// Telemetry makes OpenTelemetry spans and metrics for each call to NATS
+	// that the client makes. A span is made only inside a trace that the
+	// caller started; a metric is recorded for each call. Off by default.
+	// See docs/client/telemetry.md.
+	Telemetry bool
+	// TracerProvider makes the spans when Telemetry is on. Nil uses the
+	// global provider of the application.
+	TracerProvider trace.TracerProvider
+	// MeterProvider records the metrics when Telemetry is on. Nil uses the
+	// global provider of the application.
+	MeterProvider metric.MeterProvider
 }
 
 // AuthOptions holds authentication-related settings for connecting to NATS.
@@ -76,6 +90,15 @@ type AuthOptions struct {
 // Client provides an implementation for interacting with an embedded NATS server.
 type Client struct {
 	logger *slog.Logger
+	// tel makes the spans and metrics of the client, or is nil when
+	// Options.Telemetry is off.
+	tel *telemetry
+	// kvs, objectStores and streams hold a handle for each bucket and stream
+	// by name, so that a call by name does not ask the server for the handle
+	// each time.
+	kvs          sync.Map
+	objectStores sync.Map
+	streams      sync.Map
 
 	// NC underlying connection.
 	NC NATSConnector

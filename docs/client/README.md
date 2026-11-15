@@ -1,9 +1,14 @@
 # NATS client
 
 The `client` package gives a NATS JetStream client. The client has connection
-management, KV buckets, KV-backed streams, consumer helpers, and Object Store
-buckets. To make a client, call `New()`. Then call `Connect()` to open the
-connection.
+management, KV buckets, Object Store buckets, streams, messaging, and
+OpenTelemetry spans and metrics. To make a client, call `New()`. Then call
+`Connect()` to open the connection.
+
+Each method takes a `context.Context` first, and the name of the bucket or the
+stream. The methods return the types of `nats.go` and `jetstream`. The package
+declares no interface for its own methods. A program that uses the client
+declares the interface that it needs, in the package that uses it.
 
 ## Quick start
 
@@ -21,15 +26,14 @@ if err := c.Connect(); err != nil {
 
 ## Features
 
-| Feature                             | Description                                     | Source           |
-| ----------------------------------- | ----------------------------------------------- | ---------------- |
-| [`Connection`](connection.md)       | Connect to NATS with authentication types       | `connect.go`     |
-| [`JetStream`](jetstream.md)         | Create and update streams, and publish          | `jetstream.go`   |
-| [`Key-Value`](kv.md)                | Create, read, update and delete keys in KV      | `kv.go`          |
-| [`KV-Backed Streams`](kv-stream.md) | Write to a KV bucket and publish a notification | `kv_stream.go`   |
-| [`Consumer`](consumer.md)           | Process messages with JetStream consumers       | `consumer.go`    |
-| [`Object Store`](objectstore.md)    | Store large blobs that NATS divides into chunks | `objectstore.go` |
-| [`Core NATS`](core.md)              | Publish and subscribe without JetStream         | `core.go`        |
+| Feature                        | Description                                      | Source           |
+| ------------------------------ | ------------------------------------------------ | ---------------- |
+| [Connection](connection.md)    | Connect to NATS with an authentication type      | `connect.go`     |
+| [Key-value](kv.md)             | Create KV buckets, and read and write their keys | `kv.go`          |
+| [Object Store](objectstore.md) | Store large blobs that NATS divides into chunks  | `objectstore.go` |
+| [Streams](stream.md)           | Create streams and consumers, and read a stream  | `stream.go`      |
+| [Messaging](messaging.md)      | Publish, subscribe and consume                   | `messaging.go`   |
+| [Telemetry](telemetry.md)      | OpenTelemetry spans and metrics for each call    | `telemetry.go`   |
 
 ## Authentication
 

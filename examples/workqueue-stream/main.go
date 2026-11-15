@@ -108,13 +108,18 @@ func main() {
 	ctx := context.Background()
 
 	// Create the main stream with consumer
-	if err := c.CreateOrUpdateJetStreamWithConfig(ctx, streamConfig, consumerConfig); err != nil {
+	if err := c.StreamCreateOrUpdate(ctx, streamConfig); err != nil {
 		logger.Error("failed setting up jetstream", "error", err)
 		os.Exit(1)
 	}
 
+	if err := c.ConsumerCreateOrUpdate(ctx, streamName, consumerConfig); err != nil {
+		logger.Error("failed setting up consumer", "error", err)
+		os.Exit(1)
+	}
+
 	// Create the DLQ stream (no consumers needed)
-	if err := c.CreateOrUpdateStreamWithConfig(ctx, dlqStreamConfig); err != nil {
+	if err := c.StreamCreateOrUpdate(ctx, dlqStreamConfig); err != nil {
 		logger.Error("failed setting up DLQ stream", "error", err)
 		os.Exit(1)
 	}

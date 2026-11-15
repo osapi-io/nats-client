@@ -42,14 +42,14 @@ go get github.com/osapi-io/nats-client
 The [client documentation](docs/client/README.md) gives a quick start, the
 authentication types, and a reference for each feature.
 
-| Feature               | Description                                             | Docs                               | Source                                        |
-| --------------------- | ------------------------------------------------------- | ---------------------------------- | --------------------------------------------- |
-| Connection management | Connect to NATS with options and authentication types   | [docs](docs/client/connection.md)  | [`connect.go`](pkg/client/connect.go)         |
-| JetStream             | Create and update JetStream streams, and publish        | [docs](docs/client/jetstream.md)   | [`jetstream.go`](pkg/client/jetstream.go)     |
-| Key-value buckets     | Create, read, update and delete keys in NATS KV buckets | [docs](docs/client/kv.md)          | [`kv.go`](pkg/client/kv.go)                   |
-| KV-backed streams     | Write to a KV bucket and publish a stream notification  | [docs](docs/client/kv-stream.md)   | [`kv_stream.go`](pkg/client/kv_stream.go)     |
-| Consumer helpers      | Process messages with JetStream consumers               | [docs](docs/client/consumer.md)    | [`consumer.go`](pkg/client/consumer.go)       |
-| Object Store          | Store large blobs, which NATS divides into chunks       | [docs](docs/client/objectstore.md) | [`objectstore.go`](pkg/client/objectstore.go) |
+| Feature               | Description                                           | Docs                               | Source                                        |
+| --------------------- | ----------------------------------------------------- | ---------------------------------- | --------------------------------------------- |
+| Connection management | Connect to NATS with options and authentication types | [docs](docs/client/connection.md)  | [`connect.go`](pkg/client/connect.go)         |
+| Key-value buckets     | Create KV buckets, and read, write and delete keys    | [docs](docs/client/kv.md)          | [`kv.go`](pkg/client/kv.go)                   |
+| Object Store          | Store large blobs, which NATS divides into chunks     | [docs](docs/client/objectstore.md) | [`objectstore.go`](pkg/client/objectstore.go) |
+| Streams               | Create streams and consumers, and read a stream       | [docs](docs/client/stream.md)      | [`stream.go`](pkg/client/stream.go)           |
+| Messaging             | Publish, subscribe, and consume with a handler        | [docs](docs/client/messaging.md)   | [`messaging.go`](pkg/client/messaging.go)     |
+| Telemetry             | OpenTelemetry spans and metrics for each call to NATS | [docs](docs/client/telemetry.md)   | [`telemetry.go`](pkg/client/telemetry.go)     |
 
 ## 🧪 Examples
 
