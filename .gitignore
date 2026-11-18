@@ -13,3 +13,5 @@ examples/**
 !examples/**/*.mod
 !examples/**/*.sum
 !examples/**/*.md
+!examples/**/.gitignore
+!examples/**/.nkeys/*
