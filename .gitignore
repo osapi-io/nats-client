@@ -4,3 +4,12 @@ dist/
 .just/
 .nats/jetstream/
 test/vendor/
+
+# Compiled example binaries: go build in an example's directory writes one
+# there, named for the directory.
+examples/**
+!examples/**/
+!examples/**/*.go
+!examples/**/*.mod
+!examples/**/*.sum
+!examples/**/*.md
