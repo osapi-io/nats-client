@@ -5,7 +5,7 @@ go 1.27.3
 replace github.com/osapi-io/nats-client => ../../
 
 require (
-	github.com/nats-io/nats.go v1.55.0
+	github.com/nats-io/nats.go v1.56.0
 	github.com/osapi-io/nats-client v0.0.0-00010101000000-000000000000
 )
 
