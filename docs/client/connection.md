@@ -55,6 +55,15 @@ c := client.New(logger, &client.Options{
     },
 })
 
+// TLS, with any of the modes above: the roots to trust, and a client
+// certificate when the server asks for one
+c := client.New(logger, &client.Options{
+    Host: "nats.example.com",
+    Port: 4222,
+    Name: "my-app",
+    TLS:  &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
+})
+
 if err := c.Connect(); err != nil {
     log.Fatal(err)
 }
