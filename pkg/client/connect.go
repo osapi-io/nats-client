@@ -38,7 +38,11 @@ var GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
 // Connect establishes the connection to the NATS server and JetStream context.
 // This method returns an error if there are any issues during connection.
 func (c *Client) Connect() error {
-	natsURL := fmt.Sprintf("nats://%s:%d", c.Opts.Host, c.Opts.Port)
+	scheme := "nats"
+	if c.Opts.TLS != nil {
+		scheme = "tls"
+	}
+	natsURL := fmt.Sprintf("%s://%s:%d", scheme, c.Opts.Host, c.Opts.Port)
 
 	c.logger.Debug(
 		"connecting to NATS server",
@@ -53,6 +57,9 @@ func (c *Client) Connect() error {
 	var opts []nats.Option
 	if c.Opts.Name != "" {
 		opts = append(opts, nats.Name(c.Opts.Name))
+	}
+	if c.Opts.TLS != nil {
+		opts = append(opts, nats.Secure(c.Opts.TLS))
 	}
 
 	switch c.Opts.Auth.AuthType {

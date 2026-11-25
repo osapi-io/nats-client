@@ -21,6 +21,7 @@
 package client
 
 import (
+	"crypto/tls"
 	"log/slog"
 	"sync"
 
@@ -57,6 +58,10 @@ type Options struct {
 	Auth AuthOptions
 	// Name is a human-readable name for this client connection.
 	Name string
+	// TLS makes the connection use TLS, with this config: the roots it
+	// trusts, a client certificate, the server name. Nil connects in plain
+	// text, as before.
+	TLS *tls.Config
 	// Telemetry makes OpenTelemetry spans and metrics for each call to NATS
 	// that the client makes. A span is made only inside a trace that the
 	// caller started; a metric is recorded for each call. Off by default.
