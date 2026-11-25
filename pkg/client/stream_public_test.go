@@ -182,6 +182,33 @@ func (s *StreamPublicTestSuite) TestStreamLastMsg() {
 	})
 }
 
+func (s *StreamPublicTestSuite) TestStreamGetMsg() {
+	s.Run("returns the message at the sequence", func() {
+		msg := &jetstream.RawStreamMsg{Subject: "jobs.x", Sequence: 7}
+		s.open()
+		s.stream.EXPECT().GetMsg(gomock.Any(), uint64(7)).Return(msg, nil)
+
+		got, err := s.client.StreamGetMsg(s.ctx, "S", 7)
+		s.NoError(err)
+		s.Equal(msg, got)
+	})
+
+	s.Run("when the stream does not have it returns the error", func() {
+		s.open()
+		s.stream.EXPECT().GetMsg(gomock.Any(), uint64(7)).Return(nil, jetstream.ErrMsgNotFound)
+
+		_, err := s.client.StreamGetMsg(s.ctx, "S", 7)
+		s.ErrorIs(err, jetstream.ErrMsgNotFound)
+	})
+
+	s.Run("when the stream is not there returns the error", func() {
+		s.js.EXPECT().Stream(gomock.Any(), "S").Return(nil, errBoom)
+
+		_, err := s.client.StreamGetMsg(s.ctx, "S", 7)
+		s.ErrorIs(err, errBoom)
+	})
+}
+
 // batch returns a batch of msgs that ends with err.
 func (s *StreamPublicTestSuite) batch(
 	err error,
