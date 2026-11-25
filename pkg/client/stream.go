@@ -169,6 +169,26 @@ func (c *Client) StreamLastMsg(
 		})
 }
 
+// StreamGetMsg returns the message at seq in the stream name, read directly,
+// with no consumer. A message that the stream no longer has, such as one
+// past its max age, is jetstream.ErrMsgNotFound.
+func (c *Client) StreamGetMsg(
+	ctx context.Context,
+	name string,
+	seq uint64,
+) (*jetstream.RawStreamMsg, error) {
+	return observe(ctx, c.tel,
+		newOp("stream.get_msg", name),
+		func(ctx context.Context) (*jetstream.RawStreamMsg, error) {
+			s, err := c.stream(ctx, name)
+			if err != nil {
+				return nil, err
+			}
+
+			return s.GetMsg(ctx, seq)
+		})
+}
+
 // StreamRead reads up to count messages of the stream name in order, from the
 // sequence from, or from the first message when from is 0. It waits for the
 // messages until the deadline of ctx, or for 5 seconds when ctx has none.
