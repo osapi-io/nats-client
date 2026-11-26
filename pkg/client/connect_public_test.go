@@ -21,11 +21,13 @@
 package client_test
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -396,6 +398,158 @@ func (s *ConnectPublicTestSuite) TestGetJetStream() {
 		s.Run(tc.name, func() {
 			tc.mockSetup()
 			tc.validateFunc(tc.callFunc())
+		})
+	}
+}
+
+// connectWith connects a client of opts and logger, and returns the URL and the
+// nats.Options that Connect gave to NATS.
+func (s *ConnectPublicTestSuite) connectWith(
+	logger *slog.Logger,
+	opts *client.Options,
+) (string, nats.Options) {
+	c := client.New(logger, opts)
+	c.NC = s.mockNATS
+	var url string
+	got := nats.GetDefaultOptions()
+	s.mockNATS.EXPECT().
+		Connect(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(u string, natsOpts ...nats.Option) (*nats.Conn, error) {
+			url = u
+			for _, o := range natsOpts {
+				s.Require().NoError(o(&got))
+			}
+			return &nats.Conn{}, nil
+		})
+	orig := client.GetJetStream
+	client.GetJetStream = func(*nats.Conn) (jetstream.JetStream, error) {
+		return mocks.NewMockJetStream(s.mockCtrl), nil
+	}
+	s.T().Cleanup(func() { client.GetJetStream = orig })
+	s.Require().NoError(c.Connect())
+
+	return url, got
+}
+
+func (s *ConnectPublicTestSuite) TestReconnectPolicy() {
+	tests := []struct {
+		name      string
+		reconnect client.ReconnectOptions
+		wantMax   int
+		wantWait  time.Duration
+		wantRetry bool
+	}{
+		{
+			name:     "the zero value tries forever, DefaultReconnectWait apart",
+			wantMax:  -1,
+			wantWait: client.DefaultReconnectWait,
+		},
+		{
+			name: "the options set the tries, the wait and the first connect",
+			reconnect: client.ReconnectOptions{
+				MaxAttempts:       3,
+				Wait:              time.Second,
+				RetryFirstConnect: true,
+			},
+			wantMax:   3,
+			wantWait:  time.Second,
+			wantRetry: true,
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			_, got := s.connectWith(slog.Default(), &client.Options{
+				Host:      "localhost",
+				Port:      4222,
+				Reconnect: tc.reconnect,
+			})
+			s.Equal(tc.wantMax, got.MaxReconnect)
+			s.Equal(tc.wantWait, got.ReconnectWait)
+			s.Equal(tc.wantRetry, got.RetryOnFailedConnect)
+		})
+	}
+}
+
+func (s *ConnectPublicTestSuite) TestConnectionHandlers() {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	_, got := s.connectWith(logger, &client.Options{Host: "localhost", Port: 4222})
+
+	tests := []struct {
+		name string
+		call func()
+		want string
+	}{
+		{
+			name: "a drop that the client asked for is info",
+			call: func() { got.DisconnectedErrCB(nil, nil) },
+			want: `level=INFO msg="disconnected from NATS"`,
+		},
+		{
+			name: "a drop with an error is a warning with the error",
+			call: func() { got.DisconnectedErrCB(nil, errors.New("eof")) },
+			want: `level=WARN msg="disconnected from NATS" error=eof`,
+		},
+		{
+			name: "a reconnect is info with the URL",
+			call: func() { got.ReconnectedCB(nil) },
+			want: `level=INFO msg="reconnected to NATS" url=""`,
+		},
+		{
+			name: "a close with the last error is an error",
+			call: func() { got.ClosedCB(nil) },
+			want: `level=ERROR msg="NATS connection closed" error="nats: invalid connection"`,
+		},
+		{
+			name: "a close with no error is info",
+			call: func() { got.ClosedCB(&nats.Conn{}) },
+			want: `level=INFO msg="NATS connection closed"`,
+		},
+		{
+			name: "an error of the server names the subject",
+			call: func() {
+				got.AsyncErrorCB(nil, &nats.Subscription{Subject: "jobs.x"}, nats.ErrSlowConsumer)
+			},
+			want: `level=ERROR msg="NATS error" error="nats: slow consumer, messages dropped" subject=jobs.x`,
+		},
+		{
+			name: "an error with no subscription has no subject",
+			call: func() { got.AsyncErrorCB(nil, nil, errors.New("permissions violation")) },
+			want: `level=ERROR msg="NATS error" error="permissions violation"`,
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			buf.Reset()
+			tc.call()
+			s.Contains(buf.String(), tc.want)
+		})
+	}
+}
+
+func (s *ConnectPublicTestSuite) TestConnectTwice() {
+	s.Run("a second Connect without Close returns ErrConnected", func() {
+		s.client.ExtJS = mocks.NewMockJetStream(s.mockCtrl)
+		s.ErrorIs(s.client.Connect(), client.ErrConnected)
+	})
+}
+
+func (s *ConnectPublicTestSuite) TestConnectURL() {
+	tests := []struct {
+		name string
+		host string
+		want string
+	}{
+		{name: "a name", host: "nats.example", want: "nats://nats.example:4222"},
+		{name: "an IPv6 address is in brackets", host: "::1", want: "nats://[::1]:4222"},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			url, _ := s.connectWith(slog.Default(), &client.Options{Host: tc.host, Port: 4222})
+			s.Equal(tc.want, url)
 		})
 	}
 }

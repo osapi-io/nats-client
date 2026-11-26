@@ -21,10 +21,12 @@
 package client_test
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"testing"
 
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
 
@@ -86,6 +88,117 @@ func (s *ConnectionPublicTestSuite) TestClose() {
 	}
 }
 
+func (s *ConnectionPublicTestSuite) TestCloseForgetsTheConnection() {
+	s.Run(
+		"a call after Close is ErrNotConnected, and a new connection asks for each handle again",
+		func() {
+			ctx := context.Background()
+			kv := mocks.NewMockKeyValue(s.mockCtrl)
+			kv.EXPECT().Get(gomock.Any(), "k").Return(nil, jetstream.ErrKeyNotFound).Times(2)
+			s.mockJS.EXPECT().KeyValue(gomock.Any(), "b").Return(kv, nil)
+			_, err := s.client.KVGet(ctx, "b", "k")
+			s.ErrorIs(err, jetstream.ErrKeyNotFound)
+
+			s.mockNATS.EXPECT().Close()
+			s.client.Close()
+			s.Nil(s.client.ExtJS)
+			_, err = s.client.KVGet(ctx, "b", "k")
+			s.ErrorIs(err, client.ErrNotConnected)
+
+			js := mocks.NewMockJetStream(s.mockCtrl)
+			js.EXPECT().KeyValue(gomock.Any(), "b").Return(kv, nil)
+			s.client.ExtJS = js
+			_, err = s.client.KVGet(ctx, "b", "k")
+			s.ErrorIs(err, jetstream.ErrKeyNotFound)
+		},
+	)
+}
+
+func (s *ConnectionPublicTestSuite) TestNotConnected() {
+	ctx := context.Background()
+	calls := map[string]func() error{
+		"Publish": func() error { return s.client.Publish(ctx, "x", nil) },
+		"Consume": func() error {
+			return s.client.Consume(ctx, "S", "c",
+				func(context.Context, jetstream.Msg) error { return nil }, nil)
+		},
+		"KVCreateOrUpdate": func() error {
+			return s.client.KVCreateOrUpdate(ctx, jetstream.KeyValueConfig{Bucket: "b"})
+		},
+		"KVGet": func() error { _, err := s.client.KVGet(ctx, "b", "k"); return err },
+		"ObjectStoreCreateOrUpdate": func() error {
+			return s.client.ObjectStoreCreateOrUpdate(
+				ctx, jetstream.ObjectStoreConfig{Bucket: "b"})
+		},
+		"ObjectGetBytes": func() error { _, err := s.client.ObjectGetBytes(ctx, "b", "o"); return err },
+		"StreamCreateOrUpdate": func() error {
+			return s.client.StreamCreateOrUpdate(ctx, jetstream.StreamConfig{Name: "S"})
+		},
+		"ConsumerCreateOrUpdate": func() error {
+			return s.client.ConsumerCreateOrUpdate(ctx, "S", jetstream.ConsumerConfig{})
+		},
+		"StreamInfo": func() error { _, err := s.client.StreamInfo(ctx, "S"); return err },
+	}
+	for name, call := range calls {
+		s.Run(name+" before Connect returns ErrNotConnected", func() {
+			s.client.ExtJS = nil
+			s.ErrorIs(call(), client.ErrNotConnected)
+		})
+	}
+}
+
+func (s *ConnectionPublicTestSuite) TestGoneHandle() {
+	ctx := context.Background()
+
+	s.Run("a bucket that is gone is asked for again at the next call", func() {
+		kv := mocks.NewMockKeyValue(s.mockCtrl)
+		gomock.InOrder(
+			kv.EXPECT().Get(gomock.Any(), "k").Return(nil, jetstream.ErrNoStreamResponse),
+			kv.EXPECT().Get(gomock.Any(), "k").Return(nil, jetstream.ErrKeyNotFound),
+		)
+		s.mockJS.EXPECT().KeyValue(gomock.Any(), "b").Return(kv, nil).Times(2)
+
+		_, err := s.client.KVGet(ctx, "b", "k")
+		s.ErrorIs(err, jetstream.ErrNoStreamResponse)
+		_, err = s.client.KVGet(ctx, "b", "k")
+		s.ErrorIs(err, jetstream.ErrKeyNotFound)
+	})
+
+	s.Run("an object store that is gone is asked for again at the next call", func() {
+		store := mocks.NewMockObjectStore(s.mockCtrl)
+		gomock.InOrder(
+			store.EXPECT().GetBytes(gomock.Any(), "o").Return(nil, jetstream.ErrBucketNotFound),
+			store.EXPECT().GetBytes(gomock.Any(), "o").Return([]byte("x"), nil),
+		)
+		s.mockJS.EXPECT().ObjectStore(gomock.Any(), "b").Return(store, nil).Times(2)
+
+		_, err := s.client.ObjectGetBytes(ctx, "b", "o")
+		s.ErrorIs(err, jetstream.ErrBucketNotFound)
+		got, err := s.client.ObjectGetBytes(ctx, "b", "o")
+		s.Require().NoError(err)
+		s.Equal([]byte("x"), got)
+	})
+
+	s.Run("a stream that is gone is asked for again at the next call", func() {
+		stream := mocks.NewMockStream(s.mockCtrl)
+		gomock.InOrder(
+			stream.EXPECT().Info(gomock.Any()).Return(nil, jetstream.ErrStreamNotFound),
+			stream.EXPECT().
+				OrderedConsumer(gomock.Any(), gomock.Any()).
+				Return(nil, jetstream.ErrStreamNotFound),
+			stream.EXPECT().GetMsg(gomock.Any(), uint64(1)).Return(nil, jetstream.ErrMsgNotFound),
+		)
+		s.mockJS.EXPECT().Stream(gomock.Any(), "S").Return(stream, nil).Times(3)
+
+		_, err := s.client.StreamInfo(ctx, "S")
+		s.ErrorIs(err, jetstream.ErrStreamNotFound)
+		_, err = s.client.StreamRead(ctx, "S", 0, 1)
+		s.ErrorIs(err, jetstream.ErrStreamNotFound)
+		_, err = s.client.StreamGetMsg(ctx, "S", 1)
+		s.ErrorIs(err, jetstream.ErrMsgNotFound)
+	})
+}
+
 func (s *ConnectionPublicTestSuite) TestConnectedURL() {
 	tests := []struct {
 		name         string
@@ -123,46 +236,15 @@ func (s *ConnectionPublicTestSuite) TestConnectedURL() {
 }
 
 func (s *ConnectionPublicTestSuite) TestConnectedServerVersion() {
-	tests := []struct {
-		name         string
-		setupFunc    func()
-		validateFunc func(string)
-	}{
-		{
-			name: "returns empty string when NC is mock (not NATSConnWrapper)",
-			setupFunc: func() {
-				// mockNATS is a MockNATSConnector, not a *NATSConnWrapper
-			},
-			validateFunc: func(version string) {
-				s.Empty(version)
-			},
-		},
-		{
-			name: "returns empty string when NC is nil",
-			setupFunc: func() {
-				s.client.NC = nil
-			},
-			validateFunc: func(version string) {
-				s.Empty(version)
-			},
-		},
-		{
-			name: "returns empty string when NATSConnWrapper has nil Conn",
-			setupFunc: func() {
-				s.client.NC = &client.NATSConnWrapper{Conn: nil}
-			},
-			validateFunc: func(version string) {
-				s.Empty(version)
-			},
-		},
-	}
+	s.Run("returns the version of the connection", func() {
+		s.mockNATS.EXPECT().ConnectedServerVersion().Return("2.11.0")
+		s.Equal("2.11.0", s.client.ConnectedServerVersion())
+	})
 
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			tc.setupFunc()
-			tc.validateFunc(s.client.ConnectedServerVersion())
-		})
-	}
+	s.Run("returns empty string when NC is nil", func() {
+		s.client.NC = nil
+		s.Empty(s.client.ConnectedServerVersion())
+	})
 }
 
 func TestConnectionPublicTestSuite(t *testing.T) {

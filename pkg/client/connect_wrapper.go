@@ -27,6 +27,7 @@ type NATSConnector interface {
 	JetStream(opts ...nats.JSOpt) (nats.JetStreamContext, error)
 	Close()
 	ConnectedUrl() string
+	ConnectedServerVersion() string
 	Connect(url string, opts ...nats.Option) (*nats.Conn, error)
 	Subscribe(subject string, handler nats.MsgHandler) (*nats.Subscription, error)
 	QueueSubscribe(subject, queue string, handler nats.MsgHandler) (*nats.Subscription, error)
@@ -56,6 +57,12 @@ func (n *NATSConnWrapper) Close() {
 //revive:disable-next-line var-naming
 func (n *NATSConnWrapper) ConnectedUrl() string {
 	return n.Conn.ConnectedUrl()
+}
+
+// ConnectedServerVersion wraps the ConnectedServerVersion method of
+// nats.Conn. It is empty before Connect.
+func (n *NATSConnWrapper) ConnectedServerVersion() string {
+	return n.Conn.ConnectedServerVersion()
 }
 
 // Connect establishes a connection to the NATS server with the given URL and options.

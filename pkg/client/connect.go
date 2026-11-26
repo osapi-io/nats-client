@@ -21,14 +21,20 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
+	"strconv"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/nats-io/nkeys"
 )
+
+// ErrConnected is the error of a Connect on a client that is connected.
+var ErrConnected = errors.New("already connected: call Close first")
 
 // GetJetStream is a public variable function wrapping jetstream.New.
 var GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
@@ -37,12 +43,19 @@ var GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
 
 // Connect establishes the connection to the NATS server and JetStream context.
 // This method returns an error if there are any issues during connection.
+//
+// A second Connect without a Close between returns ErrConnected, so that the
+// first connection does not leak.
 func (c *Client) Connect() error {
+	if c.ExtJS != nil {
+		return ErrConnected
+	}
+
 	scheme := "nats"
 	if c.Opts.TLS != nil {
 		scheme = "tls"
 	}
-	natsURL := fmt.Sprintf("%s://%s:%d", scheme, c.Opts.Host, c.Opts.Port)
+	natsURL := scheme + "://" + net.JoinHostPort(c.Opts.Host, strconv.Itoa(c.Opts.Port))
 
 	c.logger.Debug(
 		"connecting to NATS server",
@@ -54,7 +67,7 @@ func (c *Client) Connect() error {
 	var nc *nats.Conn
 	var err error
 
-	var opts []nats.Option
+	opts := c.reconnectOptions()
 	if c.Opts.Name != "" {
 		opts = append(opts, nats.Name(c.Opts.Name))
 	}
@@ -120,6 +133,76 @@ func (c *Client) Connect() error {
 	c.logger.Debug("successfully connected to NATS and enabled JetStream")
 
 	return nil
+}
+
+// reconnectOptions returns the options of the reconnect policy of the
+// client, with a handler that logs each change of the connection.
+func (c *Client) reconnectOptions() []nats.Option {
+	policy := c.Opts.Reconnect
+	attempts := policy.MaxAttempts
+	if attempts == 0 {
+		attempts = -1
+	}
+	wait := policy.Wait
+	if wait == 0 {
+		wait = DefaultReconnectWait
+	}
+
+	return []nats.Option{
+		nats.MaxReconnects(attempts),
+		nats.ReconnectWait(wait),
+		nats.RetryOnFailedConnect(policy.RetryFirstConnect),
+		nats.DisconnectErrHandler(c.disconnected),
+		nats.ReconnectHandler(c.reconnected),
+		nats.ClosedHandler(c.closed),
+		nats.ErrorHandler(c.asyncError),
+	}
+}
+
+// disconnected logs a drop of the connection. err is nil for a drop that the
+// client asked for.
+func (c *Client) disconnected(
+	_ *nats.Conn,
+	err error,
+) {
+	if err == nil {
+		c.logger.Info("disconnected from NATS")
+		return
+	}
+	c.logger.Warn("disconnected from NATS", slog.String("error", err.Error()))
+}
+
+// reconnected logs a connection that is up again.
+func (c *Client) reconnected(
+	nc *nats.Conn,
+) {
+	c.logger.Info("reconnected to NATS", slog.String("url", nc.ConnectedUrl()))
+}
+
+// closed logs the end of the connection: after Close, or after the last try of
+// a reconnect. Each call after it fails.
+func (c *Client) closed(
+	nc *nats.Conn,
+) {
+	if err := nc.LastError(); err != nil {
+		c.logger.Error("NATS connection closed", slog.String("error", err.Error()))
+		return
+	}
+	c.logger.Info("NATS connection closed")
+}
+
+// asyncError logs an error that the server sent outside a call, such as a
+// permissions violation or a slow consumer.
+func (c *Client) asyncError(
+	_ *nats.Conn,
+	sub *nats.Subscription,
+	err error,
+) {
+	attrs := []any{slog.String("error", err.Error())}
+	if sub != nil {
+		attrs = append(attrs, slog.String("subject", sub.Subject))
+	}
+	c.logger.Error("NATS error", attrs...)
 }
 
 // getAuthTypeName returns a human-readable string for the auth type
