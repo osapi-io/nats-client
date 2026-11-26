@@ -22,6 +22,7 @@ package client_test
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -319,6 +320,13 @@ func (s *StreamPublicTestSuite) TestStreamRead() {
 
 		_, err := s.client.StreamRead(s.ctx, "S", 0, 2)
 		s.EqualError(err, "create ordered consumer on S: boom")
+	})
+
+	s.Run("with a count less than 1 returns an error", func() {
+		for _, count := range []int{0, -1} {
+			_, err := s.client.StreamRead(s.ctx, "S", 0, count)
+			s.EqualError(err, fmt.Sprintf("read stream S: count %d is less than 1", count))
+		}
 	})
 }
 

@@ -37,8 +37,7 @@ import (
 // is immutable once a stream is created.
 const jsErrCodeStorageTypeChange = 10052
 
-// streamReadWait is how long StreamRead waits for its messages when ctx has
-// no deadline.
+// streamReadWait is the longest that StreamRead waits for its messages.
 const streamReadWait = 5 * time.Second
 
 // isStorageTypeError returns true if the error is a NATS API error indicating
@@ -191,7 +190,8 @@ func (c *Client) StreamGetMsg(
 
 // StreamRead reads up to count messages of the stream name in order, from the
 // sequence from, or from the first message when from is 0. It waits for the
-// messages until the deadline of ctx, or for 5 seconds when ctx has none.
+// messages for up to 5 seconds, and stops sooner when ctx ends. count must be
+// 1 or more.
 // It returns the messages that it read; when the read stopped with an error,
 // it returns them with the error.
 func (c *Client) StreamRead(
@@ -203,6 +203,9 @@ func (c *Client) StreamRead(
 	return observe(ctx, c.tel,
 		newOp("stream.read", name, attribute.Int("nats.message.count", count)),
 		func(ctx context.Context) ([]jetstream.Msg, error) {
+			if count < 1 {
+				return nil, fmt.Errorf("read stream %s: count %d is less than 1", name, count)
+			}
 			s, err := c.stream(ctx, name)
 			if err != nil {
 				return nil, err
@@ -220,11 +223,10 @@ func (c *Client) StreamRead(
 				return nil, fmt.Errorf("create ordered consumer on %s: %w", name, err)
 			}
 
-			wait := streamReadWait
-			if deadline, ok := ctx.Deadline(); ok {
-				wait = time.Until(deadline)
-			}
-			batch, err := consumer.Fetch(count, jetstream.FetchMaxWait(wait))
+			// The wait ends at streamReadWait, or sooner when ctx ends.
+			wait, cancel := context.WithTimeout(ctx, streamReadWait)
+			defer cancel()
+			batch, err := consumer.Fetch(count, jetstream.FetchContext(wait))
 			if err != nil {
 				return nil, fmt.Errorf("read stream %s: %w", name, err)
 			}

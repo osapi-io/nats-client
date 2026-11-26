@@ -211,6 +211,11 @@ func (c *Client) KVKeys(
 				for key := range lister.Keys() {
 					keys = append(keys, key)
 				}
+				// The lister closes its channel when ctx ends, so a list
+				// that ctx cut short is not a full one.
+				if err := ctx.Err(); err != nil {
+					return nil, fmt.Errorf("list the keys of %s: %w", bucket, err)
+				}
 
 				return keys, nil
 			})

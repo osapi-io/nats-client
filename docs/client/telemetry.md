@@ -53,9 +53,12 @@ limit, and a subject can name a host.
 
 ## What is not a failure
 
-A key or an object that is not there is the answer of a read. Thus
-`jetstream.ErrKeyNotFound` and `jetstream.ErrObjectNotFound` do not mark the
-span as an error, and do not add `error.type`. The caller gets the error.
+A key, an object or a message that is not there is the answer of a read. A key
+that exists, or a revision that is not the last one, is the answer of `KVCreate`
+or `KVUpdate`: it is the compare that the caller asked for. Thus
+`jetstream.ErrKeyNotFound`, `jetstream.ErrObjectNotFound`,
+`jetstream.ErrMsgNotFound` and `jetstream.ErrKeyExists` do not mark the span as
+an error, and do not add `error.type`. The caller gets the error.
 
 ## When the meter provider fails
 

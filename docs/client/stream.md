@@ -36,9 +36,10 @@ msgs, err := c.StreamRead(readCtx, "AUDIT", 1, 100)
 
 ## Behavior to know
 
-- `StreamRead` waits for its messages until the deadline of `ctx`. When `ctx`
-  has no deadline, it waits 5 seconds. A sequence of 0 reads from the first
-  message.
+- `StreamRead` waits for its messages for up to 5 seconds. It stops sooner when
+  `ctx` ends: at the deadline of `ctx` with no error, or at a cancel with the
+  error of `ctx`. A sequence of 0 reads from the first message. A `count` less
+  than 1 is an error.
 - When the read stops with an error, `StreamRead` returns the messages that it
   read and the error.
 - `StreamInfo` asks the server each time. Thus the state is current.

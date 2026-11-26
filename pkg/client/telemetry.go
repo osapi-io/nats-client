@@ -111,13 +111,17 @@ func newOp(
 	}
 }
 
-// failed reports whether err is a failure of the call. A key or an object that
-// is not there is the answer of a read.
+// failed reports whether err is a failure of the call. A key, an object or a
+// message that is not there is the answer of a read. A key that exists, or a
+// revision that is not the last one, is the answer of KVCreate or KVUpdate:
+// the compare that the caller asked for.
 func failed(
 	err error,
 ) bool {
 	return err != nil && !errors.Is(err, jetstream.ErrKeyNotFound) &&
-		!errors.Is(err, jetstream.ErrObjectNotFound)
+		!errors.Is(err, jetstream.ErrObjectNotFound) &&
+		!errors.Is(err, jetstream.ErrMsgNotFound) &&
+		!errors.Is(err, jetstream.ErrKeyExists)
 }
 
 // errorType names the type of the innermost error of err, such as
