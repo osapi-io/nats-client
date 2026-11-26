@@ -290,7 +290,12 @@ func (c *Client) Consume(
 	wait := fetchRetryFirst
 	for {
 		// Take one slot, waiting for a handler to finish when all are in
-		// use, then each other slot that is free.
+		// use, then each other slot that is free. A select picks at random
+		// when both are ready, so an ended ctx is checked first.
+		if ctx.Err() != nil {
+			c.logger.Debug("stopping message consumption due to context cancellation")
+			return ctx.Err()
+		}
 		select {
 		case <-ctx.Done():
 			c.logger.Debug("stopping message consumption due to context cancellation")

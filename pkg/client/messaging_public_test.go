@@ -359,6 +359,35 @@ func (s *MessagingPublicTestSuite) TestConsume() {
 		}
 	})
 
+	s.Run("when ctx ends while each handler runs returns after they return", func() {
+		ctx, cancel := context.WithCancel(s.ctx)
+		defer cancel()
+
+		consumer := mocks.NewMockConsumer(s.ctrl)
+		consumer.EXPECT().
+			Fetch(1, gomock.Any()).
+			Return(s.batchOf(nil, s.msg("slow", "ack", nil)), nil)
+		s.js.EXPECT().Consumer(gomock.Any(), "S", "c").Return(consumer, nil)
+
+		started := make(chan struct{})
+		release := make(chan struct{})
+		go func() {
+			<-started
+			// Consume now waits for the slot of the handler.
+			time.Sleep(20 * time.Millisecond)
+			cancel()
+			time.Sleep(20 * time.Millisecond)
+			close(release)
+		}()
+
+		err := s.client.Consume(ctx, "S", "c", func(context.Context, jetstream.Msg) error {
+			close(started)
+			<-release
+			return nil
+		}, &client.ConsumeOptions{MaxInFlight: 1})
+		s.ErrorIs(err, context.Canceled)
+	})
+
 	s.Run("with no options uses the defaults", func() {
 		ctx, cancel := context.WithCancel(s.ctx)
 		cancel()
