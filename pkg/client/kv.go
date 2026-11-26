@@ -49,13 +49,17 @@ func (c *Client) KVCreateOrUpdate(
 		func(ctx context.Context) error {
 			c.logger.Debug("creating/updating KV bucket", slog.String("bucket", config.Bucket))
 
-			kv, err := c.ExtJS.CreateOrUpdateKeyValue(ctx, config)
+			js, err := c.jetStream()
+			if err != nil {
+				return err
+			}
+			kv, err := js.CreateOrUpdateKeyValue(ctx, config)
 			if err != nil && isStorageTypeError(err) {
 				c.logger.Debug(
 					"KV bucket exists with different storage type, keeping it",
 					slog.String("bucket", config.Bucket),
 				)
-				kv, err = c.ExtJS.KeyValue(ctx, config.Bucket)
+				kv, err = js.KeyValue(ctx, config.Bucket)
 			}
 			if err != nil {
 				return fmt.Errorf("failed to create/update KV bucket %s: %w", config.Bucket, err)
@@ -74,7 +78,11 @@ func (c *Client) keyValue(
 	if kv, ok := c.kvs.Load(bucket); ok {
 		return kv.(jetstream.KeyValue), nil
 	}
-	kv, err := c.ExtJS.KeyValue(ctx, bucket)
+	js, err := c.jetStream()
+	if err != nil {
+		return nil, err
+	}
+	kv, err := js.KeyValue(ctx, bucket)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get KV bucket %s: %w", bucket, err)
 	}
@@ -95,8 +103,9 @@ func onKV[T any](
 		var zero T
 		return zero, err
 	}
+	v, err := fn(kv)
 
-	return fn(kv)
+	return v, forget(&c.kvs, bucket, err)
 }
 
 // KVGet returns the entry of key in bucket. A key that is not there returns

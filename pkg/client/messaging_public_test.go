@@ -87,7 +87,7 @@ func (s *MessagingPublicTestSuite) TestPublish() {
 	s.Run("before Connect returns an error", func() {
 		s.client.ExtJS = nil
 
-		s.ErrorContains(s.client.Publish(s.ctx, "jobs.x", nil), "jetstream not initialized")
+		s.ErrorIs(s.client.Publish(s.ctx, "jobs.x", nil), client.ErrNotConnected)
 	})
 }
 

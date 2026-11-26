@@ -137,13 +137,14 @@ func (c *Client) Publish(
 		slog.Int("data_size", len(data)),
 	)
 
-	if c.ExtJS == nil {
-		return fmt.Errorf("jetstream not initialized: call Connect() first")
+	js, err := c.jetStream()
+	if err != nil {
+		return err
 	}
 
 	return c.publish(ctx, "nats.publish", subject, data,
 		func(ctx context.Context, msg *nats.Msg) error {
-			if _, err := c.ExtJS.PublishMsg(ctx, msg); err != nil {
+			if _, err := js.PublishMsg(ctx, msg); err != nil {
 				return fmt.Errorf("failed to publish message to %s: %w", subject, err)
 			}
 
@@ -273,7 +274,11 @@ func (c *Client) Consume(
 		slog.Int("max_in_flight", limit),
 	)
 
-	cons, err := c.ExtJS.Consumer(ctx, stream, consumer)
+	js, err := c.jetStream()
+	if err != nil {
+		return err
+	}
+	cons, err := js.Consumer(ctx, stream, consumer)
 	if err != nil {
 		return fmt.Errorf(
 			"failed to get consumer %s from stream %s: %w",

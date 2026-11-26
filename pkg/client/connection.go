@@ -20,11 +20,60 @@
 
 package client
 
-// Close closes the underlying NATS connection.
+import (
+	"errors"
+	"sync"
+
+	"github.com/nats-io/nats.go/jetstream"
+)
+
+// ErrNotConnected is the error of a call to JetStream before Connect, or
+// after Close.
+var ErrNotConnected = errors.New("not connected: call Connect first")
+
+// jetStream returns the JetStream API of the connection, or ErrNotConnected.
+func (c *Client) jetStream() (jetstream.JetStream, error) {
+	if c.ExtJS == nil {
+		return nil, ErrNotConnected
+	}
+
+	return c.ExtJS, nil
+}
+
+// gone reports whether err says that a bucket or a stream is not on the
+// server.
+func gone(
+	err error,
+) bool {
+	return errors.Is(err, jetstream.ErrBucketNotFound) ||
+		errors.Is(err, jetstream.ErrStreamNotFound) ||
+		errors.Is(err, jetstream.ErrNoStreamResponse)
+}
+
+// forget drops the handle of name from handles when err says that it is gone,
+// so that the next call asks the server again, and returns err.
+func forget(
+	handles *sync.Map,
+	name string,
+	err error,
+) error {
+	if gone(err) {
+		handles.Delete(name)
+	}
+
+	return err
+}
+
+// Close closes the underlying NATS connection, and forgets the handles of the
+// buckets and streams. Connect can then connect again.
 func (c *Client) Close() {
 	if c.NC != nil {
 		c.NC.Close()
 	}
+	c.ExtJS = nil
+	c.kvs.Clear()
+	c.objectStores.Clear()
+	c.streams.Clear()
 }
 
 // ConnectedURL returns the URL of the NATS server the client is connected to.
@@ -44,10 +93,5 @@ func (c *Client) ConnectedServerVersion() string {
 		return ""
 	}
 
-	wrapper, ok := c.NC.(*NATSConnWrapper)
-	if !ok || wrapper.Conn == nil {
-		return ""
-	}
-
-	return wrapper.Conn.ConnectedServerVersion()
+	return c.NC.ConnectedServerVersion()
 }

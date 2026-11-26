@@ -67,7 +67,11 @@ func (c *Client) StreamCreateOrUpdate(
 				slog.String("subjects", strings.Join(config.Subjects, ", ")),
 			)
 
-			stream, err := c.ExtJS.CreateOrUpdateStream(ctx, config)
+			js, err := c.jetStream()
+			if err != nil {
+				return err
+			}
+			stream, err := js.CreateOrUpdateStream(ctx, config)
 			if err != nil && isStorageTypeError(err) {
 				c.logger.Debug(
 					"stream exists with different storage type, keeping it",
@@ -102,7 +106,11 @@ func (c *Client) ConsumerCreateOrUpdate(
 				slog.String("stream", stream),
 			)
 
-			if _, err := c.ExtJS.CreateOrUpdateConsumer(ctx, stream, config); err != nil {
+			js, err := c.jetStream()
+			if err != nil {
+				return err
+			}
+			if _, err := js.CreateOrUpdateConsumer(ctx, stream, config); err != nil {
 				return fmt.Errorf("error creating consumer for stream %s: %w", stream, err)
 			}
 
@@ -119,13 +127,34 @@ func (c *Client) stream(
 	if s, ok := c.streams.Load(name); ok {
 		return s.(jetstream.Stream), nil
 	}
-	s, err := c.ExtJS.Stream(ctx, name)
+	js, err := c.jetStream()
+	if err != nil {
+		return nil, err
+	}
+	s, err := js.Stream(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get stream %s: %w", name, err)
 	}
 	c.streams.Store(name, s)
 
 	return s, nil
+}
+
+// onStream runs fn on the handle of the stream name.
+func onStream[T any](
+	ctx context.Context,
+	c *Client,
+	name string,
+	fn func(jetstream.Stream) (T, error),
+) (T, error) {
+	s, err := c.stream(ctx, name)
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	v, err := fn(s)
+
+	return v, forget(&c.streams, name, err)
 }
 
 // StreamInfo returns the configuration and the state of the stream name, such
@@ -137,16 +166,14 @@ func (c *Client) StreamInfo(
 ) (*jetstream.StreamInfo, error) {
 	return observe(ctx, c.tel, newOp("stream.info", name),
 		func(ctx context.Context) (*jetstream.StreamInfo, error) {
-			s, err := c.stream(ctx, name)
-			if err != nil {
-				return nil, err
-			}
-			info, err := s.Info(ctx)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get stream info for %s: %w", name, err)
-			}
+			return onStream(ctx, c, name, func(s jetstream.Stream) (*jetstream.StreamInfo, error) {
+				info, err := s.Info(ctx)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get stream info for %s: %w", name, err)
+				}
 
-			return info, nil
+				return info, nil
+			})
 		})
 }
 
@@ -159,12 +186,14 @@ func (c *Client) StreamLastMsg(
 	return observe(ctx, c.tel,
 		newOp("stream.last_msg", name, attribute.String("messaging.destination.name", subject)),
 		func(ctx context.Context) (*jetstream.RawStreamMsg, error) {
-			s, err := c.stream(ctx, name)
-			if err != nil {
-				return nil, err
-			}
-
-			return s.GetLastMsgForSubject(ctx, subject)
+			return onStream(
+				ctx,
+				c,
+				name,
+				func(s jetstream.Stream) (*jetstream.RawStreamMsg, error) {
+					return s.GetLastMsgForSubject(ctx, subject)
+				},
+			)
 		})
 }
 
@@ -179,12 +208,14 @@ func (c *Client) StreamGetMsg(
 	return observe(ctx, c.tel,
 		newOp("stream.get_msg", name),
 		func(ctx context.Context) (*jetstream.RawStreamMsg, error) {
-			s, err := c.stream(ctx, name)
-			if err != nil {
-				return nil, err
-			}
-
-			return s.GetMsg(ctx, seq)
+			return onStream(
+				ctx,
+				c,
+				name,
+				func(s jetstream.Stream) (*jetstream.RawStreamMsg, error) {
+					return s.GetMsg(ctx, seq)
+				},
+			)
 		})
 }
 
@@ -220,7 +251,8 @@ func (c *Client) StreamRead(
 			}
 			consumer, err := s.OrderedConsumer(ctx, cfg)
 			if err != nil {
-				return nil, fmt.Errorf("create ordered consumer on %s: %w", name, err)
+				return nil, forget(&c.streams, name,
+					fmt.Errorf("create ordered consumer on %s: %w", name, err))
 			}
 
 			// The wait ends at streamReadWait, or sooner when ctx ends.

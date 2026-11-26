@@ -24,6 +24,7 @@ import (
 	"crypto/tls"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/nats-io/nkeys"
@@ -73,7 +74,31 @@ type Options struct {
 	// MeterProvider records the metrics when Telemetry is on. Nil uses the
 	// global provider of the application.
 	MeterProvider metric.MeterProvider
+	// Reconnect is what the client does when the connection drops. Its zero
+	// value tries again forever, DefaultReconnectWait apart.
+	Reconnect ReconnectOptions
 }
+
+// ReconnectOptions is the reconnect policy of a Client. The client logs each
+// disconnect, each reconnect, the close of the connection, and each error
+// that the server sends, through its logger.
+type ReconnectOptions struct {
+	// MaxAttempts is the number of tries in a row after a drop. After them
+	// the client closes the connection, and each call fails. Zero tries
+	// forever, which is right for a process that runs for a long time.
+	MaxAttempts int
+	// Wait is the time between two tries. Zero is DefaultReconnectWait.
+	Wait time.Duration
+	// RetryFirstConnect makes Connect succeed when the server is not there
+	// yet, and try in the background as after a drop. A call before the
+	// connection is up waits or fails as after a drop. Without it, Connect
+	// returns the error of the first try, which a command that runs one
+	// time wants.
+	RetryFirstConnect bool
+}
+
+// DefaultReconnectWait is the Wait of a ReconnectOptions that has none.
+const DefaultReconnectWait = 2 * time.Second
 
 // AuthOptions holds authentication-related settings for connecting to NATS.
 type AuthOptions struct {

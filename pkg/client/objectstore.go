@@ -52,13 +52,17 @@ func (c *Client) ObjectStoreCreateOrUpdate(
 				slog.String("bucket", config.Bucket),
 			)
 
-			store, err := c.ExtJS.CreateOrUpdateObjectStore(ctx, config)
+			js, err := c.jetStream()
+			if err != nil {
+				return err
+			}
+			store, err := js.CreateOrUpdateObjectStore(ctx, config)
 			if err != nil && isStorageTypeError(err) {
 				c.logger.Debug(
 					"Object Store exists with different storage type, keeping it",
 					slog.String("bucket", config.Bucket),
 				)
-				store, err = c.ExtJS.ObjectStore(ctx, config.Bucket)
+				store, err = js.ObjectStore(ctx, config.Bucket)
 			}
 			if err != nil {
 				return fmt.Errorf(
@@ -81,7 +85,11 @@ func (c *Client) objectStore(
 	if store, ok := c.objectStores.Load(bucket); ok {
 		return store.(jetstream.ObjectStore), nil
 	}
-	store, err := c.ExtJS.ObjectStore(ctx, bucket)
+	js, err := c.jetStream()
+	if err != nil {
+		return nil, err
+	}
+	store, err := js.ObjectStore(ctx, bucket)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Object Store bucket %s: %w", bucket, err)
 	}
@@ -102,8 +110,9 @@ func onObjectStore[T any](
 		var zero T
 		return zero, err
 	}
+	v, err := fn(store)
 
-	return fn(store)
+	return v, forget(&c.objectStores, bucket, err)
 }
 
 // ObjectPut writes the object of meta, read from reader, to bucket.
