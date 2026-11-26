@@ -22,8 +22,10 @@ package client_test
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -100,6 +102,51 @@ func (s *ConsumeServerPublicTestSuite) TestConsume() {
 		}
 		cancel()
 		s.ErrorIs(<-done, context.Canceled)
+	})
+
+	s.Run("handles up to MaxInFlight messages at the same time", func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		var mu sync.Mutex
+		running, most, handled := 0, 0, 0
+		release := make(chan struct{})
+		done := make(chan error, 1)
+		go func() {
+			done <- s.client.Consume(ctx, "JOBS", "agent",
+				func(context.Context, jetstream.Msg) error {
+					mu.Lock()
+					running++
+					most = max(most, running)
+					mu.Unlock()
+					<-release
+					mu.Lock()
+					running--
+					handled++
+					mu.Unlock()
+					return nil
+				}, &client.ConsumeOptions{MaxInFlight: 2})
+		}()
+
+		for i := range 5 {
+			s.Require().NoError(
+				s.client.Publish(context.Background(), "jobs.x", fmt.Appendf(nil, "job-%d", i)),
+			)
+		}
+		s.Eventually(func() bool {
+			mu.Lock()
+			defer mu.Unlock()
+			return running == 2
+		}, 5*time.Second, 10*time.Millisecond)
+		close(release)
+		s.Eventually(func() bool {
+			mu.Lock()
+			defer mu.Unlock()
+			return handled == 5
+		}, 5*time.Second, 10*time.Millisecond)
+		cancel()
+		s.ErrorIs(<-done, context.Canceled)
+		s.Equal(2, most)
 	})
 
 	s.Run("when ctx ends while it waits for a message returns at once", func() {

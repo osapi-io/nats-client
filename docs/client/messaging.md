@@ -17,11 +17,11 @@ only to the subscribers that listen at that time.
 
 ## Types
 
-| Type                      | Description                                                  |
-| ------------------------- | ------------------------------------------------------------ |
-| `MsgHandler`              | `func(ctx context.Context, msg *nats.Msg)`                   |
-| `JetStreamMessageHandler` | `func(ctx context.Context, msg jetstream.Msg) error`         |
-| `ConsumeOptions`          | The queue group, and the maximum count of messages in flight |
+| Type                      | Description                                                           |
+| ------------------------- | --------------------------------------------------------------------- |
+| `MsgHandler`              | `func(ctx context.Context, msg *nats.Msg)`                            |
+| `JetStreamMessageHandler` | `func(ctx context.Context, msg jetstream.Msg) error`                  |
+| `ConsumeOptions`          | The maximum count of messages that `Consume` handles at the same time |
 
 ## Usage
 
@@ -32,7 +32,7 @@ err = c.Consume(ctx, "JOBS", "jobs-agent",
     func(ctx context.Context, msg jetstream.Msg) error {
         return process(ctx, msg.Data())
     },
-    &client.ConsumeOptions{QueueGroup: "job-agents", MaxInFlight: 10},
+    &client.ConsumeOptions{MaxInFlight: 10},
 )
 
 sub, err := c.Subscribe(ctx, "enroll.response.web-01",
@@ -48,9 +48,21 @@ defer sub.Unsubscribe()
   `ctx` of a handler has the trace context of the message. Thus the work of a
   handler is in the trace of the request that published the message. See
   [Telemetry](telemetry.md).
+- `Consume` runs up to `MaxInFlight` handlers at the same time. The default is
+  `DefaultMaxInFlight`, 10. It fetches only as many messages as it has free
+  handlers for, so a message that it fetched does not wait for its `AckWait`.
 - `Consume` acknowledges a message when the handler returns nil. When the
-  handler returns an error or panics, `Consume` does not acknowledge the
-  message. Then JetStream sends it again.
+  handler returns an error or panics, `Consume` sends a negative
+  acknowledgement. Then JetStream sends the message again, after the `BackOff`
+  of the consumer if it has one. When the error wraps `ErrTerminate`, `Consume`
+  ends the message, and JetStream does not send it again.
+- When a fetch fails, `Consume` tries again after 100 ms. The wait doubles after
+  each failure, up to 5 s. When the connection is closed, or the consumer or its
+  stream is gone, `Consume` returns the error, so the caller can make the
+  consumer again.
 - `Consume` runs until `ctx` ends, and then returns `ctx.Err()`. A wait for a
   message also stops when `ctx` ends. Thus a shutdown does not wait for the pull
-  request to expire.
+  request to expire. `Consume` returns only after each handler that it started
+  has returned.
+- A panic in a `Subscribe` handler does not stop the process. The span of the
+  message records it as an error.

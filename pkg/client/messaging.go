@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -42,16 +43,46 @@ import (
 type MsgHandler func(ctx context.Context, msg *nats.Msg)
 
 // JetStreamMessageHandler handles a JetStream message, with ctx as for
-// MsgHandler. An error leaves the message unacknowledged, so that JetStream
-// delivers it again.
+// MsgHandler. An error makes Consume negatively acknowledge the message, so
+// that JetStream delivers it again, after the BackOff of the consumer when it
+// has one. An error that wraps ErrTerminate ends the message instead: JetStream
+// does not deliver it again.
 type JetStreamMessageHandler func(ctx context.Context, msg jetstream.Msg) error
+
+// ErrTerminate is the error that a JetStreamMessageHandler wraps for a
+// message that must not be delivered again, such as one that it cannot
+// parse.
+var ErrTerminate = errors.New("terminate the message")
 
 // ConsumeOptions configures message consumption behavior.
 type ConsumeOptions struct {
-	// QueueGroup for load balancing across multiple consumers (optional)
-	QueueGroup string
-	// MaxInFlight limits the number of unacknowledged messages
+	// MaxInFlight is the number of messages that Consume handles at the same
+	// time. Zero is DefaultMaxInFlight.
 	MaxInFlight int
+}
+
+// DefaultMaxInFlight is the MaxInFlight of a Consume with no options or zero.
+const DefaultMaxInFlight = 10
+
+// fetchRetryFirst and fetchRetryLongest bound the wait of Consume after a fetch
+// fails. The wait doubles after each failure in a row, and a fetch that
+// succeeds sets it back to fetchRetryFirst.
+const (
+	fetchRetryFirst   = 100 * time.Millisecond
+	fetchRetryLongest = 5 * time.Second
+)
+
+// terminalFetchError reports whether err is a failure of a fetch that a retry
+// cannot fix: the connection is closed, or the consumer or its stream is
+// gone. Consume returns it, so that its caller can make the consumer again.
+func terminalFetchError(
+	err error,
+) bool {
+	return errors.Is(err, nats.ErrConnectionClosed) ||
+		errors.Is(err, jetstream.ErrConsumerNotFound) ||
+		errors.Is(err, jetstream.ErrConsumerDeleted) ||
+		errors.Is(err, jetstream.ErrStreamNotFound) ||
+		errors.Is(err, jetstream.ErrNoStreamResponse)
 }
 
 // subjectAttr is the attribute of the subject of a message, on its span only.
@@ -186,7 +217,17 @@ func (c *Client) Subscribe(
 			"nats.receive",
 			msg.Subject,
 			msg.Header,
-			func(ctx context.Context) error {
+			func(ctx context.Context) (err error) {
+				defer func() {
+					if r := recover(); r != nil {
+						c.logger.Error(
+							"panic in message handler",
+							slog.Any("panic", r),
+							slog.String("subject", msg.Subject),
+						)
+						err = fmt.Errorf("handler panicked: %v", r)
+					}
+				}()
 				handler(ctx, msg)
 
 				return nil
@@ -201,10 +242,18 @@ func (c *Client) Subscribe(
 }
 
 // Consume fetches the messages of the durable consumer on stream, and calls
-// handler for each, until ctx ends. A wait for a message also ends when ctx
-// ends. A message is acknowledged when handler
-// returns nil. A handler that returns an error or panics leaves it
-// unacknowledged, so that JetStream delivers it again.
+// handler for each, until ctx ends. It handles up to MaxInFlight messages at
+// the same time, and fetches only as many as it has room for. A wait for a
+// message also ends when ctx ends. Consume returns only after each handler
+// that it started has returned.
+//
+// A message is acknowledged when handler returns nil. A handler that returns
+// an error or panics makes it negatively acknowledged, so that JetStream
+// delivers it again. An error that wraps ErrTerminate ends it.
+//
+// A fetch that fails is tried again after a wait that doubles, up to
+// fetchRetryLongest. A failure that a retry cannot fix, such as a closed
+// connection or a consumer that is gone, ends Consume with that error.
 func (c *Client) Consume(
 	ctx context.Context,
 	stream string,
@@ -212,18 +261,16 @@ func (c *Client) Consume(
 	handler JetStreamMessageHandler,
 	opts *ConsumeOptions,
 ) error {
-	if opts == nil {
-		opts = &ConsumeOptions{
-			MaxInFlight: 10, // Default limit
-		}
+	limit := DefaultMaxInFlight
+	if opts != nil && opts.MaxInFlight > 0 {
+		limit = opts.MaxInFlight
 	}
 
 	c.logger.Debug(
 		"starting message consumption",
 		slog.String("stream", stream),
 		slog.String("consumer", consumer),
-		slog.String("queue_group", opts.QueueGroup),
-		slog.Int("max_in_flight", opts.MaxInFlight),
+		slog.Int("max_in_flight", limit),
 	)
 
 	cons, err := c.ExtJS.Consumer(ctx, stream, consumer)
@@ -236,48 +283,123 @@ func (c *Client) Consume(
 		)
 	}
 
+	slots := make(chan struct{}, limit)
+	var running sync.WaitGroup
+	defer running.Wait()
+
+	wait := fetchRetryFirst
 	for {
+		// Take one slot, waiting for a handler to finish when all are in
+		// use, then each other slot that is free.
 		select {
 		case <-ctx.Done():
 			c.logger.Debug("stopping message consumption due to context cancellation")
 			return ctx.Err()
-
-		default:
-			// FetchContext ends the wait for a message when ctx ends, so
-			// a shutdown does not wait for the expiry of the pull request.
-			msgs, err := cons.Fetch(1, jetstream.FetchContext(ctx))
-			if err != nil {
-				if errors.Is(err, nats.ErrTimeout) {
-					continue // Normal timeout, try again
-				}
-				c.logger.Error(
-					"error fetching messages",
-					slog.String("error", err.Error()),
-				)
-				continue
-			}
-
-			for msg := range msgs.Messages() {
-				err := c.receive(ctx, "nats.process", msg.Subject(), msg.Headers(),
-					func(ctx context.Context) error { return c.processMessage(ctx, msg, handler) })
-				if err != nil {
-					c.logger.Error(
-						"error processing message",
-						slog.String("error", err.Error()),
-						slog.String("subject", msg.Subject()),
-					)
-					// Don't ack failed messages - they'll be redelivered
-					continue
-				}
-
-				if err := msg.Ack(); err != nil {
-					c.logger.Error(
-						"error acknowledging message",
-						slog.String("error", err.Error()),
-					)
-				}
+		case slots <- struct{}{}:
+		}
+		n := 1
+	more:
+		for n < limit {
+			select {
+			case slots <- struct{}{}:
+				n++
+			default:
+				break more
 			}
 		}
+
+		got, err := c.fetch(ctx, cons, n, handler, slots, &running)
+		for range n - got {
+			<-slots
+		}
+		switch {
+		case err == nil:
+			wait = fetchRetryFirst
+		case ctx.Err() != nil:
+			return ctx.Err()
+		case terminalFetchError(err):
+			return fmt.Errorf("failed to fetch from consumer %s: %w", consumer, err)
+		default:
+			c.logger.Error("error fetching messages", slog.String("error", err.Error()))
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(wait):
+			}
+			wait = min(2*wait, fetchRetryLongest)
+		}
+	}
+}
+
+// fetch fetches up to n messages from cons, and starts a handler for each in
+// running. Each handler gives back its slot when it returns. fetch returns the
+// number of messages that it started, and the error of the fetch or of the
+// batch. A fetch that ends with no message is not an error.
+func (c *Client) fetch(
+	ctx context.Context,
+	cons jetstream.Consumer,
+	n int,
+	handler JetStreamMessageHandler,
+	slots chan struct{},
+	running *sync.WaitGroup,
+) (int, error) {
+	// FetchContext ends the wait for a message when ctx ends, so a shutdown
+	// does not wait for the expiry of the pull request.
+	batch, err := cons.Fetch(n, jetstream.FetchContext(ctx))
+	if err != nil {
+		if errors.Is(err, nats.ErrTimeout) {
+			return 0, nil
+		}
+
+		return 0, err
+	}
+
+	got := 0
+	for msg := range batch.Messages() {
+		got++
+		running.Add(1)
+		go func() {
+			defer running.Done()
+			defer func() { <-slots }()
+			c.handle(ctx, msg, handler)
+		}()
+	}
+	if err := batch.Error(); err != nil && !errors.Is(err, nats.ErrTimeout) {
+		return got, err
+	}
+
+	return got, nil
+}
+
+// handle runs handler for msg in its span, and acknowledges, negatively
+// acknowledges or ends msg by the result.
+func (c *Client) handle(
+	ctx context.Context,
+	msg jetstream.Msg,
+	handler JetStreamMessageHandler,
+) {
+	err := c.receive(ctx, "nats.process", msg.Subject(), msg.Headers(),
+		func(ctx context.Context) error { return c.processMessage(ctx, msg, handler) })
+
+	reply, verb := msg.Ack, "acknowledging"
+	switch {
+	case errors.Is(err, ErrTerminate):
+		reply, verb = msg.Term, "terminating"
+	case err != nil:
+		reply, verb = msg.Nak, "negatively acknowledging"
+	}
+	if err != nil {
+		c.logger.Error(
+			"error processing message",
+			slog.String("error", err.Error()),
+			slog.String("subject", msg.Subject()),
+		)
+	}
+	if err := reply(); err != nil {
+		c.logger.Error(
+			"error "+verb+" message",
+			slog.String("error", err.Error()),
+		)
 	}
 }
 

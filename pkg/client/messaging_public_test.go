@@ -22,8 +22,11 @@ package client_test
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -144,6 +147,22 @@ func (s *MessagingPublicTestSuite) TestSubscribe() {
 		s.Same(msg, got)
 	})
 
+	s.Run("a handler that panics does not stop the process", func() {
+		var deliver nats.MsgHandler
+		s.nc.EXPECT().
+			Subscribe("x", gomock.Any()).
+			DoAndReturn(func(_ string, h nats.MsgHandler) (*nats.Subscription, error) {
+				deliver = h
+				return &nats.Subscription{}, nil
+			})
+
+		_, err := s.client.Subscribe(s.ctx, "x", func(context.Context, *nats.Msg) {
+			panic("handler bug")
+		})
+		s.Require().NoError(err)
+		s.NotPanics(func() { deliver(&nats.Msg{Subject: "x"}) })
+	})
+
 	s.Run("when NATS refuses returns the error", func() {
 		s.nc.EXPECT().Subscribe("x", gomock.Any()).Return(nil, errBoom)
 
@@ -159,40 +178,64 @@ func (s *MessagingPublicTestSuite) TestSubscribe() {
 	})
 }
 
-// msg returns a message on subject that expects ack calls to Ack.
+// msg returns a message on subject that expects one reply: an Ack, a Nak or
+// a Term, as reply names, which returns replyErr.
 func (s *MessagingPublicTestSuite) msg(
 	subject string,
-	ack int,
-	ackErr error,
+	reply string,
+	replyErr error,
 ) *mocks.MockMsg {
 	m := mocks.NewMockMsg(s.ctrl)
 	m.EXPECT().Subject().Return(subject).AnyTimes()
 	m.EXPECT().Headers().Return(nats.Header{}).AnyTimes()
-	m.EXPECT().Ack().Return(ackErr).Times(ack)
+	switch reply {
+	case "ack":
+		m.EXPECT().Ack().Return(replyErr)
+	case "nak":
+		m.EXPECT().Nak().Return(replyErr)
+	case "term":
+		m.EXPECT().Term().Return(replyErr)
+	}
 
 	return m
 }
 
+// batchOf returns a batch of msgs, whose Error is err.
+func (s *MessagingPublicTestSuite) batchOf(
+	err error,
+	msgs ...jetstream.Msg,
+) *mocks.MockMessageBatch {
+	ch := make(chan jetstream.Msg, len(msgs))
+	for _, m := range msgs {
+		ch <- m
+	}
+	close(ch)
+	batch := mocks.NewMockMessageBatch(s.ctrl)
+	batch.EXPECT().Messages().Return(ch)
+	batch.EXPECT().Error().Return(err)
+
+	return batch
+}
+
 func (s *MessagingPublicTestSuite) TestConsume() {
-	s.Run("acknowledges a message only when the handler returns nil", func() {
+	s.Run("acknowledges, negatively acknowledges or ends each message by the handler", func() {
 		ctx, cancel := context.WithCancel(s.ctx)
 		defer cancel()
 
-		msgs := make(chan jetstream.Msg, 4)
-		msgs <- s.msg("ok", 1, nil)
-		msgs <- s.msg("ack-fails", 1, errBoom)
-		msgs <- s.msg("fails", 0, nil)
-		msgs <- s.msg("panics", 0, nil)
-		close(msgs)
-		batch := mocks.NewMockMessageBatch(s.ctrl)
-		batch.EXPECT().Messages().Return(msgs)
-
+		batch := s.batchOf(nil,
+			s.msg("ok", "ack", nil),
+			s.msg("ack-fails", "ack", errBoom),
+			s.msg("fails", "nak", nil),
+			s.msg("nak-fails", "nak", errBoom),
+			s.msg("terminate", "term", nil),
+			s.msg("panics", "nak", nil),
+		)
 		consumer := mocks.NewMockConsumer(s.ctrl)
 		gomock.InOrder(
-			consumer.EXPECT().Fetch(1, gomock.Any()).Return(nil, nats.ErrTimeout),
-			consumer.EXPECT().Fetch(1, gomock.Any()).Return(nil, errBoom),
+			consumer.EXPECT().Fetch(6, gomock.Any()).Return(nil, nats.ErrTimeout),
+			consumer.EXPECT().Fetch(6, gomock.Any()).Return(nil, errBoom),
 			consumer.EXPECT().
-				Fetch(1, gomock.Any()).
+				Fetch(6, gomock.Any()).
 				DoAndReturn(func(int, ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
 					// The loop stops after this batch.
 					cancel()
@@ -201,21 +244,119 @@ func (s *MessagingPublicTestSuite) TestConsume() {
 		)
 		s.js.EXPECT().Consumer(gomock.Any(), "S", "c").Return(consumer, nil)
 
+		var mu sync.Mutex
 		var handled []string
 		err := s.client.Consume(ctx, "S", "c", func(_ context.Context, m jetstream.Msg) error {
+			mu.Lock()
 			handled = append(handled, m.Subject())
+			mu.Unlock()
 			switch m.Subject() {
-			case "fails":
+			case "fails", "nak-fails":
 				return errBoom
+			case "terminate":
+				return fmt.Errorf("bad job: %w", client.ErrTerminate)
 			case "panics":
 				panic("handler bug")
 			}
 
 			return nil
-		}, &client.ConsumeOptions{QueueGroup: "q", MaxInFlight: 1})
+		}, &client.ConsumeOptions{MaxInFlight: 6})
 
 		s.ErrorIs(err, context.Canceled)
-		s.Equal([]string{"ok", "ack-fails", "fails", "panics"}, handled)
+		// Consume returns only after each handler returned.
+		s.ElementsMatch(
+			[]string{"ok", "ack-fails", "fails", "nak-fails", "terminate", "panics"},
+			handled,
+		)
+	})
+
+	s.Run("waits longer after each failed fetch", func() {
+		ctx, cancel := context.WithCancel(s.ctx)
+		defer cancel()
+
+		consumer := mocks.NewMockConsumer(s.ctrl)
+		var times []time.Time
+		consumer.EXPECT().
+			Fetch(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(int, ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+				times = append(times, time.Now())
+				if len(times) == 3 {
+					cancel()
+				}
+				return nil, errBoom
+			}).
+			Times(3)
+		s.js.EXPECT().Consumer(gomock.Any(), "S", "c").Return(consumer, nil)
+
+		err := s.client.Consume(ctx, "S", "c", func(context.Context, jetstream.Msg) error {
+			return nil
+		}, nil)
+
+		s.ErrorIs(err, context.Canceled)
+		s.GreaterOrEqual(times[1].Sub(times[0]), 100*time.Millisecond)
+		s.GreaterOrEqual(times[2].Sub(times[1]), 200*time.Millisecond)
+	})
+
+	s.Run("a failed batch is a failed fetch, and a batch that times out is not", func() {
+		ctx, cancel := context.WithCancel(s.ctx)
+		defer cancel()
+
+		consumer := mocks.NewMockConsumer(s.ctrl)
+		gomock.InOrder(
+			consumer.EXPECT().Fetch(1, gomock.Any()).Return(s.batchOf(nats.ErrTimeout), nil),
+			consumer.EXPECT().Fetch(1, gomock.Any()).Return(s.batchOf(errBoom), nil),
+			consumer.EXPECT().
+				Fetch(1, gomock.Any()).
+				DoAndReturn(func(int, ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+					cancel()
+					return nil, context.Canceled
+				}),
+		)
+		s.js.EXPECT().Consumer(gomock.Any(), "S", "c").Return(consumer, nil)
+
+		err := s.client.Consume(ctx, "S", "c", func(context.Context, jetstream.Msg) error {
+			return nil
+		}, &client.ConsumeOptions{MaxInFlight: 1})
+		s.ErrorIs(err, context.Canceled)
+	})
+
+	s.Run("when ctx ends in the wait after a failed fetch returns at once", func() {
+		ctx, cancel := context.WithCancel(s.ctx)
+		defer cancel()
+
+		consumer := mocks.NewMockConsumer(s.ctrl)
+		consumer.EXPECT().
+			Fetch(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(int, ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+				time.AfterFunc(20*time.Millisecond, cancel)
+				return nil, errBoom
+			})
+		s.js.EXPECT().Consumer(gomock.Any(), "S", "c").Return(consumer, nil)
+
+		err := s.client.Consume(ctx, "S", "c", func(context.Context, jetstream.Msg) error {
+			return nil
+		}, nil)
+		s.ErrorIs(err, context.Canceled)
+	})
+
+	s.Run("a failure that a retry cannot fix ends Consume", func() {
+		for _, fetchErr := range []error{
+			nats.ErrConnectionClosed,
+			jetstream.ErrConsumerNotFound,
+			jetstream.ErrConsumerDeleted,
+			jetstream.ErrStreamNotFound,
+			jetstream.ErrNoStreamResponse,
+		} {
+			consumer := mocks.NewMockConsumer(s.ctrl)
+			consumer.EXPECT().Fetch(gomock.Any(), gomock.Any()).Return(nil, fetchErr)
+			s.js.EXPECT().Consumer(gomock.Any(), "S", "c").Return(consumer, nil)
+
+			err := s.client.Consume(s.ctx, "S", "c", func(context.Context, jetstream.Msg) error {
+				return nil
+			}, nil)
+			s.ErrorIs(err, fetchErr)
+			s.ErrorContains(err, "failed to fetch from consumer c")
+		}
 	})
 
 	s.Run("with no options uses the defaults", func() {
