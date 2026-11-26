@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+// Package main is an example that connects to NATS with an NKey, and creates or
+// updates a stream.
 package main
 
 import (
