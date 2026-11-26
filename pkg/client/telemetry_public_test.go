@@ -187,6 +187,22 @@ func (s *TelemetryPublicTestSuite) TestErrors() {
 			name: "a key that is not there is the answer of a read",
 			err:  jetstream.ErrKeyNotFound,
 		},
+		{
+			name: "a message that is not there is the answer of a read",
+			err:  jetstream.ErrMsgNotFound,
+		},
+		{
+			name: "a key that exists is the answer of a create",
+			err:  jetstream.ErrKeyExists,
+		},
+		{
+			name: "a revision that is not the last is the answer of an update",
+			err: &jetstream.APIError{
+				Code:        400,
+				ErrorCode:   jetstream.JSErrCodeStreamWrongLastSequence,
+				Description: "wrong last sequence: 3",
+			},
+		},
 	}
 
 	for _, tc := range tests {

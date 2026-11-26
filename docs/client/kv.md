@@ -37,6 +37,8 @@ keys, err := c.KVKeys(ctx, "job-queue", "jobs.>")
 
 - A key that is not there makes `KVGet` return `jetstream.ErrKeyNotFound`.
 - A bucket with no keys makes `KVKeys` return an empty list, not an error.
+- When `ctx` ends during the list, `KVKeys` returns the error of `ctx`, not the
+  keys that it got before.
 - `KVWatch` sends the current values first, then each change. NATS sends a nil
   entry after the current values. The channel does not send it. The channel
   closes when `ctx` ends, or when the watch stops.

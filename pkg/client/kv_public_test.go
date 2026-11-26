@@ -299,6 +299,18 @@ func (s *KVPublicTestSuite) TestKVKeys() {
 			s.Equal(tc.want, got)
 		})
 	}
+
+	s.Run("when ctx ends during the list returns its error, not a short list", func() {
+		s.open()
+		ctx, cancel := context.WithCancel(s.ctx)
+		cancel()
+		s.kv.EXPECT().ListKeys(gomock.Any()).Return(s.lister("a"), nil)
+
+		got, err := s.client.KVKeys(ctx, "b")
+		s.ErrorIs(err, context.Canceled)
+		s.EqualError(err, "list the keys of b: context canceled")
+		s.Nil(got)
+	})
 }
 
 func (s *KVPublicTestSuite) TestKVWatch() {
