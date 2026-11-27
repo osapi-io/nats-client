@@ -129,6 +129,9 @@ type Client struct {
 	kvs          sync.Map
 	objectStores sync.Map
 	streams      sync.Map
+	// mu guards ExtJS against Connect and Close, so that a call that runs
+	// while the client closes reads it once and does not race.
+	mu sync.RWMutex
 
 	// NC underlying connection.
 	NC NATSConnector

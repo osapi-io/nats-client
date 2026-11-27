@@ -47,6 +47,8 @@ var GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
 // A second Connect without a Close between returns ErrConnected, so that the
 // first connection does not leak.
 func (c *Client) Connect() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.ExtJS != nil {
 		return ErrConnected
 	}
@@ -128,6 +130,9 @@ func (c *Client) Connect() error {
 	if err != nil {
 		return fmt.Errorf("error enabling jetstream: %w", err)
 	}
+	// A call that raced the last Close can store a handle of the old
+	// connection after Close forgot them.
+	c.forgetHandles()
 	c.ExtJS = extJS
 
 	c.logger.Debug("successfully connected to NATS and enabled JetStream")
