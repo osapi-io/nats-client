@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
@@ -140,6 +141,33 @@ func (s *KVPublicTestSuite) TestHandle() {
 		s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil).Times(2)
 
 		s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
+		s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
+	})
+
+	s.Run("keeps no handle of a connection that changed during the call", func() {
+		next := mocks.NewMockJetStream(s.ctrl)
+		// The connection closes and connects again while the server
+		// answers on the old one.
+		s.js.EXPECT().KeyValue(gomock.Any(), "b").
+			DoAndReturn(func(context.Context, string) (jetstream.KeyValue, error) {
+				s.client.ExtJS = next
+				return s.kv, nil
+			})
+		fresh := mocks.NewMockKeyValue(s.ctrl)
+		next.EXPECT().KeyValue(gomock.Any(), "b").Return(fresh, nil)
+		s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil)
+		fresh.EXPECT().Delete(gomock.Any(), "k").Return(nil)
+
+		s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
+		s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
+	})
+
+	s.Run("asks again after a call says the connection closed", func() {
+		s.js.EXPECT().KeyValue(gomock.Any(), "b").Return(s.kv, nil).Times(2)
+		s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nats.ErrConnectionClosed)
+		s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil)
+
+		s.ErrorIs(s.client.KVDelete(s.ctx, "b", "k"), nats.ErrConnectionClosed)
 		s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
 	})
 }

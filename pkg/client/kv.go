@@ -64,7 +64,7 @@ func (c *Client) KVCreateOrUpdate(
 			if err != nil {
 				return fmt.Errorf("failed to create/update KV bucket %s: %w", config.Bucket, err)
 			}
-			c.kvs.Store(config.Bucket, kv)
+			c.remember(&c.kvs, js, config.Bucket, kv)
 
 			return nil
 		})
@@ -86,7 +86,7 @@ func (c *Client) keyValue(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get KV bucket %s: %w", bucket, err)
 	}
-	c.kvs.Store(bucket, kv)
+	c.remember(&c.kvs, js, bucket, kv)
 
 	return kv, nil
 }

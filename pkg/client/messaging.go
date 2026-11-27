@@ -160,8 +160,8 @@ func (c *Client) PublishCore(
 	subject string,
 	data []byte,
 ) error {
-	if c.NC == nil {
-		return fmt.Errorf("NATS connection not established: call Connect() first")
+	if err := c.withConn(func(NATSConnector) error { return nil }); err != nil {
+		return err
 	}
 
 	c.logger.Debug(
@@ -172,7 +172,9 @@ func (c *Client) PublishCore(
 
 	return c.publish(ctx, "nats.publish_core", subject, data,
 		func(_ context.Context, msg *nats.Msg) error {
-			if err := c.NC.PublishMsg(msg); err != nil {
+			if err := c.withConn(func(nc NATSConnector) error {
+				return nc.PublishMsg(msg)
+			}); err != nil {
 				return fmt.Errorf("failed to publish to %s: %w", subject, err)
 			}
 
@@ -206,13 +208,28 @@ func (c *Client) Subscribe(
 	subject string,
 	handler MsgHandler,
 ) (*nats.Subscription, error) {
-	if c.NC == nil {
-		return nil, fmt.Errorf("NATS connection not established: call Connect() first")
-	}
-
 	c.logger.Debug("subscribing to subject", slog.String("subject", subject))
 
-	sub, err := c.NC.Subscribe(subject, func(msg *nats.Msg) {
+	var sub *nats.Subscription
+	err := c.withConn(func(nc NATSConnector) error {
+		var subErr error
+		sub, subErr = nc.Subscribe(subject, c.handlerOf(ctx, handler))
+		return subErr
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to subscribe to %s: %w", subject, err)
+	}
+
+	return sub, nil
+}
+
+// handlerOf is the core NATS handler that runs handler for each message, in
+// a consumer span, with a panic in handler logged and kept from the process.
+func (c *Client) handlerOf(
+	ctx context.Context,
+	handler MsgHandler,
+) nats.MsgHandler {
+	return func(msg *nats.Msg) {
 		_ = c.receive(
 			ctx,
 			"nats.receive",
@@ -234,12 +251,7 @@ func (c *Client) Subscribe(
 				return nil
 			},
 		)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to subscribe to %s: %w", subject, err)
 	}
-
-	return sub, nil
 }
 
 // Consume fetches the messages of the durable consumer on stream, and calls
