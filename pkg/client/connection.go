@@ -33,11 +33,14 @@ var ErrNotConnected = errors.New("not connected: call Connect first")
 
 // jetStream returns the JetStream API of the connection, or ErrNotConnected.
 func (c *Client) jetStream() (jetstream.JetStream, error) {
-	if c.ExtJS == nil {
+	c.mu.RLock()
+	js := c.ExtJS
+	c.mu.RUnlock()
+	if js == nil {
 		return nil, ErrNotConnected
 	}
 
-	return c.ExtJS, nil
+	return js, nil
 }
 
 // gone reports whether err says that a bucket or a stream is not on the
@@ -65,12 +68,21 @@ func forget(
 }
 
 // Close closes the underlying NATS connection, and forgets the handles of the
-// buckets and streams. Connect can then connect again.
+// buckets and streams. Connect can then connect again. A call that runs while
+// the client closes returns its result or ErrNotConnected.
 func (c *Client) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.NC != nil {
 		c.NC.Close()
 	}
 	c.ExtJS = nil
+	c.forgetHandles()
+}
+
+// forgetHandles drops the handle of each bucket and stream, so that the next
+// call asks the server again.
+func (c *Client) forgetHandles() {
 	c.kvs.Clear()
 	c.objectStores.Clear()
 	c.streams.Clear()

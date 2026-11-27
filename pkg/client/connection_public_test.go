@@ -22,8 +22,10 @@ package client_test
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/nats-io/nats.go/jetstream"
@@ -112,6 +114,58 @@ func (s *ConnectionPublicTestSuite) TestCloseForgetsTheConnection() {
 			s.ErrorIs(err, jetstream.ErrKeyNotFound)
 		},
 	)
+}
+
+func (s *ConnectionPublicTestSuite) TestCloseDuringCalls() {
+	tests := []struct {
+		name    string
+		readers int
+		calls   int
+	}{
+		{
+			name:    "a call that runs while the client closes returns its result or ErrNotConnected",
+			readers: 8,
+			calls:   200,
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			ctx := context.Background()
+			s.mockJS.EXPECT().
+				KeyValue(gomock.Any(), "b").
+				Return(nil, jetstream.ErrBucketNotFound).
+				AnyTimes()
+			s.mockNATS.EXPECT().Close().AnyTimes()
+
+			var wg, started sync.WaitGroup
+			errs := make(chan error, tc.readers*tc.calls)
+			started.Add(tc.readers)
+			for range tc.readers {
+				wg.Go(func() {
+					for i := range tc.calls {
+						_, err := s.client.KVStatus(ctx, "b")
+						errs <- err
+						if i == 0 {
+							started.Done()
+						}
+					}
+				})
+			}
+			started.Wait()
+			s.client.Close()
+			wg.Wait()
+			close(errs)
+
+			for err := range errs {
+				if !errors.Is(err, client.ErrNotConnected) {
+					s.ErrorIs(err, jetstream.ErrBucketNotFound)
+				}
+			}
+			_, err := s.client.KVStatus(ctx, "b")
+			s.ErrorIs(err, client.ErrNotConnected)
+		})
+	}
 }
 
 func (s *ConnectionPublicTestSuite) TestNotConnected() {
