@@ -112,13 +112,10 @@ func (s *MessagingPublicTestSuite) TestPublishCore() {
 		)
 	})
 
-	s.Run("before Connect returns an error", func() {
-		s.client.NC = nil
+	s.Run("before Connect returns ErrNotConnected", func() {
+		fresh := client.New(slog.New(slog.DiscardHandler), &client.Options{})
 
-		s.ErrorContains(
-			s.client.PublishCore(s.ctx, "enroll.request", nil),
-			"NATS connection not established",
-		)
+		s.ErrorIs(fresh.PublishCore(s.ctx, "enroll.request", nil), client.ErrNotConnected)
 	})
 }
 
@@ -170,11 +167,11 @@ func (s *MessagingPublicTestSuite) TestSubscribe() {
 		s.EqualError(err, "failed to subscribe to x: boom")
 	})
 
-	s.Run("before Connect returns an error", func() {
-		s.client.NC = nil
+	s.Run("before Connect returns ErrNotConnected", func() {
+		fresh := client.New(slog.New(slog.DiscardHandler), &client.Options{})
 
-		_, err := s.client.Subscribe(s.ctx, "x", func(context.Context, *nats.Msg) {})
-		s.ErrorContains(err, "NATS connection not established")
+		_, err := fresh.Subscribe(s.ctx, "x", func(context.Context, *nats.Msg) {})
+		s.ErrorIs(err, client.ErrNotConnected)
 	})
 }
 

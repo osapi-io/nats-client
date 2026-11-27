@@ -24,11 +24,11 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-// ErrNotConnected is the error of a call to JetStream before Connect, or
-// after Close.
+// ErrNotConnected is the error of a call before Connect, or after Close.
 var ErrNotConnected = errors.New("not connected: call Connect first")
 
 // jetStream returns the JetStream API of the connection, or ErrNotConnected.
@@ -43,12 +43,44 @@ func (c *Client) jetStream() (jetstream.JetStream, error) {
 	return js, nil
 }
 
+// withConn runs fn on the connection while Close and Connect wait, or returns
+// ErrNotConnected.
+func (c *Client) withConn(
+	fn func(NATSConnector) error,
+) error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.ExtJS == nil || c.NC == nil {
+		return ErrNotConnected
+	}
+
+	return fn(c.NC)
+}
+
+// remember stores handle as the handle of name in handles, only while js is
+// still the JetStream of the connection. A call that took js before a Close
+// and finished after the next Connect does not keep a handle of the closed
+// connection.
+func (c *Client) remember(
+	handles *sync.Map,
+	js jetstream.JetStream,
+	name string,
+	handle any,
+) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.ExtJS == js {
+		handles.Store(name, handle)
+	}
+}
+
 // gone reports whether err says that a bucket or a stream is not on the
-// server.
+// server, or that the connection of its handle closed.
 func gone(
 	err error,
 ) bool {
-	return errors.Is(err, jetstream.ErrBucketNotFound) ||
+	return errors.Is(err, nats.ErrConnectionClosed) ||
+		errors.Is(err, jetstream.ErrBucketNotFound) ||
 		errors.Is(err, jetstream.ErrStreamNotFound) ||
 		errors.Is(err, jetstream.ErrNoStreamResponse)
 }
@@ -91,19 +123,23 @@ func (c *Client) forgetHandles() {
 // ConnectedURL returns the URL of the NATS server the client is connected to.
 // Returns an empty string if not connected.
 func (c *Client) ConnectedURL() string {
-	if c.NC == nil {
-		return ""
-	}
+	var url string
+	_ = c.withConn(func(nc NATSConnector) error {
+		url = nc.ConnectedUrl()
+		return nil
+	})
 
-	return c.NC.ConnectedUrl()
+	return url
 }
 
 // ConnectedServerVersion returns the version of the connected NATS server.
 // Returns an empty string if not connected or the version is unavailable.
 func (c *Client) ConnectedServerVersion() string {
-	if c.NC == nil {
-		return ""
-	}
+	var version string
+	_ = c.withConn(func(nc NATSConnector) error {
+		version = nc.ConnectedServerVersion()
+		return nil
+	})
 
-	return c.NC.ConnectedServerVersion()
+	return version
 }

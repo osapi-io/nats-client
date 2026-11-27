@@ -71,7 +71,7 @@ func (c *Client) ObjectStoreCreateOrUpdate(
 					err,
 				)
 			}
-			c.objectStores.Store(config.Bucket, store)
+			c.remember(&c.objectStores, js, config.Bucket, store)
 
 			return nil
 		})
@@ -93,7 +93,7 @@ func (c *Client) objectStore(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Object Store bucket %s: %w", bucket, err)
 	}
-	c.objectStores.Store(bucket, store)
+	c.remember(&c.objectStores, js, bucket, store)
 
 	return store, nil
 }

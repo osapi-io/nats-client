@@ -83,7 +83,7 @@ func (c *Client) StreamCreateOrUpdate(
 			if err != nil {
 				return fmt.Errorf("error creating/updating stream %s: %w", config.Name, err)
 			}
-			c.streams.Store(config.Name, stream)
+			c.remember(&c.streams, js, config.Name, stream)
 
 			return nil
 		})
@@ -135,7 +135,7 @@ func (c *Client) stream(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get stream %s: %w", name, err)
 	}
-	c.streams.Store(name, s)
+	c.remember(&c.streams, js, name, s)
 
 	return s, nil
 }

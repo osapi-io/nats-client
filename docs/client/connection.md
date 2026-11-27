@@ -101,10 +101,20 @@ credential, and does not wait.
 
 ## Behavior to know
 
-- A call to JetStream before `Connect`, or after `Close`, returns
-  `ErrNotConnected`.
+- A call before `Connect`, or after `Close`, returns `ErrNotConnected`. This
+  includes `PublishCore` and `Subscribe`. `ConnectedURL` and
+  `ConnectedServerVersion` return an empty string then.
+- A call can run while another goroutine calls `Close` or `Connect`. It returns
+  its result or `ErrNotConnected`.
 - A second `Connect` without a `Close` between returns `ErrConnected`.
+- `Connect` on a client that `New` made with nil options returns `ErrNoOptions`.
+  A nil logger in `New` is `slog.Default()`.
+- When JetStream fails to start, `Connect` closes the connection that it made,
+  so that the connection does not keep reconnecting.
 - `Close` forgets the handle of each bucket and stream. A bucket or a stream
-  that the server says is gone is also forgotten, so the next call asks the
-  server again.
+  that the server says is gone, or a handle whose connection closed, is also
+  forgotten, so the next call asks the server again. A call that finishes after
+  a `Close` and the next `Connect` keeps no handle of the old connection.
+- With an injected `KeyPair`, `Connect` does not read the seed file. It clears
+  the seed bytes of the file after it parses them.
 - An IPv6 address in `Host` connects, such as `::1`.

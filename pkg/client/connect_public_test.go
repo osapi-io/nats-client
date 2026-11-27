@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -129,6 +130,28 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 					Connect(gomock.Any(), gomock.Any()).
 					Return(&nats.Conn{}, nil).
 					Times(1)
+				originalGetJetStream := client.GetJetStream
+				client.GetJetStream = func(_ *nats.Conn) (jetstream.JetStream, error) {
+					return mocks.NewMockJetStream(s.mockCtrl), nil
+				}
+				s.T().Cleanup(func() { client.GetJetStream = originalGetJetStream })
+			},
+			validateFunc: func(err error) {
+				s.NoError(err)
+			},
+		},
+		{
+			name:     "an injected KeyPair needs no seed file",
+			authType: client.NKeyAuth,
+			mockSetup: func() {
+				mockKP := mocks.NewMockKeyPair(s.mockCtrl)
+				mockKP.EXPECT().PublicKey().Return("test-pub-key", nil)
+				s.client.KeyPair = mockKP
+				s.client.Opts.Auth.NKeyFile = filepath.Join(s.T().TempDir(), "no-such.nkey")
+
+				s.mockNATS.EXPECT().
+					Connect(gomock.Any(), gomock.Any()).
+					Return(&nats.Conn{}, nil)
 				originalGetJetStream := client.GetJetStream
 				client.GetJetStream = func(_ *nats.Conn) (jetstream.JetStream, error) {
 					return mocks.NewMockJetStream(s.mockCtrl), nil
@@ -327,6 +350,8 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 					Connect(gomock.Any(), gomock.Any()).
 					Return(&nats.Conn{}, nil).
 					Times(1)
+				// The connection that JetStream fails on is closed, not leaked.
+				s.mockNATS.EXPECT().Close().Times(1)
 
 				// Override GetJetStream to simulate an error
 				originalGetJetStream := client.GetJetStream
@@ -350,6 +375,12 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			tc.validateFunc(s.client.Connect())
 		})
 	}
+}
+
+func (s *ConnectPublicTestSuite) TestConnectWithoutOptions() {
+	s.Run("with nil options and a nil logger returns ErrNoOptions", func() {
+		s.ErrorIs(client.New(nil, nil).Connect(), client.ErrNoOptions)
+	})
 }
 
 func (s *ConnectPublicTestSuite) TestGetJetStream() {
@@ -383,6 +414,7 @@ func (s *ConnectPublicTestSuite) TestGetJetStream() {
 					Connect(gomock.Any(), gomock.Any()).
 					Return(&nats.Conn{}, nil).
 					Times(1)
+				s.mockNATS.EXPECT().Close().Times(1)
 			},
 			callFunc: func() (jetstream.JetStream, error) {
 				return nil, s.client.Connect()

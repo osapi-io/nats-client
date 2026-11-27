@@ -27,11 +27,15 @@ import (
 	"log/slog"
 )
 
-// New creates a new Client instance using the provided logger and Options.
+// New creates a new Client instance using the provided logger and Options. A
+// nil logger is slog.Default(). Connect refuses nil options.
 func New(
 	logger *slog.Logger,
 	opts *Options,
 ) *Client {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	c := &Client{
 		logger: logger,
 		Opts:   opts,

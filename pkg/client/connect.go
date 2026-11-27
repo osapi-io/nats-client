@@ -36,6 +36,10 @@ import (
 // ErrConnected is the error of a Connect on a client that is connected.
 var ErrConnected = errors.New("already connected: call Close first")
 
+// ErrNoOptions is the error of a Connect on a client that New made with nil
+// options.
+var ErrNoOptions = errors.New("no options: give New the options of the connection")
+
 // GetJetStream is a public variable function wrapping jetstream.New.
 var GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
 	return jetstream.New(nc)
@@ -51,6 +55,9 @@ func (c *Client) Connect() error {
 	defer c.mu.Unlock()
 	if c.ExtJS != nil {
 		return ErrConnected
+	}
+	if c.Opts == nil {
+		return ErrNoOptions
 	}
 
 	scheme := "nats"
@@ -84,20 +91,9 @@ func (c *Client) Connect() error {
 		opts = append(opts, nats.UserInfo(c.Opts.Auth.Username, c.Opts.Auth.Password))
 		nc, err = c.NC.Connect(natsURL, opts...)
 	case NKeyAuth:
-		seed, readErr := os.ReadFile(c.Opts.Auth.NKeyFile)
-		if readErr != nil {
-			return fmt.Errorf("failed to read nkey seed file: %w", readErr)
-		}
-
-		var kp nkeys.KeyPair
-		if c.KeyPair != nil {
-			kp = c.KeyPair // mocked
-		} else {
-			var kpErr error
-			kp, kpErr = nkeys.FromSeed(seed)
-			if kpErr != nil {
-				return fmt.Errorf("failed to parse nkey seed: %w", kpErr)
-			}
+		kp, kpErr := c.nkeyPair()
+		if kpErr != nil {
+			return kpErr
 		}
 
 		pubKey, pubErr := kp.PublicKey()
@@ -128,6 +124,9 @@ func (c *Client) Connect() error {
 
 	extJS, err := GetJetStream(nc)
 	if err != nil {
+		// The connection would keep trying to reconnect, with no client to
+		// close it.
+		c.NC.Close()
 		return fmt.Errorf("error enabling jetstream: %w", err)
 	}
 	// A call that raced the last Close can store a handle of the old
@@ -138,6 +137,26 @@ func (c *Client) Connect() error {
 	c.logger.Debug("successfully connected to NATS and enabled JetStream")
 
 	return nil
+}
+
+// nkeyPair returns the key pair of the connection: the injected KeyPair, or
+// the one in the seed file of the options. The seed bytes are cleared after
+// they are parsed.
+func (c *Client) nkeyPair() (nkeys.KeyPair, error) {
+	if c.KeyPair != nil {
+		return c.KeyPair, nil
+	}
+	seed, err := os.ReadFile(c.Opts.Auth.NKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read nkey seed file: %w", err)
+	}
+	defer clear(seed)
+	kp, err := nkeys.FromSeed(seed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse nkey seed: %w", err)
+	}
+
+	return kp, nil
 }
 
 // reconnectOptions returns the options of the reconnect policy of the
