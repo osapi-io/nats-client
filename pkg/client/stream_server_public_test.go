@@ -128,6 +128,22 @@ func (s *StreamServerPublicTestSuite) TestStreamReadLeavesNoConsumer() {
 	s.Equal(0, info.State.Consumers)
 }
 
+func (s *StreamServerPublicTestSuite) TestStreamCreateOrUpdateKeepsStorage() {
+	s.Run("a new storage type keeps the old one, and applies the rest", func() {
+		ctx := context.Background()
+		s.Require().NoError(s.client.StreamCreateOrUpdate(ctx, jetstream.StreamConfig{
+			Name:     "AUDIT",
+			Subjects: []string{"audit.>", "more.>"},
+			Storage:  jetstream.FileStorage,
+		}))
+
+		info, err := s.client.StreamInfo(ctx, "AUDIT")
+		s.Require().NoError(err)
+		s.Equal(jetstream.MemoryStorage, info.Config.Storage)
+		s.Equal([]string{"audit.>", "more.>"}, info.Config.Subjects)
+	})
+}
+
 func TestStreamServerPublicTestSuite(t *testing.T) {
 	suite.Run(t, new(StreamServerPublicTestSuite))
 }
