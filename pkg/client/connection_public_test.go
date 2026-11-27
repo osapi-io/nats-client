@@ -56,7 +56,7 @@ func (s *ConnectionPublicTestSuite) SetupTest() {
 		Port: 4222,
 	})
 	s.client.NC = s.mockNATS
-	s.client.ExtJS = s.mockJS
+	client.SetJetStream(s.client, s.mockJS)
 }
 
 func (s *ConnectionPublicTestSuite) TearDownTest() {
@@ -103,13 +103,13 @@ func (s *ConnectionPublicTestSuite) TestCloseForgetsTheConnection() {
 
 			s.mockNATS.EXPECT().Close()
 			s.client.Close()
-			s.Nil(s.client.ExtJS)
+			s.Nil(client.JetStreamOf(s.client))
 			_, err = s.client.KVGet(ctx, "b", "k")
 			s.ErrorIs(err, client.ErrNotConnected)
 
 			js := mocks.NewMockJetStream(s.mockCtrl)
 			js.EXPECT().KeyValue(gomock.Any(), "b").Return(kv, nil)
-			s.client.ExtJS = js
+			client.SetJetStream(s.client, js)
 			_, err = s.client.KVGet(ctx, "b", "k")
 			s.ErrorIs(err, jetstream.ErrKeyNotFound)
 		},
@@ -195,7 +195,7 @@ func (s *ConnectionPublicTestSuite) TestNotConnected() {
 	}
 	for name, call := range calls {
 		s.Run(name+" before Connect returns ErrNotConnected", func() {
-			s.client.ExtJS = nil
+			client.SetJetStream(s.client, nil)
 			s.ErrorIs(call(), client.ErrNotConnected)
 		})
 	}
@@ -251,6 +251,39 @@ func (s *ConnectionPublicTestSuite) TestGoneHandle() {
 		_, err = s.client.StreamGetMsg(ctx, "S", 1)
 		s.ErrorIs(err, jetstream.ErrMsgNotFound)
 	})
+}
+
+func (s *ConnectionPublicTestSuite) TestJetStream() {
+	tests := []struct {
+		name         string
+		setup        func()
+		validateFunc func(jetstream.JetStream, error)
+	}{
+		{
+			name:  "when connected returns the JetStream API of the connection",
+			setup: func() {},
+			validateFunc: func(js jetstream.JetStream, err error) {
+				s.NoError(err)
+				s.Same(s.mockJS, js)
+			},
+		},
+		{
+			name:  "when not connected returns ErrNotConnected",
+			setup: func() { client.SetJetStream(s.client, nil) },
+			validateFunc: func(js jetstream.JetStream, err error) {
+				s.ErrorIs(err, client.ErrNotConnected)
+				s.Nil(js)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			s.SetupTest()
+			tc.setup()
+			tc.validateFunc(s.client.JetStream())
+		})
+	}
 }
 
 func (s *ConnectionPublicTestSuite) TestConnectedURL() {

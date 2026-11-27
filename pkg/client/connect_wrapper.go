@@ -24,7 +24,6 @@ import "github.com/nats-io/nats.go"
 
 // NATSConnector defines an interface for managing a NATS connection.
 type NATSConnector interface {
-	JetStream(opts ...nats.JSOpt) (nats.JetStreamContext, error)
 	Close()
 	ConnectedUrl() string
 	ConnectedServerVersion() string
@@ -38,13 +37,6 @@ type NATSConnector interface {
 // NATSConnWrapper is a concrete implementation of NATSConnector, wrapping a *nats.Conn.
 type NATSConnWrapper struct {
 	Conn *nats.Conn
-}
-
-// JetStream wraps the JetStream method of nats.Conn.
-func (n *NATSConnWrapper) JetStream(
-	opts ...nats.JSOpt,
-) (nats.JetStreamContext, error) {
-	return n.Conn.JetStream(opts...)
 }
 
 // Close wraps the Close method of nats.Conn.

@@ -31,10 +31,11 @@ import (
 // ErrNotConnected is the error of a call before Connect, or after Close.
 var ErrNotConnected = errors.New("not connected: call Connect first")
 
-// jetStream returns the JetStream API of the connection, or ErrNotConnected.
-func (c *Client) jetStream() (jetstream.JetStream, error) {
+// JetStream returns the JetStream API of the connection, for a call that this
+// client does not wrap, or ErrNotConnected.
+func (c *Client) JetStream() (jetstream.JetStream, error) {
 	c.mu.RLock()
-	js := c.ExtJS
+	js := c.js
 	c.mu.RUnlock()
 	if js == nil {
 		return nil, ErrNotConnected
@@ -50,7 +51,7 @@ func (c *Client) withConn(
 ) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if c.ExtJS == nil || c.NC == nil {
+	if c.js == nil || c.NC == nil {
 		return ErrNotConnected
 	}
 
@@ -69,7 +70,7 @@ func (c *Client) remember(
 ) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if c.ExtJS == js {
+	if c.js == js {
 		handles.Store(name, handle)
 	}
 }
@@ -108,7 +109,7 @@ func (c *Client) Close() {
 	if c.NC != nil {
 		c.NC.Close()
 	}
-	c.ExtJS = nil
+	c.js = nil
 	c.forgetHandles()
 }
 

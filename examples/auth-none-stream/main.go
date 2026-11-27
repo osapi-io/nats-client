@@ -45,7 +45,7 @@ func main() {
 
 	c := client.New(logger, opts)
 
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(context.Background()); err != nil {
 		logger.Error("failed to connect", "error", err)
 		os.Exit(1)
 	}

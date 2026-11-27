@@ -19,7 +19,7 @@ c := client.New(logger, &client.Options{
     Name: "my-app",
 })
 
-if err := c.Connect(); err != nil {
+if err := c.Connect(ctx); err != nil {
     log.Fatal(err)
 }
 ```

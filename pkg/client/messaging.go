@@ -137,7 +137,7 @@ func (c *Client) Publish(
 		slog.Int("data_size", len(data)),
 	)
 
-	js, err := c.jetStream()
+	js, err := c.JetStream()
 	if err != nil {
 		return err
 	}
@@ -154,12 +154,16 @@ func (c *Client) Publish(
 
 // PublishCore publishes data to subject with core NATS, not JetStream: for a
 // message that no stream keeps, such as an enrollment request. The headers
-// carry the trace context, as with Publish.
+// carry the trace context, as with Publish. A ctx that ended publishes
+// nothing.
 func (c *Client) PublishCore(
 	ctx context.Context,
 	subject string,
 	data []byte,
 ) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("failed to publish to %s: %w", subject, err)
+	}
 	if err := c.withConn(func(NATSConnector) error { return nil }); err != nil {
 		return err
 	}
@@ -200,9 +204,9 @@ func (c *Client) receive(
 	return err
 }
 
-// Subscribe calls handler for each core NATS message on subject, until the
-// subscription is drained or unsubscribed. ctx is the base of the context of
-// each call.
+// Subscribe calls handler for each core NATS message on subject, until ctx
+// ends or the subscription is drained or unsubscribed. ctx is the base of the
+// context of each call, and the end of ctx unsubscribes.
 func (c *Client) Subscribe(
 	ctx context.Context,
 	subject string,
@@ -219,6 +223,9 @@ func (c *Client) Subscribe(
 	if err != nil {
 		return nil, fmt.Errorf("failed to subscribe to %s: %w", subject, err)
 	}
+	// A subscription that is already gone, such as after Close, needs no
+	// unsubscribe.
+	context.AfterFunc(ctx, func() { _ = sub.Unsubscribe() })
 
 	return sub, nil
 }
@@ -286,7 +293,7 @@ func (c *Client) Consume(
 		slog.Int("max_in_flight", limit),
 	)
 
-	js, err := c.jetStream()
+	js, err := c.JetStream()
 	if err != nil {
 		return err
 	}

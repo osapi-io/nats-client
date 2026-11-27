@@ -68,7 +68,7 @@ func (c *Client) StreamCreateOrUpdate(
 				slog.String("subjects", strings.Join(config.Subjects, ", ")),
 			)
 
-			js, err := c.jetStream()
+			js, err := c.JetStream()
 			if err != nil {
 				return err
 			}
@@ -107,7 +107,7 @@ func (c *Client) ConsumerCreateOrUpdate(
 				slog.String("stream", stream),
 			)
 
-			js, err := c.jetStream()
+			js, err := c.JetStream()
 			if err != nil {
 				return err
 			}
@@ -128,7 +128,7 @@ func (c *Client) stream(
 	if s, ok := c.streams.Load(name); ok {
 		return s.(jetstream.Stream), nil
 	}
-	js, err := c.jetStream()
+	js, err := c.JetStream()
 	if err != nil {
 		return nil, err
 	}

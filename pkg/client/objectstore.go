@@ -52,7 +52,7 @@ func (c *Client) ObjectStoreCreateOrUpdate(
 				slog.String("bucket", config.Bucket),
 			)
 
-			js, err := c.jetStream()
+			js, err := c.JetStream()
 			if err != nil {
 				return err
 			}
@@ -85,7 +85,7 @@ func (c *Client) objectStore(
 	if store, ok := c.objectStores.Load(bucket); ok {
 		return store.(jetstream.ObjectStore), nil
 	}
-	js, err := c.jetStream()
+	js, err := c.JetStream()
 	if err != nil {
 		return nil, err
 	}

@@ -21,12 +21,14 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -48,47 +50,60 @@ var GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
 // Connect establishes the connection to the NATS server and JetStream context.
 // This method returns an error if there are any issues during connection.
 //
+// ctx bounds the dial. Its deadline is the dial timeout of each server, in
+// place of the default of nats.go. A ctx that ended before the dial, or while
+// it ran, ends Connect with ctx's error, and leaves no connection.
+//
 // A second Connect without a Close between returns ErrConnected, so that the
 // first connection does not leak.
-func (c *Client) Connect() error {
+func (c *Client) Connect(
+	ctx context.Context,
+) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("connect to nats: %w", err)
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.ExtJS != nil {
+	if c.js != nil {
 		return ErrConnected
 	}
-	if c.Opts == nil {
+	if c.opts == nil {
 		return ErrNoOptions
 	}
 
 	scheme := "nats"
-	if c.Opts.TLS != nil {
+	if c.opts.TLS != nil {
 		scheme = "tls"
 	}
-	natsURL := scheme + "://" + net.JoinHostPort(c.Opts.Host, strconv.Itoa(c.Opts.Port))
+	natsURL := scheme + "://" + net.JoinHostPort(c.opts.Host, strconv.Itoa(c.opts.Port))
 
 	c.logger.Debug(
 		"connecting to NATS server",
 		slog.String("url", natsURL),
 		slog.String("auth_type", c.getAuthTypeName()),
-		slog.String("client_name", c.Opts.Name),
+		slog.String("client_name", c.opts.Name),
 	)
 
 	var nc *nats.Conn
 	var err error
 
 	opts := c.reconnectOptions()
-	if c.Opts.Name != "" {
-		opts = append(opts, nats.Name(c.Opts.Name))
+	if c.opts.Name != "" {
+		opts = append(opts, nats.Name(c.opts.Name))
 	}
-	if c.Opts.TLS != nil {
-		opts = append(opts, nats.Secure(c.Opts.TLS))
+	if c.opts.TLS != nil {
+		opts = append(opts, nats.Secure(c.opts.TLS))
+	}
+	if deadline, ok := ctx.Deadline(); ok {
+		opts = append(opts, nats.Timeout(max(time.Until(deadline), time.Millisecond)))
 	}
 
-	switch c.Opts.Auth.AuthType {
+	switch c.opts.Auth.AuthType {
 	case NoAuth:
 		nc, err = c.NC.Connect(natsURL, opts...)
 	case UserPassAuth:
-		opts = append(opts, nats.UserInfo(c.Opts.Auth.Username, c.Opts.Auth.Password))
+		opts = append(opts, nats.UserInfo(c.opts.Auth.Username, c.opts.Auth.Password))
 		nc, err = c.NC.Connect(natsURL, opts...)
 	case NKeyAuth:
 		kp, kpErr := c.nkeyPair()
@@ -109,10 +124,10 @@ func (c *Client) Connect() error {
 	case CredsAuth:
 		// nats.UserCredentials reads the file on each connect, so a missing
 		// file is reported here rather than as a failed handshake.
-		if _, statErr := os.Stat(c.Opts.Auth.CredsFile); statErr != nil {
+		if _, statErr := os.Stat(c.opts.Auth.CredsFile); statErr != nil {
 			return fmt.Errorf("failed to read creds file: %w", statErr)
 		}
-		opts = append(opts, nats.UserCredentials(c.Opts.Auth.CredsFile))
+		opts = append(opts, nats.UserCredentials(c.opts.Auth.CredsFile))
 		nc, err = c.NC.Connect(natsURL, opts...)
 	default:
 		return fmt.Errorf("unsupported authentication method")
@@ -120,6 +135,11 @@ func (c *Client) Connect() error {
 
 	if err != nil {
 		return fmt.Errorf("error connecting to nats: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		c.NC.Close()
+
+		return fmt.Errorf("connect to nats: %w", err)
 	}
 
 	extJS, err := GetJetStream(nc)
@@ -132,7 +152,7 @@ func (c *Client) Connect() error {
 	// A call that raced the last Close can store a handle of the old
 	// connection after Close forgot them.
 	c.forgetHandles()
-	c.ExtJS = extJS
+	c.js = extJS
 
 	c.logger.Debug("successfully connected to NATS and enabled JetStream")
 
@@ -143,10 +163,10 @@ func (c *Client) Connect() error {
 // the one in the seed file of the options. The seed bytes are cleared after
 // they are parsed.
 func (c *Client) nkeyPair() (nkeys.KeyPair, error) {
-	if c.KeyPair != nil {
-		return c.KeyPair, nil
+	if c.keyPair != nil {
+		return c.keyPair, nil
 	}
-	seed, err := os.ReadFile(c.Opts.Auth.NKeyFile)
+	seed, err := os.ReadFile(c.opts.Auth.NKeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read nkey seed file: %w", err)
 	}
@@ -162,7 +182,7 @@ func (c *Client) nkeyPair() (nkeys.KeyPair, error) {
 // reconnectOptions returns the options of the reconnect policy of the
 // client, with a handler that logs each change of the connection.
 func (c *Client) reconnectOptions() []nats.Option {
-	policy := c.Opts.Reconnect
+	policy := c.opts.Reconnect
 	attempts := policy.MaxAttempts
 	if attempts == 0 {
 		attempts = -1
@@ -231,7 +251,7 @@ func (c *Client) asyncError(
 
 // getAuthTypeName returns a human-readable string for the auth type
 func (c *Client) getAuthTypeName() string {
-	switch c.Opts.Auth.AuthType {
+	switch c.opts.Auth.AuthType {
 	case NoAuth:
 		return "none"
 	case UserPassAuth:

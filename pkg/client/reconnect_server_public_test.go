@@ -21,6 +21,7 @@ package client_test
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"net"
 	"strings"
@@ -87,7 +88,7 @@ func (s *ReconnectServerPublicTestSuite) TestReconnect() {
 			Port:      port,
 			Reconnect: client.ReconnectOptions{Wait: 50 * time.Millisecond},
 		})
-		s.Require().NoError(c.Connect())
+		s.Require().NoError(c.Connect(context.Background()))
 		defer c.Close()
 
 		srv.Shutdown()

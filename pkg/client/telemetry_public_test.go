@@ -70,7 +70,7 @@ func (s *TelemetryPublicTestSuite) SetupTest() {
 		TracerProvider: s.tp,
 		MeterProvider:  sdkmetric.NewMeterProvider(sdkmetric.WithReader(s.reader)),
 	})
-	s.client.ExtJS = s.js
+	client.SetJetStream(s.client, s.js)
 	s.previous = otel.GetTextMapPropagator()
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 }
@@ -307,7 +307,7 @@ func (s *TelemetryPublicTestSuite) TestGlobalProviders() {
 		defer otel.SetTracerProvider(previous)
 
 		c := client.New(slog.Default(), &client.Options{Telemetry: true})
-		c.ExtJS = s.js
+		client.SetJetStream(c, s.js)
 		s.js.EXPECT().KeyValue(gomock.Any(), "jobs").Return(s.kv, nil)
 		s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil)
 
@@ -340,7 +340,7 @@ func (s *TelemetryPublicTestSuite) TestBrokenMeterProvider() {
 		TracerProvider: s.tp,
 		MeterProvider:  brokenMeterProvider{},
 	})
-	c.ExtJS = s.js
+	client.SetJetStream(c, s.js)
 	s.js.EXPECT().KeyValue(gomock.Any(), "jobs").Return(s.kv, nil)
 	s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil)
 

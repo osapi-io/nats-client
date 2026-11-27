@@ -58,7 +58,7 @@ func main() {
 
 	c := client.New(logger, opts)
 
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(context.Background()); err != nil {
 		logger.Error("failed to connect", "error", err)
 		os.Exit(1)
 	}
@@ -128,7 +128,13 @@ func main() {
 
 	// Later, retrieve the stream and consumer using the extended API.
 	// This high-level API call lets you access operations like Consume.
-	stream, err := c.ExtJS.Stream(ctx, streamName)
+	js, err := c.JetStream()
+	if err != nil {
+		logger.Error("error getting jetstream", "error", err)
+		os.Exit(1)
+	}
+
+	stream, err := js.Stream(ctx, streamName)
 	if err != nil {
 		logger.Error("error retrieving stream", "error", err)
 		os.Exit(1)
