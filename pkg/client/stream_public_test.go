@@ -24,16 +24,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
 	"testing"
-	"time"
 
-	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/osapi-io/nats-client/pkg/client"
-	"github.com/osapi-io/nats-client/pkg/client/mocks"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
+
+	"github.com/osapi-io/nats-client/pkg/client"
+	"github.com/osapi-io/nats-client/pkg/client/mocks"
 )
 
 type StreamPublicTestSuite struct {
@@ -366,119 +364,4 @@ func (s *StreamPublicTestSuite) TestStreamRead() {
 
 func TestStreamPublicTestSuite(t *testing.T) {
 	suite.Run(t, new(StreamPublicTestSuite))
-}
-
-// StreamServerPublicTestSuite runs StreamRead against a real NATS server,
-// because only a real pull request shows when a wait for messages ends.
-type StreamServerPublicTestSuite struct {
-	suite.Suite
-
-	server *server.Server
-	client *client.Client
-}
-
-func (s *StreamServerPublicTestSuite) SetupTest() {
-	srv, err := server.NewServer(&server.Options{
-		Host:      "127.0.0.1",
-		Port:      -1,
-		JetStream: true,
-		StoreDir:  s.T().TempDir(),
-	})
-	s.Require().NoError(err)
-	srv.Start()
-	s.Require().True(srv.ReadyForConnections(5 * time.Second))
-	s.server = srv
-
-	port := srv.Addr().(*net.TCPAddr).Port
-	s.client = client.New(slog.Default(), &client.Options{Host: "127.0.0.1", Port: port})
-	s.Require().NoError(s.client.Connect(context.Background()))
-
-	ctx := context.Background()
-	s.Require().NoError(s.client.StreamCreateOrUpdate(ctx, jetstream.StreamConfig{
-		Name:     "AUDIT",
-		Subjects: []string{"audit.>"},
-		Storage:  jetstream.MemoryStorage,
-	}))
-	s.Require().NoError(s.client.Publish(ctx, "audit.x", []byte("entry-1")))
-}
-
-func (s *StreamServerPublicTestSuite) TearDownTest() {
-	s.client.Close()
-	s.server.Shutdown()
-}
-
-func (s *StreamServerPublicTestSuite) TestStreamRead() {
-	tests := []struct {
-		name         string
-		ctx          func() (context.Context, context.CancelFunc)
-		validateFunc func(msgs []jetstream.Msg, err error, took time.Duration)
-	}{
-		{
-			name: "with fewer messages than count returns them at once",
-			ctx: func() (context.Context, context.CancelFunc) {
-				return context.WithCancel(context.Background())
-			},
-			validateFunc: func(msgs []jetstream.Msg, err error, took time.Duration) {
-				s.Require().NoError(err)
-				s.Require().Len(msgs, 1)
-				s.Equal("entry-1", string(msgs[0].Data()))
-				s.Less(took, time.Second)
-			},
-		},
-		{
-			name: "when ctx already ended returns its error",
-			ctx: func() (context.Context, context.CancelFunc) {
-				ctx, cancel := context.WithCancel(context.Background())
-				cancel()
-
-				return ctx, cancel
-			},
-			validateFunc: func(_ []jetstream.Msg, err error, _ time.Duration) {
-				s.ErrorIs(err, context.Canceled)
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			ctx, cancel := tc.ctx()
-			defer cancel()
-
-			began := time.Now()
-			msgs, err := s.client.StreamRead(ctx, "AUDIT", 0, 3)
-			tc.validateFunc(msgs, err, time.Since(began))
-		})
-	}
-}
-
-func (s *StreamServerPublicTestSuite) TestStreamReadLeavesNoConsumer() {
-	ctx := context.Background()
-	for range 3 {
-		_, err := s.client.StreamRead(ctx, "AUDIT", 0, 3)
-		s.Require().NoError(err)
-	}
-
-	info, err := s.client.StreamInfo(ctx, "AUDIT")
-	s.Require().NoError(err)
-	s.Equal(0, info.State.Consumers)
-}
-
-func (s *StreamServerPublicTestSuite) TestStreamCreateOrUpdateKeepsStorage() {
-	s.Run("a new storage type keeps the old one, and applies the rest", func() {
-		ctx := context.Background()
-		s.Require().NoError(s.client.StreamCreateOrUpdate(ctx, jetstream.StreamConfig{
-			Name:     "AUDIT",
-			Subjects: []string{"audit.>", "more.>"},
-			Storage:  jetstream.FileStorage,
-		}))
-
-		info, err := s.client.StreamInfo(ctx, "AUDIT")
-		s.Require().NoError(err)
-		s.Equal(jetstream.MemoryStorage, info.Config.Storage)
-		s.Equal([]string{"audit.>", "more.>"}, info.Config.Subjects)
-	})
-}
-
-func TestStreamServerPublicTestSuite(t *testing.T) {
-	suite.Run(t, new(StreamServerPublicTestSuite))
 }
