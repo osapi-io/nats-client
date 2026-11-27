@@ -274,6 +274,40 @@ func (s *MessagingPublicTestSuite) TestConsume() {
 		)
 	})
 
+	s.Run("when ctx ends while each slot is in use returns at once", func() {
+		ctx, cancel := context.WithCancel(s.ctx)
+		defer cancel()
+
+		consumer := mocks.NewMockConsumer(s.ctrl)
+		consumer.EXPECT().
+			Fetch(1, gomock.Any()).
+			Return(s.batchOf(nil, s.msg("jobs.a", "ack", nil)), nil).
+			Times(1)
+		s.js.EXPECT().Consumer(gomock.Any(), "S", "c").Return(consumer, nil)
+
+		started := make(chan struct{})
+		release := make(chan struct{})
+		done := make(chan error, 1)
+		go func() {
+			done <- s.client.Consume(ctx, "S", "c", func(context.Context, jetstream.Msg) error {
+				close(started)
+				<-release
+
+				return nil
+			}, &client.ConsumeOptions{MaxInFlight: 1})
+		}()
+
+		// The one slot is in use, so Consume waits in the select for a free
+		// slot or the end of ctx.
+		<-started
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+		time.Sleep(50 * time.Millisecond)
+		close(release)
+
+		s.ErrorIs(<-done, context.Canceled)
+	})
+
 	s.Run("waits longer after each failed fetch", func() {
 		ctx, cancel := context.WithCancel(s.ctx)
 		defer cancel()
