@@ -73,34 +73,59 @@ func (s *StreamServerPublicTestSuite) TearDownTest() {
 }
 
 func (s *StreamServerPublicTestSuite) TestStreamRead() {
-	s.Run("with fewer messages than count returns them at the deadline of ctx", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-		defer cancel()
+	tests := []struct {
+		name         string
+		ctx          func() (context.Context, context.CancelFunc)
+		validateFunc func(msgs []jetstream.Msg, err error, took time.Duration)
+	}{
+		{
+			name: "with fewer messages than count returns them at once",
+			ctx: func() (context.Context, context.CancelFunc) {
+				return context.WithCancel(context.Background())
+			},
+			validateFunc: func(msgs []jetstream.Msg, err error, took time.Duration) {
+				s.Require().NoError(err)
+				s.Require().Len(msgs, 1)
+				s.Equal("entry-1", string(msgs[0].Data()))
+				s.Less(took, time.Second)
+			},
+		},
+		{
+			name: "when ctx already ended returns its error",
+			ctx: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
 
-		msgs, err := s.client.StreamRead(ctx, "AUDIT", 0, 3)
-		s.Require().NoError(err)
-		s.Require().Len(msgs, 1)
-		s.Equal("entry-1", string(msgs[0].Data()))
-	})
+				return ctx, cancel
+			},
+			validateFunc: func(_ []jetstream.Msg, err error, _ time.Duration) {
+				s.ErrorIs(err, context.Canceled)
+			},
+		},
+	}
 
-	s.Run("when ctx ends with no deadline returns at once", func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		time.AfterFunc(100*time.Millisecond, cancel)
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			ctx, cancel := tc.ctx()
+			defer cancel()
 
-		began := time.Now()
-		msgs, err := s.client.StreamRead(ctx, "AUDIT", 0, 3)
-		s.ErrorIs(err, context.Canceled)
-		s.Len(msgs, 1)
-		s.Less(time.Since(began), 2*time.Second)
-	})
+			began := time.Now()
+			msgs, err := s.client.StreamRead(ctx, "AUDIT", 0, 3)
+			tc.validateFunc(msgs, err, time.Since(began))
+		})
+	}
+}
 
-	s.Run("when ctx already ended returns its error", func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-
+func (s *StreamServerPublicTestSuite) TestStreamReadLeavesNoConsumer() {
+	ctx := context.Background()
+	for range 3 {
 		_, err := s.client.StreamRead(ctx, "AUDIT", 0, 3)
-		s.ErrorIs(err, context.Canceled)
-	})
+		s.Require().NoError(err)
+	}
+
+	info, err := s.client.StreamInfo(ctx, "AUDIT")
+	s.Require().NoError(err)
+	s.Equal(0, info.State.Consumers)
 }
 
 func TestStreamServerPublicTestSuite(t *testing.T) {
