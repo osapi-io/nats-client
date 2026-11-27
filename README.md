@@ -9,7 +9,7 @@
 <p align="center">A Go package that connects to a NATS server and operates on it.</p>
 
 <p align="center">
-  <a href="https://github.com/osapi-io/nats-client/releases/latest"><img alt="release" src="https://img.shields.io/github/release/osapi-io/nats-client.svg?style=for-the-badge"></a>
+  <a href="https://github.com/osapi-io/nats-client/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/osapi-io/nats-client?style=for-the-badge"></a>
   <a href="https://codecov.io/gh/osapi-io/nats-client"><img alt="codecov" src="https://img.shields.io/codecov/c/github/osapi-io/nats-client?token=8RICN0QCTT&style=for-the-badge"></a>
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-brightgreen.svg?style=for-the-badge"></a>
   <a href="https://github.com/osapi-io/nats-client/actions/workflows/go.yml"><img alt="build" src="https://img.shields.io/github/actions/workflow/status/osapi-io/nats-client/go.yml?style=for-the-badge"></a>
