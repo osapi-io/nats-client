@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"log/slog"
 	"testing"
-	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/suite"
@@ -230,10 +229,10 @@ func (s *StreamPublicTestSuite) batch(
 func (s *StreamPublicTestSuite) TestStreamRead() {
 	first := mocks.NewMockMsg(gomock.NewController(s.T()))
 	second := mocks.NewMockMsg(gomock.NewController(s.T()))
+	made := &jetstream.ConsumerInfo{Stream: "S", Name: "ordered-1"}
 
 	tests := []struct {
 		name    string
-		ctx     func() (context.Context, context.CancelFunc)
 		from    uint64
 		setup   func(*mocks.MockConsumer)
 		wantCfg jetstream.OrderedConsumerConfig
@@ -241,21 +240,22 @@ func (s *StreamPublicTestSuite) TestStreamRead() {
 		wantErr string
 	}{
 		{
-			name: "from 0 reads from the first message",
+			name: "from 0 reads from the first message, and deletes its consumer",
 			setup: func(c *mocks.MockConsumer) {
-				c.EXPECT().Fetch(2, gomock.Any()).Return(s.batch(nil, first, second), nil)
+				c.EXPECT().FetchNoWait(2).Return(s.batch(nil, first, second), nil)
+				c.EXPECT().CachedInfo().Return(made)
+				s.stream.EXPECT().DeleteConsumer(gomock.Any(), "ordered-1").Return(nil)
 			},
 			wantCfg: jetstream.OrderedConsumerConfig{DeliverPolicy: jetstream.DeliverAllPolicy},
 			want:    []jetstream.Msg{first, second},
 		},
 		{
-			name: "from a sequence reads from that sequence, until the deadline of ctx",
-			ctx: func() (context.Context, context.CancelFunc) {
-				return context.WithTimeout(context.Background(), time.Second)
-			},
+			name: "from a sequence reads from that sequence",
 			from: 7,
 			setup: func(c *mocks.MockConsumer) {
-				c.EXPECT().Fetch(2, gomock.Any()).Return(s.batch(nil, first), nil)
+				c.EXPECT().FetchNoWait(2).Return(s.batch(nil, first), nil)
+				c.EXPECT().CachedInfo().Return(made)
+				s.stream.EXPECT().DeleteConsumer(gomock.Any(), "ordered-1").Return(nil)
 			},
 			wantCfg: jetstream.OrderedConsumerConfig{
 				DeliverPolicy: jetstream.DeliverByStartSequencePolicy,
@@ -264,9 +264,20 @@ func (s *StreamPublicTestSuite) TestStreamRead() {
 			want: []jetstream.Msg{first},
 		},
 		{
-			name: "when the fetch fails returns the error",
+			name: "when the delete of its consumer fails still returns the messages",
 			setup: func(c *mocks.MockConsumer) {
-				c.EXPECT().Fetch(2, gomock.Any()).Return(nil, errBoom)
+				c.EXPECT().FetchNoWait(2).Return(s.batch(nil, first), nil)
+				c.EXPECT().CachedInfo().Return(made)
+				s.stream.EXPECT().DeleteConsumer(gomock.Any(), "ordered-1").Return(errBoom)
+			},
+			wantCfg: jetstream.OrderedConsumerConfig{DeliverPolicy: jetstream.DeliverAllPolicy},
+			want:    []jetstream.Msg{first},
+		},
+		{
+			name: "when the fetch fails returns the error, and deletes no consumer that was never made",
+			setup: func(c *mocks.MockConsumer) {
+				c.EXPECT().FetchNoWait(2).Return(nil, errBoom)
+				c.EXPECT().CachedInfo().Return(nil)
 			},
 			wantCfg: jetstream.OrderedConsumerConfig{DeliverPolicy: jetstream.DeliverAllPolicy},
 			wantErr: "read stream S: boom",
@@ -274,7 +285,8 @@ func (s *StreamPublicTestSuite) TestStreamRead() {
 		{
 			name: "when the batch ends with an error returns the messages and the error",
 			setup: func(c *mocks.MockConsumer) {
-				c.EXPECT().Fetch(2, gomock.Any()).Return(s.batch(errBoom, first), nil)
+				c.EXPECT().FetchNoWait(2).Return(s.batch(errBoom, first), nil)
+				c.EXPECT().CachedInfo().Return(&jetstream.ConsumerInfo{})
 			},
 			wantCfg: jetstream.OrderedConsumerConfig{DeliverPolicy: jetstream.DeliverAllPolicy},
 			want:    []jetstream.Msg{first},
@@ -284,18 +296,12 @@ func (s *StreamPublicTestSuite) TestStreamRead() {
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
-			ctx, cancel := context.WithCancel(s.ctx)
-			if tc.ctx != nil {
-				ctx, cancel = tc.ctx()
-			}
-			defer cancel()
-
 			consumer := mocks.NewMockConsumer(s.ctrl)
 			s.open()
 			s.stream.EXPECT().OrderedConsumer(gomock.Any(), tc.wantCfg).Return(consumer, nil)
 			tc.setup(consumer)
 
-			got, err := s.client.StreamRead(ctx, "S", tc.from, 2)
+			got, err := s.client.StreamRead(s.ctx, "S", tc.from, 2)
 			if tc.wantErr != "" {
 				s.EqualError(err, tc.wantErr)
 			} else {

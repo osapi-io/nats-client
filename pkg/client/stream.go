@@ -37,8 +37,9 @@ import (
 // is immutable once a stream is created.
 const jsErrCodeStorageTypeChange = 10052
 
-// streamReadWait is the longest that StreamRead waits for its messages.
-const streamReadWait = 5 * time.Second
+// readConsumerDeleteWait is the longest that StreamRead waits to delete the
+// consumer that it read with.
+const readConsumerDeleteWait = 5 * time.Second
 
 // isStorageTypeError returns true if the error is a NATS API error indicating
 // that the storage type cannot be changed on an existing stream.
@@ -220,11 +221,11 @@ func (c *Client) StreamGetMsg(
 }
 
 // StreamRead reads up to count messages of the stream name in order, from the
-// sequence from, or from the first message when from is 0. It waits for the
-// messages for up to 5 seconds, and stops sooner when ctx ends. count must be
-// 1 or more.
-// It returns the messages that it read; when the read stopped with an error,
-// it returns them with the error.
+// sequence from, or from the first message when from is 0. It returns the
+// messages that the stream has now, and does not wait for more. count must be
+// 1 or more. When the read stopped with an error, it returns the messages
+// that it read with the error. It deletes the consumer that it read with, so
+// a read leaves no consumer on the server.
 func (c *Client) StreamRead(
 	ctx context.Context,
 	name string,
@@ -255,10 +256,8 @@ func (c *Client) StreamRead(
 					fmt.Errorf("create ordered consumer on %s: %w", name, err))
 			}
 
-			// The wait ends at streamReadWait, or sooner when ctx ends.
-			wait, cancel := context.WithTimeout(ctx, streamReadWait)
-			defer cancel()
-			batch, err := consumer.Fetch(count, jetstream.FetchContext(wait))
+			batch, err := consumer.FetchNoWait(count)
+			defer c.deleteReadConsumer(ctx, s, consumer)
 			if err != nil {
 				return nil, fmt.Errorf("read stream %s: %w", name, err)
 			}
@@ -273,4 +272,29 @@ func (c *Client) StreamRead(
 
 			return msgs, nil
 		})
+}
+
+// deleteReadConsumer deletes the ordered consumer that StreamRead read with,
+// also when ctx ended, because the server keeps it until its inactive
+// threshold. A consumer that has no name yet was never made on the server.
+// A failed delete is logged and left to that threshold.
+func (c *Client) deleteReadConsumer(
+	ctx context.Context,
+	s jetstream.Stream,
+	consumer jetstream.Consumer,
+) {
+	info := consumer.CachedInfo()
+	if info == nil || info.Name == "" {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), readConsumerDeleteWait)
+	defer cancel()
+	if err := s.DeleteConsumer(ctx, info.Name); err != nil {
+		c.logger.Debug("delete stream read consumer",
+			slog.String("stream", info.Stream),
+			slog.String("consumer", info.Name),
+			slog.String("error", err.Error()),
+		)
+	}
 }
