@@ -56,7 +56,7 @@ func (s *StreamServerPublicTestSuite) SetupTest() {
 
 	port := srv.Addr().(*net.TCPAddr).Port
 	s.client = client.New(slog.Default(), &client.Options{Host: "127.0.0.1", Port: port})
-	s.Require().NoError(s.client.Connect())
+	s.Require().NoError(s.client.Connect(context.Background()))
 
 	ctx := context.Background()
 	s.Require().NoError(s.client.StreamCreateOrUpdate(ctx, jetstream.StreamConfig{

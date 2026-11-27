@@ -49,7 +49,7 @@ func (s *StreamPublicTestSuite) SetupTest() {
 	s.js = mocks.NewMockJetStream(s.ctrl)
 	s.stream = mocks.NewMockStream(s.ctrl)
 	s.client = client.New(slog.Default(), &client.Options{})
-	s.client.ExtJS = s.js
+	client.SetJetStream(s.client, s.js)
 	s.ctx = context.Background()
 }
 

@@ -49,10 +49,10 @@ func (s *ClientPublicTestSuite) TestNew() {
 			},
 			validateFunc: func(c *client.Client) {
 				s.NotNil(c)
-				s.Equal("localhost", c.Opts.Host)
-				s.Equal(4222, c.Opts.Port)
-				s.Equal("test-client", c.Opts.Name)
-				s.Equal(client.NoAuth, c.Opts.Auth.AuthType)
+				s.Equal("localhost", client.OptionsOf(c).Host)
+				s.Equal(4222, client.OptionsOf(c).Port)
+				s.Equal("test-client", client.OptionsOf(c).Name)
+				s.Equal(client.NoAuth, client.OptionsOf(c).Auth.AuthType)
 			},
 		},
 		{
@@ -73,8 +73,8 @@ func (s *ClientPublicTestSuite) TestNew() {
 				Port: 4222,
 			},
 			validateFunc: func(c *client.Client) {
-				s.Nil(c.ExtJS)
-				s.Nil(c.KeyPair)
+				s.Nil(client.JetStreamOf(c))
+				s.Nil(client.KeyPairOf(c))
 			},
 		},
 		{
@@ -82,7 +82,7 @@ func (s *ClientPublicTestSuite) TestNew() {
 			opts: nil,
 			validateFunc: func(c *client.Client) {
 				s.NotNil(c)
-				s.Nil(c.Opts)
+				s.Nil(client.OptionsOf(c))
 			},
 		},
 	}

@@ -49,7 +49,7 @@ func (c *Client) KVCreateOrUpdate(
 		func(ctx context.Context) error {
 			c.logger.Debug("creating/updating KV bucket", slog.String("bucket", config.Bucket))
 
-			js, err := c.jetStream()
+			js, err := c.JetStream()
 			if err != nil {
 				return err
 			}
@@ -78,7 +78,7 @@ func (c *Client) keyValue(
 	if kv, ok := c.kvs.Load(bucket); ok {
 		return kv.(jetstream.KeyValue), nil
 	}
-	js, err := c.jetStream()
+	js, err := c.JetStream()
 	if err != nil {
 		return nil, err
 	}
@@ -233,8 +233,10 @@ func (c *Client) KVKeys(
 
 // KVWatch sends each change to a key of bucket that matches pattern, such as
 // "responses.>" or ">" for each key, on the channel that it returns. The
-// current values come first. The watch stops, and the channel closes, when
-// ctx ends. The span covers the start of the watch.
+// current values come first. The channel carries entries only: it does not
+// mark the end of the current values, so a caller that needs a full snapshot
+// reads the keys with KVKeys and KVGet. The watch stops, and the channel
+// closes, when ctx ends. The span covers the start of the watch.
 func (c *Client) KVWatch(
 	ctx context.Context,
 	bucket string,

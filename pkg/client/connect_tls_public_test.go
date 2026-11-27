@@ -21,6 +21,7 @@
 package client_test
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -127,7 +128,7 @@ func (s *ConnectTLSPublicTestSuite) TestConnect() {
 				Port: s.port,
 				TLS:  tc.tls,
 			})
-			tc.validateFunc(c, c.Connect())
+			tc.validateFunc(c, c.Connect(context.Background()))
 		})
 	}
 }

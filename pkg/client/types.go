@@ -129,16 +129,18 @@ type Client struct {
 	kvs          sync.Map
 	objectStores sync.Map
 	streams      sync.Map
-	// mu guards ExtJS against Connect and Close, so that a call that runs
+	// mu guards js against Connect and Close, so that a call that runs
 	// while the client closes reads it once and does not race.
 	mu sync.RWMutex
 
-	// NC underlying connection.
+	// NC is the connection. Set it before Connect, such as to a mock in a
+	// test, and do not change it while the client is connected.
 	NC NATSConnector
-	// ExtJS is the extended JetStream API for high-level operations (e.g. retrieving streams/consumers).
-	ExtJS jetstream.JetStream
-	// Opts configuration options used to create the client
-	Opts *Options
-	// KeyPair allows injecting a mock `nkeys.KeyPair` for testing authentication logic.
-	KeyPair nkeys.KeyPair
+	// js is the JetStream API of the connection, or nil when the client is
+	// not connected. JetStream reads it.
+	js jetstream.JetStream
+	// opts are the options that New was given.
+	opts *Options
+	// keyPair is the nkey of NKeyAuth, which tests set in place of the file.
+	keyPair nkeys.KeyPair
 }

@@ -57,7 +57,7 @@ func (s *KVPublicTestSuite) SetupTest() {
 	s.js = mocks.NewMockJetStream(s.ctrl)
 	s.kv = mocks.NewMockKeyValue(s.ctrl)
 	s.client = client.New(slog.Default(), &client.Options{})
-	s.client.ExtJS = s.js
+	client.SetJetStream(s.client, s.js)
 	s.ctx = context.Background()
 }
 
@@ -150,7 +150,7 @@ func (s *KVPublicTestSuite) TestHandle() {
 		// answers on the old one.
 		s.js.EXPECT().KeyValue(gomock.Any(), "b").
 			DoAndReturn(func(context.Context, string) (jetstream.KeyValue, error) {
-				s.client.ExtJS = next
+				client.SetJetStream(s.client, next)
 				return s.kv, nil
 			})
 		fresh := mocks.NewMockKeyValue(s.ctrl)

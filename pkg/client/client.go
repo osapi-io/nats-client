@@ -38,7 +38,7 @@ func New(
 	}
 	c := &Client{
 		logger: logger,
-		Opts:   opts,
+		opts:   opts,
 		NC:     &NATSConnWrapper{},
 		// NC, NativeJS, and ExtJS will be set in the Connect method.
 	}

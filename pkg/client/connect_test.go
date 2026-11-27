@@ -39,7 +39,7 @@ func (s *ConnectTestSuite) SetupTest() {
 
 	s.client = &Client{
 		logger: s.logger,
-		Opts: &Options{
+		opts: &Options{
 			Host: "localhost",
 			Port: 4222,
 			Auth: AuthOptions{
@@ -89,7 +89,7 @@ func (s *ConnectTestSuite) TestGetAuthTypeName() {
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
-			s.client.Opts.Auth.AuthType = tc.authType
+			s.client.opts.Auth.AuthType = tc.authType
 			result := s.client.getAuthTypeName()
 			s.Equal(tc.expected, result)
 		})

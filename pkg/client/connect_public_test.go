@@ -22,6 +22,7 @@ package client_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -124,7 +125,7 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 				err := os.WriteFile(tempFile, validSeed, 0o644)
 				require.NoError(s.T(), err)
 
-				s.client.Opts.Auth.NKeyFile = tempFile
+				client.OptionsOf(s.client).Auth.NKeyFile = tempFile
 
 				s.mockNATS.EXPECT().
 					Connect(gomock.Any(), gomock.Any()).
@@ -146,8 +147,11 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			mockSetup: func() {
 				mockKP := mocks.NewMockKeyPair(s.mockCtrl)
 				mockKP.EXPECT().PublicKey().Return("test-pub-key", nil)
-				s.client.KeyPair = mockKP
-				s.client.Opts.Auth.NKeyFile = filepath.Join(s.T().TempDir(), "no-such.nkey")
+				client.SetKeyPair(s.client, mockKP)
+				client.OptionsOf(s.client).Auth.NKeyFile = filepath.Join(
+					s.T().TempDir(),
+					"no-such.nkey",
+				)
 
 				s.mockNATS.EXPECT().
 					Connect(gomock.Any(), gomock.Any()).
@@ -176,7 +180,7 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 					Return([]byte("signed-data"), nil).
 					Times(1)
 
-				s.client.KeyPair = mockKP
+				client.SetKeyPair(s.client, mockKP)
 
 				tempDir := s.T().TempDir()
 				tempFile := fmt.Sprintf("%s/test.nkey", tempDir)
@@ -185,7 +189,7 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 				err := os.WriteFile(tempFile, validSeed, 0o644)
 				require.NoError(s.T(), err)
 
-				s.client.Opts.Auth.NKeyFile = tempFile
+				client.OptionsOf(s.client).Auth.NKeyFile = tempFile
 
 				s.mockNATS.EXPECT().
 					Connect(gomock.Any(), gomock.Any()).
@@ -217,7 +221,7 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			mockSetup: func() {
 				creds := fmt.Sprintf("%s/user.creds", s.T().TempDir())
 				require.NoError(s.T(), os.WriteFile(creds, []byte("creds"), 0o600))
-				s.client.Opts.Auth.CredsFile = creds
+				client.OptionsOf(s.client).Auth.CredsFile = creds
 
 				s.mockNATS.EXPECT().
 					Connect(gomock.Any(), gomock.Any()).
@@ -237,7 +241,7 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			name:     "fails to read creds file",
 			authType: client.CredsAuth,
 			mockSetup: func() {
-				s.client.Opts.Auth.CredsFile = "/invalid/path"
+				client.OptionsOf(s.client).Auth.CredsFile = "/invalid/path"
 			},
 			validateFunc: func(err error) {
 				s.Error(err)
@@ -248,7 +252,7 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			name:     "fails to read NKey file",
 			authType: client.NKeyAuth,
 			mockSetup: func() {
-				s.client.Opts.Auth.NKeyFile = "/invalid/path"
+				client.OptionsOf(s.client).Auth.NKeyFile = "/invalid/path"
 			},
 			validateFunc: func(err error) {
 				s.Error(err)
@@ -265,7 +269,7 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 				err := os.WriteFile(tempFile, []byte("invalid-seed"), 0o644)
 				require.NoError(s.T(), err)
 
-				s.client.Opts.Auth.NKeyFile = tempFile
+				client.OptionsOf(s.client).Auth.NKeyFile = tempFile
 			},
 			validateFunc: func(err error) {
 				s.Error(err)
@@ -292,7 +296,7 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 				err := os.WriteFile(tempFile, invalidSeed, 0o644)
 				require.NoError(s.T(), err)
 
-				s.client.Opts.Auth.NKeyFile = tempFile
+				client.OptionsOf(s.client).Auth.NKeyFile = tempFile
 			},
 			validateFunc: func(err error) {
 				s.Error(err)
@@ -309,7 +313,7 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 					Return("", errors.New("simulated public key failure")).
 					Times(1)
 
-				s.client.KeyPair = mockKP
+				client.SetKeyPair(s.client, mockKP)
 
 				tempDir := s.T().TempDir()
 				tempFile := fmt.Sprintf("%s/test.nkey", tempDir)
@@ -318,7 +322,7 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 				err := os.WriteFile(tempFile, validSeed, 0o644)
 				require.NoError(s.T(), err)
 
-				s.client.Opts.Auth.NKeyFile = tempFile
+				client.OptionsOf(s.client).Auth.NKeyFile = tempFile
 			},
 			validateFunc: func(err error) {
 				s.Error(err)
@@ -369,17 +373,17 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
-			s.client.Opts.Auth.AuthType = tc.authType
+			client.OptionsOf(s.client).Auth.AuthType = tc.authType
 			tc.mockSetup()
 
-			tc.validateFunc(s.client.Connect())
+			tc.validateFunc(s.client.Connect(context.Background()))
 		})
 	}
 }
 
 func (s *ConnectPublicTestSuite) TestConnectWithoutOptions() {
 	s.Run("with nil options and a nil logger returns ErrNoOptions", func() {
-		s.ErrorIs(client.New(nil, nil).Connect(), client.ErrNoOptions)
+		s.ErrorIs(client.New(nil, nil).Connect(context.Background()), client.ErrNoOptions)
 	})
 }
 
@@ -417,7 +421,7 @@ func (s *ConnectPublicTestSuite) TestGetJetStream() {
 				s.mockNATS.EXPECT().Close().Times(1)
 			},
 			callFunc: func() (jetstream.JetStream, error) {
-				return nil, s.client.Connect()
+				return nil, s.client.Connect(context.Background())
 			},
 			validateFunc: func(_ jetstream.JetStream, err error) {
 				s.Error(err)
@@ -458,7 +462,7 @@ func (s *ConnectPublicTestSuite) connectWith(
 		return mocks.NewMockJetStream(s.mockCtrl), nil
 	}
 	s.T().Cleanup(func() { client.GetJetStream = orig })
-	s.Require().NoError(c.Connect())
+	s.Require().NoError(c.Connect(context.Background()))
 
 	return url, got
 }
@@ -561,10 +565,97 @@ func (s *ConnectPublicTestSuite) TestConnectionHandlers() {
 	}
 }
 
+func (s *ConnectPublicTestSuite) TestConnectContext() {
+	tests := []struct {
+		name         string
+		ctx          func() (context.Context, context.CancelFunc)
+		mockSetup    func(cancel context.CancelFunc, got *nats.Options)
+		validateFunc func(err error, got nats.Options)
+	}{
+		{
+			name: "a ctx that already ended dials nothing",
+			ctx: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+
+				return ctx, cancel
+			},
+			mockSetup: func(context.CancelFunc, *nats.Options) {},
+			validateFunc: func(err error, _ nats.Options) {
+				s.ErrorIs(err, context.Canceled)
+				s.Nil(client.JetStreamOf(s.client))
+			},
+		},
+		{
+			name: "the deadline of ctx is the dial timeout",
+			ctx: func() (context.Context, context.CancelFunc) {
+				return context.WithTimeout(context.Background(), 300*time.Millisecond)
+			},
+			mockSetup: func(_ context.CancelFunc, got *nats.Options) {
+				s.mockNATS.EXPECT().
+					Connect(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ string, natsOpts ...nats.Option) (*nats.Conn, error) {
+						for _, o := range natsOpts {
+							s.Require().NoError(o(got))
+						}
+
+						return &nats.Conn{}, nil
+					})
+				s.stubJetStream()
+			},
+			validateFunc: func(err error, got nats.Options) {
+				s.NoError(err)
+				s.Positive(got.Timeout)
+				s.LessOrEqual(got.Timeout, 300*time.Millisecond)
+			},
+		},
+		{
+			name: "a ctx that ends while the dial runs closes the connection",
+			ctx: func() (context.Context, context.CancelFunc) {
+				return context.WithCancel(context.Background())
+			},
+			mockSetup: func(cancel context.CancelFunc, _ *nats.Options) {
+				s.mockNATS.EXPECT().
+					Connect(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(string, ...nats.Option) (*nats.Conn, error) {
+						cancel()
+
+						return &nats.Conn{}, nil
+					})
+				s.mockNATS.EXPECT().Close().Times(1)
+			},
+			validateFunc: func(err error, _ nats.Options) {
+				s.ErrorIs(err, context.Canceled)
+				s.Nil(client.JetStreamOf(s.client))
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			ctx, cancel := tc.ctx()
+			defer cancel()
+			got := nats.GetDefaultOptions()
+			tc.mockSetup(cancel, &got)
+
+			tc.validateFunc(s.client.Connect(ctx), got)
+		})
+	}
+}
+
+// stubJetStream makes Connect get a mock JetStream API.
+func (s *ConnectPublicTestSuite) stubJetStream() {
+	orig := client.GetJetStream
+	client.GetJetStream = func(*nats.Conn) (jetstream.JetStream, error) {
+		return mocks.NewMockJetStream(s.mockCtrl), nil
+	}
+	s.T().Cleanup(func() { client.GetJetStream = orig })
+}
+
 func (s *ConnectPublicTestSuite) TestConnectTwice() {
 	s.Run("a second Connect without Close returns ErrConnected", func() {
-		s.client.ExtJS = mocks.NewMockJetStream(s.mockCtrl)
-		s.ErrorIs(s.client.Connect(), client.ErrConnected)
+		client.SetJetStream(s.client, mocks.NewMockJetStream(s.mockCtrl))
+		s.ErrorIs(s.client.Connect(context.Background()), client.ErrConnected)
 	})
 }
 

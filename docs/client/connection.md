@@ -64,7 +64,7 @@ c := client.New(logger, &client.Options{
     TLS:  &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
 })
 
-if err := c.Connect(); err != nil {
+if err := c.Connect(ctx); err != nil {
     log.Fatal(err)
 }
 defer c.Close()
@@ -115,6 +115,12 @@ credential, and does not wait.
   that the server says is gone, or a handle whose connection closed, is also
   forgotten, so the next call asks the server again. A call that finishes after
   a `Close` and the next `Connect` keeps no handle of the old connection.
-- With an injected `KeyPair`, `Connect` does not read the seed file. It clears
-  the seed bytes of the file after it parses them.
+- `Connect` clears the seed bytes of the nkey file after it parses them.
+- The deadline of the ctx that `Connect` gets is the dial timeout of each
+  server. A ctx that ended before the dial, or while it ran, ends `Connect` with
+  the error of the ctx, and leaves no connection.
+- The end of the ctx that `Subscribe` gets unsubscribes. `PublishCore` with a
+  ctx that ended publishes nothing.
+- `JetStream` returns the JetStream API of the connection, for a call that the
+  client does not wrap, or `ErrNotConnected`.
 - An IPv6 address in `Host` connects, such as `::1`.

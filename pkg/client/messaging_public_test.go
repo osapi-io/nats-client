@@ -52,7 +52,7 @@ func (s *MessagingPublicTestSuite) SetupTest() {
 	s.js = mocks.NewMockJetStream(s.ctrl)
 	s.nc = mocks.NewMockNATSConnector(s.ctrl)
 	s.client = client.New(slog.Default(), &client.Options{})
-	s.client.ExtJS = s.js
+	client.SetJetStream(s.client, s.js)
 	s.client.NC = s.nc
 	s.ctx = context.Background()
 }
@@ -85,7 +85,7 @@ func (s *MessagingPublicTestSuite) TestPublish() {
 	})
 
 	s.Run("before Connect returns an error", func() {
-		s.client.ExtJS = nil
+		client.SetJetStream(s.client, nil)
 
 		s.ErrorIs(s.client.Publish(s.ctx, "jobs.x", nil), client.ErrNotConnected)
 	})
@@ -116,6 +116,13 @@ func (s *MessagingPublicTestSuite) TestPublishCore() {
 		fresh := client.New(slog.New(slog.DiscardHandler), &client.Options{})
 
 		s.ErrorIs(fresh.PublishCore(s.ctx, "enroll.request", nil), client.ErrNotConnected)
+	})
+
+	s.Run("a ctx that ended publishes nothing", func() {
+		ctx, cancel := context.WithCancel(s.ctx)
+		cancel()
+
+		s.ErrorIs(s.client.PublishCore(ctx, "enroll.request", nil), context.Canceled)
 	})
 }
 

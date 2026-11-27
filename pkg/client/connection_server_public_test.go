@@ -63,7 +63,7 @@ func (s *ConnectionServerPublicTestSuite) SetupTest() {
 		slog.New(slog.DiscardHandler),
 		&client.Options{Host: "127.0.0.1", Port: port},
 	)
-	s.Require().NoError(s.client.Connect())
+	s.Require().NoError(s.client.Connect(context.Background()))
 }
 
 func (s *ConnectionServerPublicTestSuite) TearDownTest() {
@@ -105,7 +105,7 @@ func (s *ConnectionServerPublicTestSuite) TestCallsDuringReconnect() {
 
 		for range 20 {
 			s.client.Close()
-			s.Require().NoError(s.client.Connect())
+			s.Require().NoError(s.client.Connect(context.Background()))
 		}
 		close(stop)
 		calls.Wait()
@@ -136,6 +136,18 @@ func isClosedOrNotConnected(
 	return errors.Is(err, client.ErrNotConnected) ||
 		errors.Is(err, nats.ErrConnectionClosed) ||
 		errors.Is(err, nats.ErrBadSubscription)
+}
+
+func (s *ConnectionServerPublicTestSuite) TestSubscribeEndsWithCtx() {
+	s.Run("the end of ctx unsubscribes", func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		sub, err := s.client.Subscribe(ctx, "x.ctx", func(context.Context, *nats.Msg) {})
+		s.Require().NoError(err)
+		s.True(sub.IsValid())
+
+		cancel()
+		s.Eventually(func() bool { return !sub.IsValid() }, 2*time.Second, 10*time.Millisecond)
+	})
 }
 
 func TestConnectionServerPublicTestSuite(t *testing.T) {
