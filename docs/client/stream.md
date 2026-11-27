@@ -43,5 +43,6 @@ msgs, err := c.StreamRead(ctx, "AUDIT", 1, 100)
 - When the read stops with an error, `StreamRead` returns the messages that it
   read and the error.
 - `StreamInfo` asks the server each time. Thus the state is current.
-- A stream with a different storage type stays as it is, and
-  `StreamCreateOrUpdate` returns no error.
+- NATS cannot change the storage type of a stream that exists. For a stream with
+  a different storage type, `StreamCreateOrUpdate` keeps the storage type,
+  applies the rest of the config, and logs a warning.

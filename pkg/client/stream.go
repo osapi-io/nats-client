@@ -55,7 +55,9 @@ func isStorageTypeError(
 }
 
 // StreamCreateOrUpdate creates the stream of config, or updates it to match.
-// A stream whose storage type differs stays as it is.
+// NATS cannot change the storage type of a stream that exists. Thus, for a
+// stream whose storage type differs, it keeps the storage type on the server
+// and applies the rest of config.
 func (c *Client) StreamCreateOrUpdate(
 	ctx context.Context,
 	config jetstream.StreamConfig,
@@ -74,12 +76,7 @@ func (c *Client) StreamCreateOrUpdate(
 			}
 			stream, err := js.CreateOrUpdateStream(ctx, config)
 			if err != nil && isStorageTypeError(err) {
-				c.logger.Debug(
-					"stream exists with different storage type, keeping it",
-					slog.String("name", config.Name),
-				)
-
-				return nil
+				stream, err = c.updateKeepingStorage(ctx, js, config)
 			}
 			if err != nil {
 				return fmt.Errorf("error creating/updating stream %s: %w", config.Name, err)
@@ -88,6 +85,29 @@ func (c *Client) StreamCreateOrUpdate(
 
 			return nil
 		})
+}
+
+// updateKeepingStorage updates the stream of config with the storage type
+// that the stream has on the server, which NATS cannot change.
+func (c *Client) updateKeepingStorage(
+	ctx context.Context,
+	js jetstream.JetStream,
+	config jetstream.StreamConfig,
+) (jetstream.Stream, error) {
+	existing, err := js.Stream(ctx, config.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	kept := config
+	kept.Storage = existing.CachedInfo().Config.Storage
+	c.logger.Warn(
+		"stream exists with a different storage type: keeping it, and applying the rest",
+		slog.String("name", config.Name),
+		slog.String("storage", kept.Storage.String()),
+	)
+
+	return js.UpdateStream(ctx, kept)
 }
 
 // ConsumerCreateOrUpdate creates the durable consumer of config on stream, or

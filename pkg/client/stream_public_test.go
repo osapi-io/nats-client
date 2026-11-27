@@ -79,10 +79,36 @@ func (s *StreamPublicTestSuite) TestStreamCreateOrUpdate() {
 			wantKept: true,
 		},
 		{
-			name: "when only the storage type differs keeps the stream",
+			name: "when the storage type differs keeps it and applies the rest",
+			setup: func() {
+				kept := cfg
+				kept.Storage = jetstream.MemoryStorage
+				s.js.EXPECT().CreateOrUpdateStream(gomock.Any(), cfg).Return(nil, errStorageType)
+				s.js.EXPECT().Stream(gomock.Any(), "S").Return(s.stream, nil)
+				s.stream.EXPECT().CachedInfo().Return(&jetstream.StreamInfo{
+					Config: jetstream.StreamConfig{Name: "S", Storage: jetstream.MemoryStorage},
+				})
+				s.js.EXPECT().UpdateStream(gomock.Any(), kept).Return(s.stream, nil)
+			},
+			wantKept: true,
+		},
+		{
+			name: "when the storage type differs and the stream cannot be read returns the error",
 			setup: func() {
 				s.js.EXPECT().CreateOrUpdateStream(gomock.Any(), cfg).Return(nil, errStorageType)
+				s.js.EXPECT().Stream(gomock.Any(), "S").Return(nil, errBoom)
 			},
+			wantErr: "error creating/updating stream S: boom",
+		},
+		{
+			name: "when the storage type differs and the update fails returns the error",
+			setup: func() {
+				s.js.EXPECT().CreateOrUpdateStream(gomock.Any(), cfg).Return(nil, errStorageType)
+				s.js.EXPECT().Stream(gomock.Any(), "S").Return(s.stream, nil)
+				s.stream.EXPECT().CachedInfo().Return(&jetstream.StreamInfo{})
+				s.js.EXPECT().UpdateStream(gomock.Any(), cfg).Return(nil, errBoom)
+			},
+			wantErr: "error creating/updating stream S: boom",
 		},
 		{
 			name: "when the server refuses returns the error",
