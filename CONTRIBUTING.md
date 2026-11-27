@@ -19,10 +19,11 @@ not rename, move or remove one. -->
   difference.
 - **Examine the work that exists.** Look for a pull request or an issue about
   the change. If you find one, use what it says in your work.
-- **Backward compatibility.** Make sure that your change does not stop a program
-  that uses nats-client. A change that keeps compatibility is more likely to
-  merge. If your change cannot keep it, open an issue first. Then the
-  maintainers can discuss the API change before you do the work.
+- **No backward compatibility.** When a change makes something old or
+  inconsistent, change it or delete it everywhere, in the same change. Do not
+  add a deprecated flag, a field for old callers, or a shim for an old setup.
+  For a change to the API, open an issue first. Then the maintainers can discuss
+  it before you do the work.
 
 ## Prerequisites
 
@@ -94,6 +95,9 @@ Do not write `//nolint:revive`. It hides a problem and does not fix it. Fix the
 name or the code. When a name must be different in an API, give it an explicit
 name, such as a struct tag.
 
+Do not write an em dash, in a page or in a Go comment. The generated docs come
+from the comments, so a comment is a page too.
+
 ### Documentation
 
 [mdformat] formats the markdown files, through `uvx`. CI makes sure that the
@@ -124,6 +128,10 @@ func FunctionName(
 }
 ```
 
+A test entry point, such as `func TestServerPublicTestSuite(t *testing.T)`, is
+the one exception. Write it on one line, as `go test` shows it. Each other
+function with parameters has the signature on more than one line.
+
 Write a function that has no parameters on one line:
 
 ```go
@@ -143,12 +151,21 @@ code that has no other place.
 `types.go` holds only type declarations: structs, interfaces, constants and
 aliases. Put a function in a file that has the name of what the function does.
 
-A test file has the name of the production file that it tests. If a test file
-becomes too large to read, split the production file first. Then each test file
-keeps its production file.
+A test file has the name of the production file that it tests: `foo.go` has
+`foo_public_test.go` and `foo_test.go`. `export_test.go` is the exception. If a
+test file becomes too large to read, split the production file first. Then each
+test file keeps its production file. `just go-test-name-check` fails a test file
+that has no production file of the same name in its directory.
 
 ### Go patterns
 
+- Do not call `panic` in code that is not a test. Return an error, also for a
+  registration error or a programming error. `main` reports the error and exits
+  with a code that is not zero. A `recover` that stops a panic from a dependency
+  is permitted. The `forbidigo` linter fails a `panic` outside a test.
+- Read and write files through [avfs], so that a test can use a file system in
+  memory. This applies to tools that run at build time too: generators,
+  scaffolders and the tools that write docs.
 - Wrap errors with `fmt.Errorf("context: %w", err)`. Then the chain names each
   layer. `errors.Is` and `errors.As` can examine the chain.
 - Return early. Do not put the successful path inside conditions.
@@ -244,14 +261,19 @@ just go-unit-cov-check   # Report coverage and fail below the target
 ```
 
 `.github/codecov.yml` and the shared `go` justfile module both declare the
-target. Change the two together.
+target. Change the two together. Put the Codecov settings only in
+`.github/codecov.yml`. A `codecov.yml` at the root replaces it, and nothing
+fails. The `threshold` of `.github/codecov.yml` absorbs the rounding of Codecov
+only. `just go-unit-cov-check` is the exact gate at the target.
 
 ### Test file conventions
 
-- Public tests: `*_public_test.go`, in the `_test` package of the package. They
-  test the exported API. Write this type of test first.
-- Internal tests: `*_test.go`, in the same package. Use them only for what the
+- Public tests: `*_public_test.go`, in package `<name>_test`. They test the
+  exported API. Write this type of test first.
+- Internal tests: `*_test.go`, in package `<name>`. Use them only for what the
   exported API cannot reach.
+- A test in package `<name>_test` has a name that ends in `_public_test.go`. A
+  `*_test.go` file is always an internal test.
 - Suite names: `*_public_test.go` has `{Name}PublicTestSuite`, and `*_test.go`
   has `{Name}TestSuite`.
 - Use `testify/suite` with table-driven cases.
@@ -332,6 +354,7 @@ vote or comment on issues, or help answer questions.
 
 Open a [Discussion] on GitHub.
 
+[avfs]: https://github.com/avfs/avfs
 [conventional commits]: https://www.conventionalcommits.org
 [discussion]: https://github.com/osapi-io/nats-client/discussions
 [go]: https://go.dev
