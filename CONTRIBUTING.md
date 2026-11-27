@@ -166,6 +166,10 @@ that has no production file of the same name in its directory.
 - Read and write files through [avfs], so that a test can use a file system in
   memory. This applies to tools that run at build time too: generators,
   scaffolders and the tools that write docs.
+- Use NATS through [nats-client](https://github.com/osapi-io/nats-client). A
+  package may import `nats.go` or `jetstream` for their types. A call that
+  connects, creates a stream, a KV bucket or an object store, publishes or
+  subscribes goes through nats-client. nats-client itself is the exception.
 - Wrap errors with `fmt.Errorf("context: %w", err)`. Then the chain names each
   layer. `errors.Is` and `errors.As` can examine the chain.
 - Return early. Do not put the successful path inside conditions.
