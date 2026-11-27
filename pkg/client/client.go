@@ -39,8 +39,8 @@ func New(
 	c := &Client{
 		logger: logger,
 		opts:   opts,
-		NC:     &NATSConnWrapper{},
-		// NC, NativeJS, and ExtJS will be set in the Connect method.
+		// Connect dials through NC and sets js.
+		NC: &NATSConnWrapper{},
 	}
 
 	tel, err := newTelemetry(opts)
