@@ -168,6 +168,23 @@ func (s *TelemetryPublicTestSuite) TestCalls() {
 			},
 		},
 		{
+			name: "a Publish on a client that is not connected has its span and its metric",
+			validateFunc: func() {
+				client.SetJetStream(s.client, nil)
+
+				ctx, req := s.request()
+				err := s.client.Publish(ctx, "jobs.1", []byte("x"))
+				req.End()
+				s.ErrorIs(err, client.ErrNotConnected)
+
+				ended := s.spans.Ended()
+				s.Require().Len(ended, 2)
+				s.Equal("nats.publish", ended[0].Name())
+				s.Equal(codes.Error, ended[0].Status().Code)
+				s.Require().Len(s.points(), 1)
+			},
+		},
+		{
 			name: "a call outside a trace makes no span and still records the metric",
 			validateFunc: func() {
 				s.js.EXPECT().KeyValue(gomock.Any(), "jobs").Return(s.kv, nil)

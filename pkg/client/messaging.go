@@ -137,13 +137,14 @@ func (c *Client) Publish(
 		slog.Int("data_size", len(data)),
 	)
 
-	js, err := c.JetStream()
-	if err != nil {
-		return err
-	}
-
 	return c.publish(ctx, "nats.publish", subject, data,
 		func(ctx context.Context, msg *nats.Msg) error {
+			// Inside send, so that a publish on a client that is not
+			// connected has its span and its metric, as the other calls do.
+			js, err := c.JetStream()
+			if err != nil {
+				return err
+			}
 			if _, err := js.PublishMsg(ctx, msg); err != nil {
 				return fmt.Errorf("failed to publish message to %s: %w", subject, err)
 			}
@@ -206,13 +207,19 @@ func (c *Client) receive(
 
 // Subscribe calls handler for each core NATS message on subject, until ctx
 // ends or the subscription is drained or unsubscribed. ctx is the base of the
-// context of each call, and the end of ctx unsubscribes.
+// context of each call, and the end of ctx unsubscribes. A ctx that ended
+// subscribes nothing. Subscribe sets the closed handler of the subscription,
+// so that an unsubscribe by hand stops the watch of ctx. A caller that sets
+// its own closed handler replaces it, and the watch then lasts until ctx ends.
 func (c *Client) Subscribe(
 	ctx context.Context,
 	subject string,
 	handler MsgHandler,
 ) (*nats.Subscription, error) {
 	c.logger.Debug("subscribing to subject", slog.String("subject", subject))
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("failed to subscribe to %s: %w", subject, err)
+	}
 
 	var sub *nats.Subscription
 	err := c.withConn(func(nc NATSConnector) error {
@@ -224,8 +231,21 @@ func (c *Client) Subscribe(
 		return nil, fmt.Errorf("failed to subscribe to %s: %w", subject, err)
 	}
 	// A subscription that is already gone, such as after Close, needs no
-	// unsubscribe.
-	context.AfterFunc(ctx, func() { _ = sub.Unsubscribe() })
+	// unsubscribe. A subscription that closes first, such as one that the
+	// caller unsubscribed, stops the AfterFunc, so that a long ctx keeps no
+	// reference to it.
+	stop := context.AfterFunc(ctx, func() {
+		c.logger.Debug("unsubscribing at the end of ctx", slog.String("subject", subject))
+		_ = sub.Unsubscribe()
+	})
+	sub.SetClosedHandler(func(string) {
+		if stop() {
+			c.logger.Debug(
+				"subscription closed before the end of ctx",
+				slog.String("subject", subject),
+			)
+		}
+	})
 
 	return sub, nil
 }
