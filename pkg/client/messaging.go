@@ -234,8 +234,18 @@ func (c *Client) Subscribe(
 	// unsubscribe. A subscription that closes first, such as one that the
 	// caller unsubscribed, stops the AfterFunc, so that a long ctx keeps no
 	// reference to it.
-	stop := context.AfterFunc(ctx, func() { _ = sub.Unsubscribe() })
-	sub.SetClosedHandler(func(string) { stop() })
+	stop := context.AfterFunc(ctx, func() {
+		c.logger.Debug("unsubscribing at the end of ctx", slog.String("subject", subject))
+		_ = sub.Unsubscribe()
+	})
+	sub.SetClosedHandler(func(string) {
+		if stop() {
+			c.logger.Debug(
+				"subscription closed before the end of ctx",
+				slog.String("subject", subject),
+			)
+		}
+	})
 
 	return sub, nil
 }

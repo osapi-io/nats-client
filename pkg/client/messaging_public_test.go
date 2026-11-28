@@ -23,8 +23,10 @@ package client_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -243,7 +245,8 @@ func (s *MessagingPublicTestSuite) TestSubscribe() {
 		{
 			name: "the end of ctx unsubscribes",
 			validateFunc: func() {
-				c := s.realClient()
+				logs := &syncBuffer{}
+				c := s.realClient(logs)
 				ctx, cancel := context.WithCancel(s.ctx)
 
 				sub, err := c.Subscribe(ctx, "x", func(context.Context, *nats.Msg) {})
@@ -252,19 +255,34 @@ func (s *MessagingPublicTestSuite) TestSubscribe() {
 				cancel()
 
 				s.Eventually(func() bool { return !sub.IsValid() }, time.Second, time.Millisecond)
+				s.Contains(logs.String(), "unsubscribing at the end of ctx")
 			},
 		},
 		{
 			name: "an unsubscribe by hand stops the unsubscribe at the end of ctx",
 			validateFunc: func() {
-				c := s.realClient()
+				logs := &syncBuffer{}
+				c := s.realClient(logs)
 				ctx, cancel := context.WithCancel(s.ctx)
-				defer cancel()
 
 				sub, err := c.Subscribe(ctx, "x", func(context.Context, *nats.Msg) {})
 				s.Require().NoError(err)
 				s.Require().NoError(sub.Unsubscribe())
-				s.False(sub.IsValid())
+				// NATS runs the closed handler in the goroutine of the
+				// subscription, after the unsubscribe returns.
+				s.Eventually(func() bool {
+					return strings.Contains(
+						logs.String(),
+						"subscription closed before the end of ctx",
+					)
+				}, time.Second, time.Millisecond)
+				cancel()
+
+				// The watch of ctx stopped with the subscription, so the end of
+				// ctx runs nothing.
+				s.Never(func() bool {
+					return strings.Contains(logs.String(), "unsubscribing at the end of ctx")
+				}, 200*time.Millisecond, 5*time.Millisecond)
 			},
 		},
 	}
@@ -276,17 +294,22 @@ func (s *MessagingPublicTestSuite) TestSubscribe() {
 
 // realClient is a client that is connected to a NATS server that runs for
 // the test.
-func (s *MessagingPublicTestSuite) realClient() *client.Client {
+func (s *MessagingPublicTestSuite) realClient(
+	logs io.Writer,
+) *client.Client {
 	srv, err := server.NewServer(&server.Options{Host: "127.0.0.1", Port: -1})
 	s.Require().NoError(err)
 	srv.Start()
 	s.Require().True(srv.ReadyForConnections(5 * time.Second))
 	s.T().Cleanup(srv.Shutdown)
 
-	c := client.New(slog.New(slog.DiscardHandler), &client.Options{
-		Host: "127.0.0.1",
-		Port: srv.Addr().(*net.TCPAddr).Port,
-	})
+	c := client.New(
+		slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		&client.Options{
+			Host: "127.0.0.1",
+			Port: srv.Addr().(*net.TCPAddr).Port,
+		},
+	)
 	s.Require().NoError(c.Connect(context.Background()))
 	s.T().Cleanup(c.Close)
 
