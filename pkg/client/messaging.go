@@ -185,6 +185,62 @@ func (c *Client) PublishCore(
 		})
 }
 
+// DefaultRequestTimeout bounds Request when its ctx has no deadline.
+const DefaultRequestTimeout = 15 * time.Second
+
+// Request sends data to subject with core NATS and returns the reply: for a
+// request that a service answers, such as a join. The ctx deadline bounds
+// the wait, or DefaultRequestTimeout when ctx has none. The headers carry
+// the trace context, as with Publish.
+func (c *Client) Request(
+	ctx context.Context,
+	subject string,
+	data []byte,
+) (*nats.Msg, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("failed to request %s: %w", subject, err)
+	}
+	// The wait for the reply runs outside the lock, so Close and Connect do
+	// not wait for it. A Close during the wait closes the connection, and
+	// the request ends with ErrConnectionClosed.
+	var nc NATSConnector
+	if err := c.withConn(func(conn NATSConnector) error {
+		nc = conn
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, DefaultRequestTimeout)
+		defer cancel()
+	}
+
+	c.logger.Debug(
+		"sending core request",
+		slog.String("subject", subject),
+		slog.Int("data_size", len(data)),
+	)
+
+	var reply *nats.Msg
+	err := c.publish(ctx, "nats.request", subject, data,
+		func(ctx context.Context, msg *nats.Msg) error {
+			r, err := nc.RequestMsgWithContext(ctx, msg)
+			if err != nil {
+				return fmt.Errorf("failed to request %s: %w", subject, err)
+			}
+			reply = r
+
+			return nil
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	return reply, nil
+}
+
 // receive runs handle for a message on subject with header, inside a consumer
 // span named name that continues the trace of the message from base.
 func (c *Client) receive(

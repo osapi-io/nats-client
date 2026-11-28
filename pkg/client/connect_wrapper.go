@@ -20,7 +20,11 @@
 
 package client
 
-import "github.com/nats-io/nats.go"
+import (
+	"context"
+
+	"github.com/nats-io/nats.go"
+)
 
 // NATSConnector defines an interface for managing a NATS connection.
 type NATSConnector interface {
@@ -32,6 +36,7 @@ type NATSConnector interface {
 	QueueSubscribe(subject, queue string, handler nats.MsgHandler) (*nats.Subscription, error)
 	Publish(subject string, data []byte) error
 	PublishMsg(msg *nats.Msg) error
+	RequestMsgWithContext(ctx context.Context, msg *nats.Msg) (*nats.Msg, error)
 }
 
 // NATSConnWrapper is a concrete implementation of NATSConnector, wrapping a *nats.Conn.
@@ -100,4 +105,12 @@ func (n *NATSConnWrapper) PublishMsg(
 	msg *nats.Msg,
 ) error {
 	return n.Conn.PublishMsg(msg)
+}
+
+// RequestMsgWithContext wraps the RequestMsgWithContext method of nats.Conn.
+func (n *NATSConnWrapper) RequestMsgWithContext(
+	ctx context.Context,
+	msg *nats.Msg,
+) (*nats.Msg, error) {
+	return n.Conn.RequestMsgWithContext(ctx, msg)
 }

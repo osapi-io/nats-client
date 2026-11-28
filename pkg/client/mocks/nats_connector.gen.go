@@ -10,6 +10,7 @@
 package mocks
 
 import (
+	context "context"
 	reflect "reflect"
 
 	nats "github.com/nats-io/nats.go"
@@ -141,6 +142,21 @@ func (m *MockNATSConnector) QueueSubscribe(subject, queue string, handler nats.M
 func (mr *MockNATSConnectorMockRecorder) QueueSubscribe(subject, queue, handler any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueSubscribe", reflect.TypeOf((*MockNATSConnector)(nil).QueueSubscribe), subject, queue, handler)
+}
+
+// RequestMsgWithContext mocks base method.
+func (m *MockNATSConnector) RequestMsgWithContext(ctx context.Context, msg *nats.Msg) (*nats.Msg, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RequestMsgWithContext", ctx, msg)
+	ret0, _ := ret[0].(*nats.Msg)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RequestMsgWithContext indicates an expected call of RequestMsgWithContext.
+func (mr *MockNATSConnectorMockRecorder) RequestMsgWithContext(ctx, msg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestMsgWithContext", reflect.TypeOf((*MockNATSConnector)(nil).RequestMsgWithContext), ctx, msg)
 }
 
 // Subscribe mocks base method.

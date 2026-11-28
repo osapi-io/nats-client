@@ -49,6 +49,9 @@ type MessagingPublicTestSuite struct {
 	nc     *mocks.MockNATSConnector
 	client *client.Client
 	ctx    context.Context
+	// started is signalled when a mock call begins, for a row that acts
+	// while the call waits.
+	started chan struct{}
 }
 
 func (s *MessagingPublicTestSuite) SetupTest() {
@@ -59,6 +62,7 @@ func (s *MessagingPublicTestSuite) SetupTest() {
 	client.SetJetStream(s.client, s.js)
 	s.client.NC = s.nc
 	s.ctx = context.Background()
+	s.started = make(chan struct{}, 1)
 }
 
 func (s *MessagingPublicTestSuite) SetupSubTest() {
@@ -161,6 +165,135 @@ func (s *MessagingPublicTestSuite) TestPublishCore() {
 
 	for _, tc := range tests {
 		s.Run(tc.name, tc.validateFunc)
+	}
+}
+
+func (s *MessagingPublicTestSuite) TestRequest() {
+	tests := []struct {
+		name         string
+		fresh        bool
+		closeDuring  bool
+		ctx          func() (context.Context, context.CancelFunc)
+		setup        func()
+		validateFunc func(*nats.Msg, error)
+	}{
+		{
+			name: "sends the data and returns the reply, within the default timeout",
+			ctx:  func() (context.Context, context.CancelFunc) { return s.ctx, func() {} },
+			setup: func() {
+				s.nc.EXPECT().RequestMsgWithContext(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(ctx context.Context, msg *nats.Msg) (*nats.Msg, error) {
+						s.Equal("join.request", msg.Subject)
+						s.Equal([]byte("data"), msg.Data)
+						_, ok := ctx.Deadline()
+						s.True(ok)
+
+						return &nats.Msg{Data: []byte("reply")}, nil
+					},
+				)
+			},
+			validateFunc: func(m *nats.Msg, err error) {
+				s.Require().NoError(err)
+				s.Equal([]byte("reply"), m.Data)
+			},
+		},
+		{
+			name: "keeps the deadline of ctx",
+			ctx: func() (context.Context, context.CancelFunc) {
+				return context.WithTimeout(s.ctx, time.Minute)
+			},
+			setup: func() {
+				s.nc.EXPECT().RequestMsgWithContext(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(ctx context.Context, _ *nats.Msg) (*nats.Msg, error) {
+						d, _ := ctx.Deadline()
+						s.Greater(time.Until(d), client.DefaultRequestTimeout)
+
+						return &nats.Msg{}, nil
+					},
+				)
+			},
+			validateFunc: func(_ *nats.Msg, err error) { s.NoError(err) },
+		},
+		{
+			name: "when NATS gives no reply returns the error",
+			ctx:  func() (context.Context, context.CancelFunc) { return s.ctx, func() {} },
+			setup: func() {
+				s.nc.EXPECT().RequestMsgWithContext(gomock.Any(), gomock.Any()).Return(nil, errBoom)
+			},
+			validateFunc: func(_ *nats.Msg, err error) {
+				s.EqualError(err, "failed to request join.request: boom")
+			},
+		},
+		{
+			name: "a ctx that ended sends nothing",
+			ctx: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(s.ctx)
+				cancel()
+
+				return ctx, cancel
+			},
+			setup:        func() {},
+			validateFunc: func(_ *nats.Msg, err error) { s.ErrorIs(err, context.Canceled) },
+		},
+		{
+			name:        "a Close during the wait returns at once and ends the request",
+			closeDuring: true,
+			ctx: func() (context.Context, context.CancelFunc) {
+				return context.WithTimeout(s.ctx, 2*time.Second)
+			},
+			setup: func() {
+				closed := make(chan struct{})
+				s.nc.EXPECT().RequestMsgWithContext(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(ctx context.Context, _ *nats.Msg) (*nats.Msg, error) {
+						s.started <- struct{}{}
+						select {
+						case <-closed:
+							return nil, nats.ErrConnectionClosed
+						case <-ctx.Done():
+							return nil, ctx.Err()
+						}
+					},
+				)
+				s.nc.EXPECT().Close().Do(func() { close(closed) })
+			},
+			validateFunc: func(_ *nats.Msg, err error) {
+				s.ErrorIs(err, nats.ErrConnectionClosed)
+			},
+		},
+		{
+			name:         "before Connect returns ErrNotConnected",
+			fresh:        true,
+			ctx:          func() (context.Context, context.CancelFunc) { return s.ctx, func() {} },
+			setup:        func() {},
+			validateFunc: func(_ *nats.Msg, err error) { s.ErrorIs(err, client.ErrNotConnected) },
+		},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			ctx, cancel := tt.ctx()
+			defer cancel()
+			tt.setup()
+			c := s.client
+			if tt.fresh {
+				c = client.New(slog.New(slog.DiscardHandler), &client.Options{})
+			}
+			if !tt.closeDuring {
+				tt.validateFunc(c.Request(ctx, "join.request", []byte("data")))
+
+				return
+			}
+			done := make(chan error, 1)
+			go func() {
+				_, err := c.Request(ctx, "join.request", []byte("data"))
+				done <- err
+			}()
+			<-s.started
+			began := time.Now()
+			c.Close()
+			s.Less(time.Since(began), time.Second)
+			tt.validateFunc(nil, <-done)
+		})
 	}
 }
 
