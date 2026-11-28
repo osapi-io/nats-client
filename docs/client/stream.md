@@ -12,6 +12,7 @@ state and the messages of a stream. Each method takes the name of the stream.
 | `StreamInfo(ctx, name)`                    | Return the configuration and the current state of a stream     |
 | `StreamLastMsg(ctx, name, subject)`        | Return the last message on a subject                           |
 | `StreamRead(ctx, name, from, count)`       | Read up to `count` messages in order, from the sequence `from` |
+| `StreamPurgeSubject(ctx, name, subject)`   | Remove each message of a subject from a stream                 |
 
 ## Usage
 
@@ -46,3 +47,8 @@ msgs, err := c.StreamRead(ctx, "AUDIT", 1, 100)
 - NATS cannot change the storage type of a stream that exists. For a stream with
   a different storage type, `StreamCreateOrUpdate` keeps the storage type,
   applies the rest of the config, and logs a warning.
+
+`StreamPurgeSubject` writes nothing. It works on a stream that is at its
+`max_bytes`. A KV delete on a full bucket fails, because the delete writes a
+marker. To remove a key of a full bucket, purge `$KV.<bucket>.<key>` from the
+stream `KV_<bucket>`.

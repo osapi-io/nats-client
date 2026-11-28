@@ -235,6 +235,30 @@ func (s *StreamPublicTestSuite) TestStreamGetMsg() {
 	})
 }
 
+func (s *StreamPublicTestSuite) TestStreamPurgeSubject() {
+	s.Run("purges the messages of the subject", func() {
+		s.open()
+		s.stream.EXPECT().Purge(gomock.Any(), gomock.Any()).Return(nil)
+
+		s.NoError(s.client.StreamPurgeSubject(s.ctx, "S", "$KV.jobs.jobs.1"))
+	})
+
+	s.Run("when the purge fails returns the error with the subject", func() {
+		s.open()
+		s.stream.EXPECT().Purge(gomock.Any(), gomock.Any()).Return(errBoom)
+
+		err := s.client.StreamPurgeSubject(s.ctx, "S", "$KV.jobs.jobs.1")
+		s.ErrorIs(err, errBoom)
+		s.ErrorContains(err, "failed to purge $KV.jobs.jobs.1 from stream S")
+	})
+
+	s.Run("when the stream is not there returns the error", func() {
+		s.js.EXPECT().Stream(gomock.Any(), "S").Return(nil, errBoom)
+
+		s.ErrorIs(s.client.StreamPurgeSubject(s.ctx, "S", "$KV.jobs.jobs.1"), errBoom)
+	})
+}
+
 // batch returns a batch of msgs that ends with err.
 func (s *StreamPublicTestSuite) batch(
 	err error,
