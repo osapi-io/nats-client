@@ -122,11 +122,121 @@ func (s *ObjectStorePublicTestSuite) TestObjectStoreCreateOrUpdate() {
 	}
 }
 
-func (s *ObjectStorePublicTestSuite) TestHandle() {
+func (s *ObjectStorePublicTestSuite) TestObjectPut() {
+	info := &jetstream.ObjectInfo{ObjectMeta: jetstream.ObjectMeta{Name: "o"}}
+	meta := jetstream.ObjectMeta{Name: "o"}
+	reader := bytes.NewReader([]byte("data"))
+
+	setup := func(st *mocks.MockObjectStore, err error) {
+		st.EXPECT().Put(gomock.Any(), meta, reader).Return(info, err)
+	}
+	call := func(c *client.Client) (any, error) { return c.ObjectPut(s.ctx, "b", meta, reader) }
+
 	tests := []struct {
 		name         string
 		validateFunc func()
 	}{
+		{
+			name: "returns the answer of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.store, nil)
+
+				got, err := call(s.client)
+				s.NoError(err)
+				s.Equal(info, got)
+			},
+		},
+		{
+			name: "returns the error of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.store, errBoom)
+
+				_, err := call(s.client)
+				s.ErrorIs(err, errBoom)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
+}
+
+func (s *ObjectStorePublicTestSuite) TestObjectPutBytes() {
+	info := &jetstream.ObjectInfo{ObjectMeta: jetstream.ObjectMeta{Name: "o"}}
+
+	setup := func(st *mocks.MockObjectStore, err error) {
+		st.EXPECT().PutBytes(gomock.Any(), "o", []byte("data")).Return(info, err)
+	}
+	call := func(c *client.Client) (any, error) {
+		return c.ObjectPutBytes(s.ctx, "b", "o", []byte("data"))
+	}
+
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "returns the answer of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.store, nil)
+
+				got, err := call(s.client)
+				s.NoError(err)
+				s.Equal(info, got)
+			},
+		},
+		{
+			name: "returns the error of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.store, errBoom)
+
+				_, err := call(s.client)
+				s.ErrorIs(err, errBoom)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
+}
+
+func (s *ObjectStorePublicTestSuite) TestObjectGetBytes() {
+	setup := func(st *mocks.MockObjectStore, err error) {
+		st.EXPECT().GetBytes(gomock.Any(), "o").Return([]byte("data"), err)
+	}
+	call := func(c *client.Client) (any, error) { return c.ObjectGetBytes(s.ctx, "b", "o") }
+
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "returns the answer of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.store, nil)
+
+				got, err := call(s.client)
+				s.NoError(err)
+				s.Equal([]byte("data"), got)
+			},
+		},
+		{
+			name: "returns the error of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.store, errBoom)
+
+				_, err := call(s.client)
+				s.ErrorIs(err, errBoom)
+			},
+		},
 		{
 			name: "when the bucket is not there returns the error",
 			validateFunc: func() {
@@ -137,6 +247,135 @@ func (s *ObjectStorePublicTestSuite) TestHandle() {
 				_, err := s.client.ObjectGetBytes(s.ctx, "b", "o")
 				s.ErrorIs(err, jetstream.ErrBucketNotFound)
 				s.ErrorContains(err, "failed to get Object Store bucket b")
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
+}
+
+func (s *ObjectStorePublicTestSuite) TestObjectInfo() {
+	info := &jetstream.ObjectInfo{ObjectMeta: jetstream.ObjectMeta{Name: "o"}}
+
+	setup := func(st *mocks.MockObjectStore, err error) {
+		st.EXPECT().GetInfo(gomock.Any(), "o").Return(info, err)
+	}
+	call := func(c *client.Client) (any, error) { return c.ObjectInfo(s.ctx, "b", "o") }
+
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "returns the answer of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.store, nil)
+
+				got, err := call(s.client)
+				s.NoError(err)
+				s.Equal(info, got)
+			},
+		},
+		{
+			name: "returns the error of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.store, errBoom)
+
+				_, err := call(s.client)
+				s.ErrorIs(err, errBoom)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
+}
+
+func (s *ObjectStorePublicTestSuite) TestObjectList() {
+	info := &jetstream.ObjectInfo{ObjectMeta: jetstream.ObjectMeta{Name: "o"}}
+
+	setup := func(st *mocks.MockObjectStore, err error) {
+		st.EXPECT().List(gomock.Any()).Return([]*jetstream.ObjectInfo{info}, err)
+	}
+	call := func(c *client.Client) (any, error) { return c.ObjectList(s.ctx, "b") }
+
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "returns the answer of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.store, nil)
+
+				got, err := call(s.client)
+				s.NoError(err)
+				s.Equal([]*jetstream.ObjectInfo{info}, got)
+			},
+		},
+		{
+			name: "returns the error of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.store, errBoom)
+
+				_, err := call(s.client)
+				s.ErrorIs(err, errBoom)
+			},
+		},
+		{
+			name: "of an empty bucket returns an empty list",
+			validateFunc: func() {
+				s.open()
+				s.store.EXPECT().List(gomock.Any()).Return(nil, jetstream.ErrNoObjectsFound)
+
+				got, err := s.client.ObjectList(s.ctx, "b")
+				s.NoError(err)
+				s.Equal([]*jetstream.ObjectInfo{}, got)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
+}
+
+func (s *ObjectStorePublicTestSuite) TestObjectDelete() {
+	setup := func(st *mocks.MockObjectStore, err error) {
+		st.EXPECT().Delete(gomock.Any(), "o").Return(err)
+	}
+	call := func(c *client.Client) (any, error) { return nil, c.ObjectDelete(s.ctx, "b", "o") }
+
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "returns the answer of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.store, nil)
+
+				got, err := call(s.client)
+				s.NoError(err)
+				s.Equal(nil, got)
+			},
+		},
+		{
+			name: "returns the error of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.store, errBoom)
+
+				_, err := call(s.client)
+				s.ErrorIs(err, errBoom)
 			},
 		},
 		{
@@ -156,108 +395,49 @@ func (s *ObjectStorePublicTestSuite) TestHandle() {
 	}
 }
 
-func (s *ObjectStorePublicTestSuite) TestCalls() {
-	info := &jetstream.ObjectInfo{ObjectMeta: jetstream.ObjectMeta{Name: "o"}}
-	meta := jetstream.ObjectMeta{Name: "o"}
-	reader := bytes.NewReader([]byte("data"))
+func (s *ObjectStorePublicTestSuite) TestObjectStoreStatus() {
+	setup := func(st *mocks.MockObjectStore, err error) {
+		st.EXPECT().Status(gomock.Any()).Return(nil, err)
+	}
+	call := func(c *client.Client) (any, error) {
+		st, err := c.ObjectStoreStatus(s.ctx, "b")
+		if st == nil {
+			return nil, err
+		}
+
+		return st, err
+	}
 
 	tests := []struct {
-		name  string
-		setup func(*mocks.MockObjectStore, error)
-		call  func(*client.Client) (any, error)
-		want  any
+		name         string
+		validateFunc func()
 	}{
 		{
-			name: "ObjectPut",
-			setup: func(st *mocks.MockObjectStore, err error) {
-				st.EXPECT().Put(gomock.Any(), meta, reader).Return(info, err)
-			},
-			call: func(c *client.Client) (any, error) { return c.ObjectPut(s.ctx, "b", meta, reader) },
-			want: info,
-		},
-		{
-			name: "ObjectPutBytes",
-			setup: func(st *mocks.MockObjectStore, err error) {
-				st.EXPECT().PutBytes(gomock.Any(), "o", []byte("data")).Return(info, err)
-			},
-			call: func(c *client.Client) (any, error) {
-				return c.ObjectPutBytes(s.ctx, "b", "o", []byte("data"))
-			},
-			want: info,
-		},
-		{
-			name: "ObjectGetBytes",
-			setup: func(st *mocks.MockObjectStore, err error) {
-				st.EXPECT().GetBytes(gomock.Any(), "o").Return([]byte("data"), err)
-			},
-			call: func(c *client.Client) (any, error) { return c.ObjectGetBytes(s.ctx, "b", "o") },
-			want: []byte("data"),
-		},
-		{
-			name: "ObjectInfo",
-			setup: func(st *mocks.MockObjectStore, err error) {
-				st.EXPECT().GetInfo(gomock.Any(), "o").Return(info, err)
-			},
-			call: func(c *client.Client) (any, error) { return c.ObjectInfo(s.ctx, "b", "o") },
-			want: info,
-		},
-		{
-			name: "ObjectList",
-			setup: func(st *mocks.MockObjectStore, err error) {
-				st.EXPECT().List(gomock.Any()).Return([]*jetstream.ObjectInfo{info}, err)
-			},
-			call: func(c *client.Client) (any, error) { return c.ObjectList(s.ctx, "b") },
-			want: []*jetstream.ObjectInfo{info},
-		},
-		{
-			name: "ObjectDelete",
-			setup: func(st *mocks.MockObjectStore, err error) {
-				st.EXPECT().Delete(gomock.Any(), "o").Return(err)
-			},
-			call: func(c *client.Client) (any, error) { return nil, c.ObjectDelete(s.ctx, "b", "o") },
-		},
-		{
-			name: "ObjectStoreStatus",
-			setup: func(st *mocks.MockObjectStore, err error) {
-				st.EXPECT().Status(gomock.Any()).Return(nil, err)
-			},
-			call: func(c *client.Client) (any, error) {
-				st, err := c.ObjectStoreStatus(s.ctx, "b")
-				if st == nil {
-					return nil, err
-				}
+			name: "returns the answer of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.store, nil)
 
-				return st, err
+				got, err := call(s.client)
+				s.NoError(err)
+				s.Equal(nil, got)
+			},
+		},
+		{
+			name: "returns the error of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.store, errBoom)
+
+				_, err := call(s.client)
+				s.ErrorIs(err, errBoom)
 			},
 		},
 	}
 
 	for _, tc := range tests {
-		s.Run(tc.name+" returns the answer of the bucket", func() {
-			s.open()
-			tc.setup(s.store, nil)
-
-			got, err := tc.call(s.client)
-			s.NoError(err)
-			s.Equal(tc.want, got)
-		})
-		s.Run(tc.name+" returns the error of the bucket", func() {
-			s.open()
-			tc.setup(s.store, errBoom)
-
-			_, err := tc.call(s.client)
-			s.ErrorIs(err, errBoom)
-		})
+		s.Run(tc.name, tc.validateFunc)
 	}
-
-	s.Run("ObjectList of an empty bucket returns an empty list", func() {
-		s.open()
-		s.store.EXPECT().List(gomock.Any()).Return(nil, jetstream.ErrNoObjectsFound)
-
-		got, err := s.client.ObjectList(s.ctx, "b")
-		s.NoError(err)
-		s.Equal([]*jetstream.ObjectInfo{}, got)
-	})
 }
 
 func TestObjectStorePublicTestSuite(t *testing.T) {

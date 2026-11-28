@@ -24,11 +24,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
 	"testing"
 	"time"
 
-	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
@@ -73,6 +71,10 @@ func (s *StreamPublicTestSuite) TestStreamCreateOrUpdate() {
 		setup    func()
 		wantErr  string
 		wantKept bool
+		// server, when set, runs the call against a real NATS server,
+		// because only a server shows which storage type it keeps.
+		server       *jetstream.StreamConfig
+		validateFunc func(jetstream.StreamConfig)
 	}{
 		{
 			name: "when the stream is made keeps its handle",
@@ -120,10 +122,49 @@ func (s *StreamPublicTestSuite) TestStreamCreateOrUpdate() {
 			},
 			wantErr: "error creating/updating stream S: boom",
 		},
+		{
+			name: "on a server a new storage type keeps the old one, and applies the rest",
+			server: &jetstream.StreamConfig{
+				Name:     "AUDIT",
+				Subjects: []string{"audit.>", "more.>"},
+				Storage:  jetstream.FileStorage,
+			},
+			validateFunc: func(got jetstream.StreamConfig) {
+				s.Equal(jetstream.MemoryStorage, got.Storage)
+				s.Equal([]string{"audit.>", "more.>"}, got.Subjects)
+			},
+		},
+		{
+			name: "on a server the same storage type applies the change",
+			server: &jetstream.StreamConfig{
+				Name:     "AUDIT",
+				Subjects: []string{"audit.>", "other.>"},
+				Storage:  jetstream.MemoryStorage,
+			},
+			validateFunc: func(got jetstream.StreamConfig) {
+				s.Equal(jetstream.MemoryStorage, got.Storage)
+				s.Equal([]string{"audit.>", "other.>"}, got.Subjects)
+			},
+		},
 	}
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
+			if tc.server != nil {
+				c := connectJetStream(s.T())
+				s.Require().NoError(c.StreamCreateOrUpdate(s.ctx, jetstream.StreamConfig{
+					Name:     "AUDIT",
+					Subjects: []string{"audit.>"},
+					Storage:  jetstream.MemoryStorage,
+				}))
+				s.Require().NoError(c.StreamCreateOrUpdate(s.ctx, *tc.server))
+
+				info, err := c.StreamInfo(s.ctx, "AUDIT")
+				s.Require().NoError(err)
+				tc.validateFunc(info.Config)
+
+				return
+			}
 			tc.setup()
 
 			err := s.client.StreamCreateOrUpdate(s.ctx, cfg)
@@ -345,181 +386,161 @@ func (s *StreamPublicTestSuite) TestStreamRead() {
 	first := mocks.NewMockMsg(gomock.NewController(s.T()))
 	second := mocks.NewMockMsg(gomock.NewController(s.T()))
 	made := &jetstream.ConsumerInfo{Stream: "S", Name: "ordered-1"}
+	// ordered sets up the stream "S" to make an ordered consumer from cfg,
+	// and lets the row set what the consumer does.
+	ordered := func(
+		cfg jetstream.OrderedConsumerConfig,
+		consumer func(*mocks.MockConsumer),
+	) func() {
+		return func() {
+			c := mocks.NewMockConsumer(s.ctrl)
+			s.open()
+			s.stream.EXPECT().OrderedConsumer(gomock.Any(), cfg).Return(c, nil)
+			consumer(c)
+		}
+	}
+	all := jetstream.OrderedConsumerConfig{DeliverPolicy: jetstream.DeliverAllPolicy}
 
 	tests := []struct {
-		name    string
-		from    uint64
-		setup   func(*mocks.MockConsumer)
-		wantCfg jetstream.OrderedConsumerConfig
-		want    []jetstream.Msg
-		wantErr string
+		name  string
+		setup func()
+		from  uint64
+		count int
+		// server, when set, runs the call against a real NATS server that
+		// holds one message in "AUDIT", because only a real pull request
+		// shows when a wait for messages ends.
+		server       bool
+		ctx          func() (context.Context, context.CancelFunc)
+		validateFunc func(c *client.Client, msgs []jetstream.Msg, err error, took time.Duration)
 	}{
 		{
-			name: "from 0 reads from the first message, and deletes its consumer",
-			setup: func(c *mocks.MockConsumer) {
+			name:  "from 0 reads from the first message, and deletes its consumer",
+			count: 2,
+			setup: ordered(all, func(c *mocks.MockConsumer) {
 				c.EXPECT().FetchNoWait(2).Return(s.batch(nil, first, second), nil)
 				c.EXPECT().CachedInfo().Return(made)
 				s.stream.EXPECT().DeleteConsumer(gomock.Any(), "ordered-1").Return(nil)
+			}),
+			validateFunc: func(_ *client.Client, got []jetstream.Msg, err error, _ time.Duration) {
+				s.NoError(err)
+				s.Equal([]jetstream.Msg{first, second}, got)
 			},
-			wantCfg: jetstream.OrderedConsumerConfig{DeliverPolicy: jetstream.DeliverAllPolicy},
-			want:    []jetstream.Msg{first, second},
 		},
 		{
-			name: "from a sequence reads from that sequence",
-			from: 7,
-			setup: func(c *mocks.MockConsumer) {
+			name:  "from a sequence reads from that sequence",
+			count: 2,
+			from:  7,
+			setup: ordered(jetstream.OrderedConsumerConfig{
+				DeliverPolicy: jetstream.DeliverByStartSequencePolicy,
+				OptStartSeq:   7,
+			}, func(c *mocks.MockConsumer) {
 				c.EXPECT().FetchNoWait(2).Return(s.batch(nil, first), nil)
 				c.EXPECT().CachedInfo().Return(made)
 				s.stream.EXPECT().DeleteConsumer(gomock.Any(), "ordered-1").Return(nil)
+			}),
+			validateFunc: func(_ *client.Client, got []jetstream.Msg, err error, _ time.Duration) {
+				s.NoError(err)
+				s.Equal([]jetstream.Msg{first}, got)
 			},
-			wantCfg: jetstream.OrderedConsumerConfig{
-				DeliverPolicy: jetstream.DeliverByStartSequencePolicy,
-				OptStartSeq:   7,
-			},
-			want: []jetstream.Msg{first},
 		},
 		{
-			name: "when the delete of its consumer fails still returns the messages",
-			setup: func(c *mocks.MockConsumer) {
+			name:  "when the delete of its consumer fails still returns the messages",
+			count: 2,
+			setup: ordered(all, func(c *mocks.MockConsumer) {
 				c.EXPECT().FetchNoWait(2).Return(s.batch(nil, first), nil)
 				c.EXPECT().CachedInfo().Return(made)
 				s.stream.EXPECT().DeleteConsumer(gomock.Any(), "ordered-1").Return(errBoom)
+			}),
+			validateFunc: func(_ *client.Client, got []jetstream.Msg, err error, _ time.Duration) {
+				s.NoError(err)
+				s.Equal([]jetstream.Msg{first}, got)
 			},
-			wantCfg: jetstream.OrderedConsumerConfig{DeliverPolicy: jetstream.DeliverAllPolicy},
-			want:    []jetstream.Msg{first},
 		},
 		{
-			name: "when the fetch fails returns the error, and deletes no consumer that was never made",
-			setup: func(c *mocks.MockConsumer) {
+			name:  "when the fetch fails returns the error, and deletes no consumer that was never made",
+			count: 2,
+			setup: ordered(all, func(c *mocks.MockConsumer) {
 				c.EXPECT().FetchNoWait(2).Return(nil, errBoom)
 				c.EXPECT().CachedInfo().Return(nil)
+			}),
+			validateFunc: func(_ *client.Client, _ []jetstream.Msg, err error, _ time.Duration) {
+				s.EqualError(err, "read stream S: boom")
 			},
-			wantCfg: jetstream.OrderedConsumerConfig{DeliverPolicy: jetstream.DeliverAllPolicy},
-			wantErr: "read stream S: boom",
 		},
 		{
-			name: "when the batch ends with an error returns the messages and the error",
-			setup: func(c *mocks.MockConsumer) {
+			name:  "when the batch ends with an error returns the messages and the error",
+			count: 2,
+			setup: ordered(all, func(c *mocks.MockConsumer) {
 				c.EXPECT().FetchNoWait(2).Return(s.batch(errBoom, first), nil)
 				c.EXPECT().CachedInfo().Return(&jetstream.ConsumerInfo{})
+			}),
+			validateFunc: func(_ *client.Client, got []jetstream.Msg, err error, _ time.Duration) {
+				s.EqualError(err, "read stream S: boom")
+				s.Equal([]jetstream.Msg{first}, got)
 			},
-			wantCfg: jetstream.OrderedConsumerConfig{DeliverPolicy: jetstream.DeliverAllPolicy},
-			want:    []jetstream.Msg{first},
-			wantErr: "read stream S: boom",
 		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			consumer := mocks.NewMockConsumer(s.ctrl)
-			s.open()
-			s.stream.EXPECT().OrderedConsumer(gomock.Any(), tc.wantCfg).Return(consumer, nil)
-			tc.setup(consumer)
-
-			got, err := s.client.StreamRead(s.ctx, "S", tc.from, 2)
-			if tc.wantErr != "" {
-				s.EqualError(err, tc.wantErr)
-			} else {
-				s.NoError(err)
-			}
-			if tc.want != nil {
-				s.Equal(tc.want, got)
-			}
-		})
-	}
-
-	s.Run("when the stream is not there returns the error", func() {
-		s.js.EXPECT().Stream(gomock.Any(), "S").Return(nil, errBoom)
-
-		_, err := s.client.StreamRead(s.ctx, "S", 0, 2)
-		s.ErrorIs(err, errBoom)
-	})
-
-	s.Run("when the consumer cannot be made returns the error", func() {
-		s.open()
-		s.stream.EXPECT().OrderedConsumer(gomock.Any(), gomock.Any()).Return(nil, errBoom)
-
-		_, err := s.client.StreamRead(s.ctx, "S", 0, 2)
-		s.EqualError(err, "create ordered consumer on S: boom")
-	})
-
-	s.Run("with a count less than 1 returns an error", func() {
-		for _, count := range []int{0, -1} {
-			_, err := s.client.StreamRead(s.ctx, "S", 0, count)
-			s.EqualError(err, fmt.Sprintf("read stream S: count %d is less than 1", count))
-		}
-	})
-
-	s.Run(
-		"with a count more than MaxStreamReadCount returns an error, and allocates nothing",
-		func() {
-			for _, count := range []int{client.MaxStreamReadCount + 1, 1 << 40} {
-				_, err := s.client.StreamRead(s.ctx, "S", 0, count)
+		{
+			name:  "when the stream is not there returns the error",
+			count: 2,
+			setup: func() {
+				s.js.EXPECT().Stream(gomock.Any(), "S").Return(nil, errBoom)
+			},
+			validateFunc: func(_ *client.Client, _ []jetstream.Msg, err error, _ time.Duration) {
+				s.ErrorIs(err, errBoom)
+			},
+		},
+		{
+			name:  "when the consumer cannot be made returns the error",
+			count: 2,
+			setup: func() {
+				s.open()
+				s.stream.EXPECT().OrderedConsumer(gomock.Any(), gomock.Any()).Return(nil, errBoom)
+			},
+			validateFunc: func(_ *client.Client, _ []jetstream.Msg, err error, _ time.Duration) {
+				s.EqualError(err, "create ordered consumer on S: boom")
+			},
+		},
+		{
+			name:  "with a count of 0 returns an error",
+			count: 0,
+			validateFunc: func(_ *client.Client, _ []jetstream.Msg, err error, _ time.Duration) {
+				s.EqualError(err, "read stream S: count 0 is less than 1")
+			},
+		},
+		{
+			name:  "with a count of -1 returns an error",
+			count: -1,
+			validateFunc: func(_ *client.Client, _ []jetstream.Msg, err error, _ time.Duration) {
+				s.EqualError(err, "read stream S: count -1 is less than 1")
+			},
+		},
+		{
+			name:  "with a count one more than MaxStreamReadCount returns an error",
+			count: client.MaxStreamReadCount + 1,
+			validateFunc: func(_ *client.Client, _ []jetstream.Msg, err error, _ time.Duration) {
 				s.EqualError(err, fmt.Sprintf(
 					"read stream S: count %d is more than %d",
-					count,
+					client.MaxStreamReadCount+1,
 					client.MaxStreamReadCount,
 				))
-			}
-		},
-	)
-}
-
-func TestStreamPublicTestSuite(t *testing.T) {
-	suite.Run(t, new(StreamPublicTestSuite))
-}
-
-// StreamServerPublicTestSuite runs StreamRead against a real NATS server,
-// because only a real pull request shows when a wait for messages ends.
-type StreamServerPublicTestSuite struct {
-	suite.Suite
-
-	server *server.Server
-	client *client.Client
-}
-
-func (s *StreamServerPublicTestSuite) SetupTest() {
-	srv, err := server.NewServer(&server.Options{
-		Host:      "127.0.0.1",
-		Port:      -1,
-		JetStream: true,
-		StoreDir:  s.T().TempDir(),
-	})
-	s.Require().NoError(err)
-	srv.Start()
-	s.Require().True(srv.ReadyForConnections(5 * time.Second))
-	s.server = srv
-
-	port := srv.Addr().(*net.TCPAddr).Port
-	s.client = client.New(slog.Default(), &client.Options{Host: "127.0.0.1", Port: port})
-	s.Require().NoError(s.client.Connect(context.Background()))
-
-	ctx := context.Background()
-	s.Require().NoError(s.client.StreamCreateOrUpdate(ctx, jetstream.StreamConfig{
-		Name:     "AUDIT",
-		Subjects: []string{"audit.>"},
-		Storage:  jetstream.MemoryStorage,
-	}))
-	s.Require().NoError(s.client.Publish(ctx, "audit.x", []byte("entry-1")))
-}
-
-func (s *StreamServerPublicTestSuite) TearDownTest() {
-	s.client.Close()
-	s.server.Shutdown()
-}
-
-func (s *StreamServerPublicTestSuite) TestStreamRead() {
-	tests := []struct {
-		name         string
-		ctx          func() (context.Context, context.CancelFunc)
-		validateFunc func(msgs []jetstream.Msg, err error, took time.Duration)
-	}{
-		{
-			name: "with fewer messages than count returns them at once",
-			ctx: func() (context.Context, context.CancelFunc) {
-				return context.WithCancel(context.Background())
 			},
-			validateFunc: func(msgs []jetstream.Msg, err error, took time.Duration) {
+		},
+		{
+			name:  "with a huge count returns an error, and allocates nothing",
+			count: 1 << 40,
+			validateFunc: func(_ *client.Client, _ []jetstream.Msg, err error, _ time.Duration) {
+				s.EqualError(err, fmt.Sprintf(
+					"read stream S: count %d is more than %d",
+					1<<40,
+					client.MaxStreamReadCount,
+				))
+			},
+		},
+		{
+			name:   "on a server with fewer messages than count returns them at once",
+			count:  3,
+			server: true,
+			validateFunc: func(_ *client.Client, msgs []jetstream.Msg, err error, took time.Duration) {
 				s.Require().NoError(err)
 				s.Require().Len(msgs, 1)
 				s.Equal("entry-1", string(msgs[0].Data()))
@@ -527,30 +548,31 @@ func (s *StreamServerPublicTestSuite) TestStreamRead() {
 			},
 		},
 		{
-			name: "when ctx already ended returns its error",
+			name:   "on a server when ctx already ended returns its error",
+			count:  3,
+			server: true,
 			ctx: func() (context.Context, context.CancelFunc) {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()
 
 				return ctx, cancel
 			},
-			validateFunc: func(_ []jetstream.Msg, err error, _ time.Duration) {
+			validateFunc: func(_ *client.Client, _ []jetstream.Msg, err error, _ time.Duration) {
 				s.ErrorIs(err, context.Canceled)
 			},
 		},
 		{
-			name: "leaves no consumer behind",
-			ctx: func() (context.Context, context.CancelFunc) {
-				return context.WithCancel(context.Background())
-			},
-			validateFunc: func(_ []jetstream.Msg, err error, _ time.Duration) {
+			name:   "on a server leaves no consumer behind",
+			count:  3,
+			server: true,
+			validateFunc: func(c *client.Client, _ []jetstream.Msg, err error, _ time.Duration) {
 				s.Require().NoError(err)
 				for range 2 {
-					_, err := s.client.StreamRead(context.Background(), "AUDIT", 0, 3)
+					_, err := c.StreamRead(context.Background(), "AUDIT", 0, 3)
 					s.Require().NoError(err)
 				}
 
-				info, err := s.client.StreamInfo(context.Background(), "AUDIT")
+				info, err := c.StreamInfo(context.Background(), "AUDIT")
 				s.Require().NoError(err)
 				s.Equal(0, info.State.Consumers)
 			},
@@ -559,60 +581,33 @@ func (s *StreamServerPublicTestSuite) TestStreamRead() {
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
-			ctx, cancel := tc.ctx()
+			ctx, cancel := context.WithCancel(s.ctx)
+			if tc.ctx != nil {
+				ctx, cancel = tc.ctx()
+			}
 			defer cancel()
 
+			c, stream := s.client, "S"
+			if tc.server {
+				c, stream = connectJetStream(s.T()), "AUDIT"
+				s.Require().NoError(c.StreamCreateOrUpdate(s.ctx, jetstream.StreamConfig{
+					Name:     "AUDIT",
+					Subjects: []string{"audit.>"},
+					Storage:  jetstream.MemoryStorage,
+				}))
+				s.Require().NoError(c.Publish(s.ctx, "audit.x", []byte("entry-1")))
+			}
+			if tc.setup != nil {
+				tc.setup()
+			}
+
 			began := time.Now()
-			msgs, err := s.client.StreamRead(ctx, "AUDIT", 0, 3)
-			tc.validateFunc(msgs, err, time.Since(began))
+			msgs, err := c.StreamRead(ctx, stream, tc.from, tc.count)
+			tc.validateFunc(c, msgs, err, time.Since(began))
 		})
 	}
 }
 
-func (s *StreamServerPublicTestSuite) TestStreamCreateOrUpdate() {
-	tests := []struct {
-		name         string
-		cfg          jetstream.StreamConfig
-		validateFunc func(jetstream.StreamConfig)
-	}{
-		{
-			name: "a new storage type keeps the old one, and applies the rest",
-			cfg: jetstream.StreamConfig{
-				Name:     "AUDIT",
-				Subjects: []string{"audit.>", "more.>"},
-				Storage:  jetstream.FileStorage,
-			},
-			validateFunc: func(got jetstream.StreamConfig) {
-				s.Equal(jetstream.MemoryStorage, got.Storage)
-				s.Equal([]string{"audit.>", "more.>"}, got.Subjects)
-			},
-		},
-		{
-			name: "the same storage type applies the change",
-			cfg: jetstream.StreamConfig{
-				Name:     "AUDIT",
-				Subjects: []string{"audit.>", "other.>"},
-				Storage:  jetstream.MemoryStorage,
-			},
-			validateFunc: func(got jetstream.StreamConfig) {
-				s.Equal(jetstream.MemoryStorage, got.Storage)
-				s.Equal([]string{"audit.>", "other.>"}, got.Subjects)
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			ctx := context.Background()
-			s.Require().NoError(s.client.StreamCreateOrUpdate(ctx, tc.cfg))
-
-			info, err := s.client.StreamInfo(ctx, "AUDIT")
-			s.Require().NoError(err)
-			tc.validateFunc(info.Config)
-		})
-	}
-}
-
-func TestStreamServerPublicTestSuite(t *testing.T) {
-	suite.Run(t, new(StreamServerPublicTestSuite))
+func TestStreamPublicTestSuite(t *testing.T) {
+	suite.Run(t, new(StreamPublicTestSuite))
 }
