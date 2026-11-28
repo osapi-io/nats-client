@@ -21,6 +21,7 @@
 package client
 
 import (
+	"context"
 	"crypto/tls"
 	"log/slog"
 	"sync"
@@ -139,6 +140,9 @@ type Client struct {
 	// js is the JetStream API of the connection, or nil when the client is
 	// not connected. JetStream reads it.
 	js jetstream.JetStream
+	// cancelDial ends the dial of a Connect that runs, or is nil when no
+	// Connect dials. Close calls it.
+	cancelDial context.CancelFunc
 	// opts are the options that New was given.
 	opts *Options
 	// keyPair is the nkey of NKeyAuth, which tests set in place of the file.
