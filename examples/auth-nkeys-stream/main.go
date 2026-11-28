@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+
 	"github.com/osapi-io/nats-client/pkg/client"
 )
 
