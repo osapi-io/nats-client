@@ -66,3 +66,9 @@ defer sub.Unsubscribe()
   has returned.
 - A panic in a `Subscribe` handler does not stop the process. The span of the
   message records it as an error.
+- `Subscribe` with a `ctx` that ended subscribes nothing. The end of `ctx`
+  unsubscribes. An unsubscribe by hand also stops the watch of `ctx`, through
+  the closed handler of the subscription. A caller that sets its own closed
+  handler replaces that one, and the watch then lasts until `ctx` ends.
+- A `Publish` on a client that is not connected has its span and its metric, as
+  the other calls do.

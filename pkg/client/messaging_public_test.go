@@ -229,11 +229,68 @@ func (s *MessagingPublicTestSuite) TestSubscribe() {
 				s.ErrorIs(err, client.ErrNotConnected)
 			},
 		},
+		{
+			name: "with a ctx that ended subscribes nothing",
+			validateFunc: func() {
+				ctx, cancel := context.WithCancel(s.ctx)
+				cancel()
+
+				_, err := s.client.Subscribe(ctx, "x", func(context.Context, *nats.Msg) {})
+				s.ErrorIs(err, context.Canceled)
+				s.EqualError(err, "failed to subscribe to x: context canceled")
+			},
+		},
+		{
+			name: "the end of ctx unsubscribes",
+			validateFunc: func() {
+				c := s.realClient()
+				ctx, cancel := context.WithCancel(s.ctx)
+
+				sub, err := c.Subscribe(ctx, "x", func(context.Context, *nats.Msg) {})
+				s.Require().NoError(err)
+				s.True(sub.IsValid())
+				cancel()
+
+				s.Eventually(func() bool { return !sub.IsValid() }, time.Second, time.Millisecond)
+			},
+		},
+		{
+			name: "an unsubscribe by hand stops the unsubscribe at the end of ctx",
+			validateFunc: func() {
+				c := s.realClient()
+				ctx, cancel := context.WithCancel(s.ctx)
+				defer cancel()
+
+				sub, err := c.Subscribe(ctx, "x", func(context.Context, *nats.Msg) {})
+				s.Require().NoError(err)
+				s.Require().NoError(sub.Unsubscribe())
+				s.False(sub.IsValid())
+			},
+		},
 	}
 
 	for _, tc := range tests {
 		s.Run(tc.name, tc.validateFunc)
 	}
+}
+
+// realClient is a client that is connected to a NATS server that runs for
+// the test.
+func (s *MessagingPublicTestSuite) realClient() *client.Client {
+	srv, err := server.NewServer(&server.Options{Host: "127.0.0.1", Port: -1})
+	s.Require().NoError(err)
+	srv.Start()
+	s.Require().True(srv.ReadyForConnections(5 * time.Second))
+	s.T().Cleanup(srv.Shutdown)
+
+	c := client.New(slog.New(slog.DiscardHandler), &client.Options{
+		Host: "127.0.0.1",
+		Port: srv.Addr().(*net.TCPAddr).Port,
+	})
+	s.Require().NoError(c.Connect(context.Background()))
+	s.T().Cleanup(c.Close)
+
+	return c
 }
 
 // msg returns a message on subject that expects one reply: an Ack, a Nak or
@@ -354,24 +411,21 @@ func (s *MessagingPublicTestSuite) TestConsume() {
 				s.js.EXPECT().Consumer(gomock.Any(), "S", "c").Return(consumer, nil)
 
 				started := make(chan struct{})
-				release := make(chan struct{})
 				done := make(chan error, 1)
 				go func() {
-					done <- s.client.Consume(ctx, "S", "c", func(context.Context, jetstream.Msg) error {
+					// The handler holds the one slot until ctx ends, so Consume
+					// waits in the select for a free slot or the end of ctx, and
+					// the end of ctx comes first.
+					done <- s.client.Consume(ctx, "S", "c", func(ctx context.Context, _ jetstream.Msg) error {
 						close(started)
-						<-release
+						<-ctx.Done()
 
 						return nil
 					}, &client.ConsumeOptions{MaxInFlight: 1})
 				}()
 
-				// The one slot is in use, so Consume waits in the select for a free
-				// slot or the end of ctx.
 				<-started
-				time.Sleep(50 * time.Millisecond)
 				cancel()
-				time.Sleep(50 * time.Millisecond)
-				close(release)
 
 				s.ErrorIs(<-done, context.Canceled)
 			},
@@ -494,22 +548,29 @@ func (s *MessagingPublicTestSuite) TestConsume() {
 				s.js.EXPECT().Consumer(gomock.Any(), "S", "c").Return(consumer, nil)
 
 				started := make(chan struct{})
-				release := make(chan struct{})
 				go func() {
 					<-started
-					// Consume now waits for the slot of the handler.
-					time.Sleep(20 * time.Millisecond)
 					cancel()
-					time.Sleep(20 * time.Millisecond)
-					close(release)
 				}()
 
-				err := s.client.Consume(ctx, "S", "c", func(context.Context, jetstream.Msg) error {
-					close(started)
-					<-release
-					return nil
-				}, &client.ConsumeOptions{MaxInFlight: 1})
+				// The handler runs until ctx ends. Consume returns only after
+				// it returns.
+				returned := false
+				err := s.client.Consume(
+					ctx,
+					"S",
+					"c",
+					func(ctx context.Context, _ jetstream.Msg) error {
+						close(started)
+						<-ctx.Done()
+						returned = true
+
+						return nil
+					},
+					&client.ConsumeOptions{MaxInFlight: 1},
+				)
 				s.ErrorIs(err, context.Canceled)
+				s.True(returned)
 			},
 		},
 		{
@@ -687,9 +748,20 @@ func (s *ConsumeServerPublicTestSuite) TestConsume() {
 						func(context.Context, jetstream.Msg) error { return nil }, nil)
 				}()
 
-				// Let Consume start its wait. The pull request expires after 30
-				// seconds, so a return within 2 seconds shows that ctx ended it.
-				time.Sleep(200 * time.Millisecond)
+				// Wait until the server has the pull request of Consume. It
+				// expires after 30 seconds, so a return within 2 seconds shows
+				// that ctx ended it.
+				js, err := s.client.JetStream()
+				s.Require().NoError(err)
+				s.Eventually(func() bool {
+					cons, err := js.Consumer(context.Background(), "JOBS", "agent")
+					if err != nil {
+						return false
+					}
+					info, err := cons.Info(context.Background())
+
+					return err == nil && info.NumWaiting > 0
+				}, 5*time.Second, 10*time.Millisecond)
 				began := time.Now()
 				cancel()
 
