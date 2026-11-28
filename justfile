@@ -1,9 +1,6 @@
 set allow-duplicate-variables
 
 # Optional modules: mod? allows `just fetch` to work before .just/remote/ exists.
-# Recipes below use `just` subcommands instead of dependency syntax because just
-
-# validates dependencies at parse time, which would fail when modules aren't loaded.
 import? '.just/remote/go.just'
 import? '.just/remote/md.just'
 import? '.just/remote/just.just'
@@ -50,10 +47,10 @@ test:
 generate:
     just go-generate
 
-# Format and lint before committing
+# Format, lint, and generate before committing
 ready:
     just generate
-    just just-fmt
     just md-fmt
     just go-fmt
     just go-vet
+    just just-fmt

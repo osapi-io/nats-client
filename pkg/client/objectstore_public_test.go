@@ -123,21 +123,37 @@ func (s *ObjectStorePublicTestSuite) TestObjectStoreCreateOrUpdate() {
 }
 
 func (s *ObjectStorePublicTestSuite) TestHandle() {
-	s.Run("when the bucket is not there returns the error", func() {
-		s.js.EXPECT().ObjectStore(gomock.Any(), "b").Return(nil, jetstream.ErrBucketNotFound)
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "when the bucket is not there returns the error",
+			validateFunc: func() {
+				s.js.EXPECT().
+					ObjectStore(gomock.Any(), "b").
+					Return(nil, jetstream.ErrBucketNotFound)
 
-		_, err := s.client.ObjectGetBytes(s.ctx, "b", "o")
-		s.ErrorIs(err, jetstream.ErrBucketNotFound)
-		s.ErrorContains(err, "failed to get Object Store bucket b")
-	})
+				_, err := s.client.ObjectGetBytes(s.ctx, "b", "o")
+				s.ErrorIs(err, jetstream.ErrBucketNotFound)
+				s.ErrorContains(err, "failed to get Object Store bucket b")
+			},
+		},
+		{
+			name: "asks the server for the handle once",
+			validateFunc: func() {
+				s.open()
+				s.store.EXPECT().Delete(gomock.Any(), "o").Return(nil).Times(2)
 
-	s.Run("asks the server for the handle once", func() {
-		s.open()
-		s.store.EXPECT().Delete(gomock.Any(), "o").Return(nil).Times(2)
+				s.NoError(s.client.ObjectDelete(s.ctx, "b", "o"))
+				s.NoError(s.client.ObjectDelete(s.ctx, "b", "o"))
+			},
+		},
+	}
 
-		s.NoError(s.client.ObjectDelete(s.ctx, "b", "o"))
-		s.NoError(s.client.ObjectDelete(s.ctx, "b", "o"))
-	})
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
 }
 
 func (s *ObjectStorePublicTestSuite) TestCalls() {

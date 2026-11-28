@@ -24,8 +24,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"testing"
+	"time"
 
+	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
@@ -143,96 +146,158 @@ func (s *StreamPublicTestSuite) TestStreamCreateOrUpdate() {
 func (s *StreamPublicTestSuite) TestConsumerCreateOrUpdate() {
 	cfg := jetstream.ConsumerConfig{Durable: "c"}
 
-	s.Run("makes the consumer", func() {
-		s.js.EXPECT().CreateOrUpdateConsumer(gomock.Any(), "S", cfg).Return(nil, nil)
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "makes the consumer",
+			validateFunc: func() {
+				s.js.EXPECT().CreateOrUpdateConsumer(gomock.Any(), "S", cfg).Return(nil, nil)
 
-		s.NoError(s.client.ConsumerCreateOrUpdate(s.ctx, "S", cfg))
-	})
+				s.NoError(s.client.ConsumerCreateOrUpdate(s.ctx, "S", cfg))
+			},
+		},
+		{
+			name: "when the server refuses returns the error",
+			validateFunc: func() {
+				s.js.EXPECT().CreateOrUpdateConsumer(gomock.Any(), "S", cfg).Return(nil, errBoom)
 
-	s.Run("when the server refuses returns the error", func() {
-		s.js.EXPECT().CreateOrUpdateConsumer(gomock.Any(), "S", cfg).Return(nil, errBoom)
+				s.EqualError(
+					s.client.ConsumerCreateOrUpdate(s.ctx, "S", cfg),
+					"error creating consumer for stream S: boom",
+				)
+			},
+		},
+	}
 
-		s.EqualError(
-			s.client.ConsumerCreateOrUpdate(s.ctx, "S", cfg),
-			"error creating consumer for stream S: boom",
-		)
-	})
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
 }
 
 func (s *StreamPublicTestSuite) TestStreamInfo() {
-	s.Run("returns the info and asks for the handle once", func() {
-		info := &jetstream.StreamInfo{State: jetstream.StreamState{Msgs: 3}}
-		s.open()
-		s.stream.EXPECT().Info(gomock.Any()).Return(info, nil).Times(2)
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "returns the info and asks for the handle once",
+			validateFunc: func() {
+				info := &jetstream.StreamInfo{State: jetstream.StreamState{Msgs: 3}}
+				s.open()
+				s.stream.EXPECT().Info(gomock.Any()).Return(info, nil).Times(2)
 
-		got, err := s.client.StreamInfo(s.ctx, "S")
-		s.NoError(err)
-		s.Equal(info, got)
-		_, err = s.client.StreamInfo(s.ctx, "S")
-		s.NoError(err)
-	})
+				got, err := s.client.StreamInfo(s.ctx, "S")
+				s.NoError(err)
+				s.Equal(info, got)
+				_, err = s.client.StreamInfo(s.ctx, "S")
+				s.NoError(err)
+			},
+		},
+		{
+			name: "when the stream is not there returns the error",
+			validateFunc: func() {
+				s.js.EXPECT().Stream(gomock.Any(), "S").Return(nil, jetstream.ErrStreamNotFound)
 
-	s.Run("when the stream is not there returns the error", func() {
-		s.js.EXPECT().Stream(gomock.Any(), "S").Return(nil, jetstream.ErrStreamNotFound)
+				_, err := s.client.StreamInfo(s.ctx, "S")
+				s.ErrorIs(err, jetstream.ErrStreamNotFound)
+				s.ErrorContains(err, "failed to get stream S")
+			},
+		},
+		{
+			name: "when the info fails returns the error",
+			validateFunc: func() {
+				s.open()
+				s.stream.EXPECT().Info(gomock.Any()).Return(nil, errBoom)
 
-		_, err := s.client.StreamInfo(s.ctx, "S")
-		s.ErrorIs(err, jetstream.ErrStreamNotFound)
-		s.ErrorContains(err, "failed to get stream S")
-	})
+				_, err := s.client.StreamInfo(s.ctx, "S")
+				s.EqualError(err, "failed to get stream info for S: boom")
+			},
+		},
+	}
 
-	s.Run("when the info fails returns the error", func() {
-		s.open()
-		s.stream.EXPECT().Info(gomock.Any()).Return(nil, errBoom)
-
-		_, err := s.client.StreamInfo(s.ctx, "S")
-		s.EqualError(err, "failed to get stream info for S: boom")
-	})
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
 }
 
 func (s *StreamPublicTestSuite) TestStreamLastMsg() {
-	s.Run("returns the last message on the subject", func() {
-		msg := &jetstream.RawStreamMsg{Subject: "audit.x", Sequence: 9}
-		s.open()
-		s.stream.EXPECT().GetLastMsgForSubject(gomock.Any(), "audit.x").Return(msg, nil)
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "returns the last message on the subject",
+			validateFunc: func() {
+				msg := &jetstream.RawStreamMsg{Subject: "audit.x", Sequence: 9}
+				s.open()
+				s.stream.EXPECT().GetLastMsgForSubject(gomock.Any(), "audit.x").Return(msg, nil)
 
-		got, err := s.client.StreamLastMsg(s.ctx, "S", "audit.x")
-		s.NoError(err)
-		s.Equal(msg, got)
-	})
+				got, err := s.client.StreamLastMsg(s.ctx, "S", "audit.x")
+				s.NoError(err)
+				s.Equal(msg, got)
+			},
+		},
+		{
+			name: "when the stream is not there returns the error",
+			validateFunc: func() {
+				s.js.EXPECT().Stream(gomock.Any(), "S").Return(nil, errBoom)
 
-	s.Run("when the stream is not there returns the error", func() {
-		s.js.EXPECT().Stream(gomock.Any(), "S").Return(nil, errBoom)
+				_, err := s.client.StreamLastMsg(s.ctx, "S", "audit.x")
+				s.ErrorIs(err, errBoom)
+			},
+		},
+	}
 
-		_, err := s.client.StreamLastMsg(s.ctx, "S", "audit.x")
-		s.ErrorIs(err, errBoom)
-	})
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
 }
 
 func (s *StreamPublicTestSuite) TestStreamGetMsg() {
-	s.Run("returns the message at the sequence", func() {
-		msg := &jetstream.RawStreamMsg{Subject: "jobs.x", Sequence: 7}
-		s.open()
-		s.stream.EXPECT().GetMsg(gomock.Any(), uint64(7)).Return(msg, nil)
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "returns the message at the sequence",
+			validateFunc: func() {
+				msg := &jetstream.RawStreamMsg{Subject: "jobs.x", Sequence: 7}
+				s.open()
+				s.stream.EXPECT().GetMsg(gomock.Any(), uint64(7)).Return(msg, nil)
 
-		got, err := s.client.StreamGetMsg(s.ctx, "S", 7)
-		s.NoError(err)
-		s.Equal(msg, got)
-	})
+				got, err := s.client.StreamGetMsg(s.ctx, "S", 7)
+				s.NoError(err)
+				s.Equal(msg, got)
+			},
+		},
+		{
+			name: "when the stream does not have it returns the error",
+			validateFunc: func() {
+				s.open()
+				s.stream.EXPECT().
+					GetMsg(gomock.Any(), uint64(7)).
+					Return(nil, jetstream.ErrMsgNotFound)
 
-	s.Run("when the stream does not have it returns the error", func() {
-		s.open()
-		s.stream.EXPECT().GetMsg(gomock.Any(), uint64(7)).Return(nil, jetstream.ErrMsgNotFound)
+				_, err := s.client.StreamGetMsg(s.ctx, "S", 7)
+				s.ErrorIs(err, jetstream.ErrMsgNotFound)
+			},
+		},
+		{
+			name: "when the stream is not there returns the error",
+			validateFunc: func() {
+				s.js.EXPECT().Stream(gomock.Any(), "S").Return(nil, errBoom)
 
-		_, err := s.client.StreamGetMsg(s.ctx, "S", 7)
-		s.ErrorIs(err, jetstream.ErrMsgNotFound)
-	})
+				_, err := s.client.StreamGetMsg(s.ctx, "S", 7)
+				s.ErrorIs(err, errBoom)
+			},
+		},
+	}
 
-	s.Run("when the stream is not there returns the error", func() {
-		s.js.EXPECT().Stream(gomock.Any(), "S").Return(nil, errBoom)
-
-		_, err := s.client.StreamGetMsg(s.ctx, "S", 7)
-		s.ErrorIs(err, errBoom)
-	})
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
 }
 
 // batch returns a batch of msgs that ends with err.
@@ -364,4 +429,152 @@ func (s *StreamPublicTestSuite) TestStreamRead() {
 
 func TestStreamPublicTestSuite(t *testing.T) {
 	suite.Run(t, new(StreamPublicTestSuite))
+}
+
+// StreamServerPublicTestSuite runs StreamRead against a real NATS server,
+// because only a real pull request shows when a wait for messages ends.
+type StreamServerPublicTestSuite struct {
+	suite.Suite
+
+	server *server.Server
+	client *client.Client
+}
+
+func (s *StreamServerPublicTestSuite) SetupTest() {
+	srv, err := server.NewServer(&server.Options{
+		Host:      "127.0.0.1",
+		Port:      -1,
+		JetStream: true,
+		StoreDir:  s.T().TempDir(),
+	})
+	s.Require().NoError(err)
+	srv.Start()
+	s.Require().True(srv.ReadyForConnections(5 * time.Second))
+	s.server = srv
+
+	port := srv.Addr().(*net.TCPAddr).Port
+	s.client = client.New(slog.Default(), &client.Options{Host: "127.0.0.1", Port: port})
+	s.Require().NoError(s.client.Connect(context.Background()))
+
+	ctx := context.Background()
+	s.Require().NoError(s.client.StreamCreateOrUpdate(ctx, jetstream.StreamConfig{
+		Name:     "AUDIT",
+		Subjects: []string{"audit.>"},
+		Storage:  jetstream.MemoryStorage,
+	}))
+	s.Require().NoError(s.client.Publish(ctx, "audit.x", []byte("entry-1")))
+}
+
+func (s *StreamServerPublicTestSuite) TearDownTest() {
+	s.client.Close()
+	s.server.Shutdown()
+}
+
+func (s *StreamServerPublicTestSuite) TestStreamRead() {
+	tests := []struct {
+		name         string
+		ctx          func() (context.Context, context.CancelFunc)
+		validateFunc func(msgs []jetstream.Msg, err error, took time.Duration)
+	}{
+		{
+			name: "with fewer messages than count returns them at once",
+			ctx: func() (context.Context, context.CancelFunc) {
+				return context.WithCancel(context.Background())
+			},
+			validateFunc: func(msgs []jetstream.Msg, err error, took time.Duration) {
+				s.Require().NoError(err)
+				s.Require().Len(msgs, 1)
+				s.Equal("entry-1", string(msgs[0].Data()))
+				s.Less(took, time.Second)
+			},
+		},
+		{
+			name: "when ctx already ended returns its error",
+			ctx: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+
+				return ctx, cancel
+			},
+			validateFunc: func(_ []jetstream.Msg, err error, _ time.Duration) {
+				s.ErrorIs(err, context.Canceled)
+			},
+		},
+		{
+			name: "leaves no consumer behind",
+			ctx: func() (context.Context, context.CancelFunc) {
+				return context.WithCancel(context.Background())
+			},
+			validateFunc: func(_ []jetstream.Msg, err error, _ time.Duration) {
+				s.Require().NoError(err)
+				for range 2 {
+					_, err := s.client.StreamRead(context.Background(), "AUDIT", 0, 3)
+					s.Require().NoError(err)
+				}
+
+				info, err := s.client.StreamInfo(context.Background(), "AUDIT")
+				s.Require().NoError(err)
+				s.Equal(0, info.State.Consumers)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			ctx, cancel := tc.ctx()
+			defer cancel()
+
+			began := time.Now()
+			msgs, err := s.client.StreamRead(ctx, "AUDIT", 0, 3)
+			tc.validateFunc(msgs, err, time.Since(began))
+		})
+	}
+}
+
+func (s *StreamServerPublicTestSuite) TestStreamCreateOrUpdate() {
+	tests := []struct {
+		name         string
+		cfg          jetstream.StreamConfig
+		validateFunc func(jetstream.StreamConfig)
+	}{
+		{
+			name: "a new storage type keeps the old one, and applies the rest",
+			cfg: jetstream.StreamConfig{
+				Name:     "AUDIT",
+				Subjects: []string{"audit.>", "more.>"},
+				Storage:  jetstream.FileStorage,
+			},
+			validateFunc: func(got jetstream.StreamConfig) {
+				s.Equal(jetstream.MemoryStorage, got.Storage)
+				s.Equal([]string{"audit.>", "more.>"}, got.Subjects)
+			},
+		},
+		{
+			name: "the same storage type applies the change",
+			cfg: jetstream.StreamConfig{
+				Name:     "AUDIT",
+				Subjects: []string{"audit.>", "other.>"},
+				Storage:  jetstream.MemoryStorage,
+			},
+			validateFunc: func(got jetstream.StreamConfig) {
+				s.Equal(jetstream.MemoryStorage, got.Storage)
+				s.Equal([]string{"audit.>", "other.>"}, got.Subjects)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			ctx := context.Background()
+			s.Require().NoError(s.client.StreamCreateOrUpdate(ctx, tc.cfg))
+
+			info, err := s.client.StreamInfo(ctx, "AUDIT")
+			s.Require().NoError(err)
+			tc.validateFunc(info.Config)
+		})
+	}
+}
+
+func TestStreamServerPublicTestSuite(t *testing.T) {
+	suite.Run(t, new(StreamServerPublicTestSuite))
 }
