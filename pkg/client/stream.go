@@ -240,6 +240,35 @@ func (c *Client) StreamGetMsg(
 		})
 }
 
+// StreamPurgeSubject removes each message of subject from the stream name,
+// such as the messages of one key of a KV bucket from its stream KV_<bucket>.
+// A purge writes nothing, so it works on a stream that is at its max_bytes,
+// where a KV delete, which writes a marker, is refused.
+func (c *Client) StreamPurgeSubject(
+	ctx context.Context,
+	name string,
+	subject string,
+) error {
+	_, err := observe(ctx, c.tel,
+		newOp("stream.purge", name, attribute.String("messaging.destination.name", subject)),
+		func(ctx context.Context) (struct{}, error) {
+			return onStream(ctx, c, name, func(s jetstream.Stream) (struct{}, error) {
+				if err := s.Purge(ctx, jetstream.WithPurgeSubject(subject)); err != nil {
+					return struct{}{}, fmt.Errorf(
+						"failed to purge %s from stream %s: %w",
+						subject,
+						name,
+						err,
+					)
+				}
+
+				return struct{}{}, nil
+			})
+		})
+
+	return err
+}
+
 // StreamRead reads up to count messages of the stream name in order, from the
 // sequence from, or from the first message when from is 0. It returns the
 // messages that the stream has now, and does not wait for more. count must be
