@@ -127,11 +127,39 @@ func (s *KVPublicTestSuite) TestKVCreateOrUpdate() {
 	}
 }
 
-func (s *KVPublicTestSuite) TestHandle() {
+func (s *KVPublicTestSuite) TestKVGet() {
+	entry := mocks.NewMockKeyValueEntry(gomock.NewController(s.T()))
+
+	setup := func(kv *mocks.MockKeyValue, err error) {
+		kv.EXPECT().Get(gomock.Any(), "k").Return(entry, err)
+	}
+	call := func(c *client.Client) (any, error) { return c.KVGet(s.ctx, "b", "k") }
+
 	tests := []struct {
 		name         string
 		validateFunc func()
 	}{
+		{
+			name: "returns the answer of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.kv, nil)
+
+				got, err := call(s.client)
+				s.NoError(err)
+				s.Equal(entry, got)
+			},
+		},
+		{
+			name: "returns the error of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.kv, errBoom)
+
+				_, err := call(s.client)
+				s.ErrorIs(err, errBoom)
+			},
+		},
 		{
 			name: "when the bucket is not there returns the error",
 			validateFunc: func() {
@@ -140,6 +168,160 @@ func (s *KVPublicTestSuite) TestHandle() {
 				_, err := s.client.KVGet(s.ctx, "b", "k")
 				s.ErrorIs(err, jetstream.ErrBucketNotFound)
 				s.ErrorContains(err, "failed to get KV bucket b")
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
+}
+
+func (s *KVPublicTestSuite) TestKVPut() {
+	setup := func(kv *mocks.MockKeyValue, err error) {
+		kv.EXPECT().Put(gomock.Any(), "k", []byte("v")).Return(uint64(2), err)
+	}
+	call := func(c *client.Client) (any, error) { return c.KVPut(s.ctx, "b", "k", []byte("v")) }
+
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "returns the answer of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.kv, nil)
+
+				got, err := call(s.client)
+				s.NoError(err)
+				s.Equal(uint64(2), got)
+			},
+		},
+		{
+			name: "returns the error of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.kv, errBoom)
+
+				_, err := call(s.client)
+				s.ErrorIs(err, errBoom)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
+}
+
+func (s *KVPublicTestSuite) TestKVCreate() {
+	setup := func(kv *mocks.MockKeyValue, err error) {
+		kv.EXPECT().Create(gomock.Any(), "k", []byte("v")).Return(uint64(3), err)
+	}
+	call := func(c *client.Client) (any, error) { return c.KVCreate(s.ctx, "b", "k", []byte("v")) }
+
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "returns the answer of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.kv, nil)
+
+				got, err := call(s.client)
+				s.NoError(err)
+				s.Equal(uint64(3), got)
+			},
+		},
+		{
+			name: "returns the error of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.kv, errBoom)
+
+				_, err := call(s.client)
+				s.ErrorIs(err, errBoom)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
+}
+
+func (s *KVPublicTestSuite) TestKVUpdate() {
+	setup := func(kv *mocks.MockKeyValue, err error) {
+		kv.EXPECT().Update(gomock.Any(), "k", []byte("v"), uint64(3)).Return(uint64(4), err)
+	}
+	call := func(c *client.Client) (any, error) {
+		return c.KVUpdate(s.ctx, "b", "k", []byte("v"), 3)
+	}
+
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "returns the answer of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.kv, nil)
+
+				got, err := call(s.client)
+				s.NoError(err)
+				s.Equal(uint64(4), got)
+			},
+		},
+		{
+			name: "returns the error of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.kv, errBoom)
+
+				_, err := call(s.client)
+				s.ErrorIs(err, errBoom)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
+}
+
+func (s *KVPublicTestSuite) TestKVDelete() {
+	setup := func(kv *mocks.MockKeyValue, err error) {
+		kv.EXPECT().Delete(gomock.Any(), "k").Return(err)
+	}
+	call := func(c *client.Client) (any, error) { return nil, c.KVDelete(s.ctx, "b", "k") }
+
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "returns the answer of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.kv, nil)
+
+				got, err := call(s.client)
+				s.NoError(err)
+				s.Equal(nil, got)
+			},
+		},
+		{
+			name: "returns the error of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.kv, errBoom)
+
+				_, err := call(s.client)
+				s.ErrorIs(err, errBoom)
 			},
 		},
 		{
@@ -190,88 +372,48 @@ func (s *KVPublicTestSuite) TestHandle() {
 	}
 }
 
-func (s *KVPublicTestSuite) TestCalls() {
-	entry := mocks.NewMockKeyValueEntry(gomock.NewController(s.T()))
+func (s *KVPublicTestSuite) TestKVStatus() {
+	setup := func(kv *mocks.MockKeyValue, err error) {
+		kv.EXPECT().Status(gomock.Any()).Return(nil, err)
+	}
+	call := func(c *client.Client) (any, error) {
+		st, err := c.KVStatus(s.ctx, "b")
+		if st == nil {
+			return nil, err
+		}
+
+		return st, err
+	}
 
 	tests := []struct {
-		name  string
-		setup func(*mocks.MockKeyValue, error)
-		call  func(*client.Client) (any, error)
-		want  any
+		name         string
+		validateFunc func()
 	}{
 		{
-			name: "KVGet",
-			setup: func(kv *mocks.MockKeyValue, err error) {
-				kv.EXPECT().Get(gomock.Any(), "k").Return(entry, err)
-			},
-			call: func(c *client.Client) (any, error) { return c.KVGet(s.ctx, "b", "k") },
-			want: entry,
-		},
-		{
-			name: "KVPut",
-			setup: func(kv *mocks.MockKeyValue, err error) {
-				kv.EXPECT().Put(gomock.Any(), "k", []byte("v")).Return(uint64(2), err)
-			},
-			call: func(c *client.Client) (any, error) { return c.KVPut(s.ctx, "b", "k", []byte("v")) },
-			want: uint64(2),
-		},
-		{
-			name: "KVCreate",
-			setup: func(kv *mocks.MockKeyValue, err error) {
-				kv.EXPECT().Create(gomock.Any(), "k", []byte("v")).Return(uint64(3), err)
-			},
-			call: func(c *client.Client) (any, error) { return c.KVCreate(s.ctx, "b", "k", []byte("v")) },
-			want: uint64(3),
-		},
-		{
-			name: "KVUpdate",
-			setup: func(kv *mocks.MockKeyValue, err error) {
-				kv.EXPECT().Update(gomock.Any(), "k", []byte("v"), uint64(3)).Return(uint64(4), err)
-			},
-			call: func(c *client.Client) (any, error) {
-				return c.KVUpdate(s.ctx, "b", "k", []byte("v"), 3)
-			},
-			want: uint64(4),
-		},
-		{
-			name: "KVDelete",
-			setup: func(kv *mocks.MockKeyValue, err error) {
-				kv.EXPECT().Delete(gomock.Any(), "k").Return(err)
-			},
-			call: func(c *client.Client) (any, error) { return nil, c.KVDelete(s.ctx, "b", "k") },
-		},
-		{
-			name: "KVStatus",
-			setup: func(kv *mocks.MockKeyValue, err error) {
-				kv.EXPECT().Status(gomock.Any()).Return(nil, err)
-			},
-			call: func(c *client.Client) (any, error) {
-				st, err := c.KVStatus(s.ctx, "b")
-				if st == nil {
-					return nil, err
-				}
+			name: "returns the answer of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.kv, nil)
 
-				return st, err
+				got, err := call(s.client)
+				s.NoError(err)
+				s.Equal(nil, got)
+			},
+		},
+		{
+			name: "returns the error of the bucket",
+			validateFunc: func() {
+				s.open()
+				setup(s.kv, errBoom)
+
+				_, err := call(s.client)
+				s.ErrorIs(err, errBoom)
 			},
 		},
 	}
 
 	for _, tc := range tests {
-		s.Run(tc.name+" returns the answer of the bucket", func() {
-			s.open()
-			tc.setup(s.kv, nil)
-
-			got, err := tc.call(s.client)
-			s.NoError(err)
-			s.Equal(tc.want, got)
-		})
-		s.Run(tc.name+" returns the error of the bucket", func() {
-			s.open()
-			tc.setup(s.kv, errBoom)
-
-			_, err := tc.call(s.client)
-			s.ErrorIs(err, errBoom)
-		})
+		s.Run(tc.name, tc.validateFunc)
 	}
 }
 

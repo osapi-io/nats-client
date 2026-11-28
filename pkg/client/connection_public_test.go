@@ -27,7 +27,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -35,6 +34,7 @@ import (
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
 
@@ -72,6 +72,10 @@ func (s *ConnectionPublicTestSuite) TearDownTest() {
 func (s *ConnectionPublicTestSuite) TestClose() {
 	// kv is the bucket handle that the first row reads before and after Close.
 	var kv *mocks.MockKeyValue
+	// readers and errs are the calls that the during-calls row runs while
+	// the client closes, and what each returned.
+	var readers sync.WaitGroup
+	var errs chan error
 
 	tests := []struct {
 		name         string
@@ -115,6 +119,45 @@ func (s *ConnectionPublicTestSuite) TestClose() {
 				s.client.NC = nil
 			},
 		},
+		{
+			name: "a call that runs while the client closes returns its result or ErrNotConnected",
+			setupFunc: func() {
+				const goroutines, calls = 8, 200
+				ctx := context.Background()
+				s.mockJS.EXPECT().
+					KeyValue(gomock.Any(), "b").
+					Return(nil, jetstream.ErrBucketNotFound).
+					AnyTimes()
+				s.mockNATS.EXPECT().Close().AnyTimes()
+
+				var started sync.WaitGroup
+				errs = make(chan error, goroutines*calls)
+				started.Add(goroutines)
+				for range goroutines {
+					readers.Go(func() {
+						for i := range calls {
+							_, err := s.client.KVStatus(ctx, "b")
+							errs <- err
+							if i == 0 {
+								started.Done()
+							}
+						}
+					})
+				}
+				started.Wait()
+			},
+			validateFunc: func() {
+				readers.Wait()
+				close(errs)
+				for err := range errs {
+					if !errors.Is(err, client.ErrNotConnected) {
+						s.ErrorIs(err, jetstream.ErrBucketNotFound)
+					}
+				}
+				_, err := s.client.KVStatus(context.Background(), "b")
+				s.ErrorIs(err, client.ErrNotConnected)
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -124,58 +167,6 @@ func (s *ConnectionPublicTestSuite) TestClose() {
 			if tc.validateFunc != nil {
 				tc.validateFunc()
 			}
-		})
-	}
-}
-
-func (s *ConnectionPublicTestSuite) TestCloseDuringCalls() {
-	tests := []struct {
-		name    string
-		readers int
-		calls   int
-	}{
-		{
-			name:    "a call that runs while the client closes returns its result or ErrNotConnected",
-			readers: 8,
-			calls:   200,
-		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			ctx := context.Background()
-			s.mockJS.EXPECT().
-				KeyValue(gomock.Any(), "b").
-				Return(nil, jetstream.ErrBucketNotFound).
-				AnyTimes()
-			s.mockNATS.EXPECT().Close().AnyTimes()
-
-			var wg, started sync.WaitGroup
-			errs := make(chan error, tc.readers*tc.calls)
-			started.Add(tc.readers)
-			for range tc.readers {
-				wg.Go(func() {
-					for i := range tc.calls {
-						_, err := s.client.KVStatus(ctx, "b")
-						errs <- err
-						if i == 0 {
-							started.Done()
-						}
-					}
-				})
-			}
-			started.Wait()
-			s.client.Close()
-			wg.Wait()
-			close(errs)
-
-			for err := range errs {
-				if !errors.Is(err, client.ErrNotConnected) {
-					s.ErrorIs(err, jetstream.ErrBucketNotFound)
-				}
-			}
-			_, err := s.client.KVStatus(ctx, "b")
-			s.ErrorIs(err, client.ErrNotConnected)
 		})
 	}
 }
@@ -425,36 +416,6 @@ func TestConnectionPublicTestSuite(t *testing.T) {
 	suite.Run(t, new(ConnectionPublicTestSuite))
 }
 
-// ConnectionServerPublicTestSuite runs calls against a real NATS server while
-// the client closes and connects again, because only a real connection shows
-// a race on it. Run it with -race.
-type ConnectionServerPublicTestSuite struct {
-	suite.Suite
-
-	server *server.Server
-	client *client.Client
-}
-
-func (s *ConnectionServerPublicTestSuite) SetupTest() {
-	srv, err := server.NewServer(&server.Options{
-		Host:      "127.0.0.1",
-		Port:      -1,
-		JetStream: true,
-		StoreDir:  s.T().TempDir(),
-	})
-	s.Require().NoError(err)
-	srv.Start()
-	s.Require().True(srv.ReadyForConnections(5 * time.Second))
-	s.server = srv
-
-	port := srv.Addr().(*net.TCPAddr).Port
-	s.client = client.New(
-		slog.New(slog.DiscardHandler),
-		&client.Options{Host: "127.0.0.1", Port: port},
-	)
-	s.Require().NoError(s.client.Connect(context.Background()))
-}
-
 // syncBuffer is a bytes.Buffer that the handlers of the connection, which
 // run in their own goroutine, and the test can use at the same time.
 type syncBuffer struct {
@@ -476,108 +437,6 @@ func (b *syncBuffer) String() string {
 	defer b.mu.Unlock()
 
 	return b.buf.String()
-}
-
-// start starts a NATS server on port, or on a free port when port is -1.
-func (s *ConnectionServerPublicTestSuite) start(
-	port int,
-) *server.Server {
-	srv, err := server.NewServer(&server.Options{Host: "127.0.0.1", Port: port})
-	s.Require().NoError(err)
-	srv.Start()
-	s.Require().True(srv.ReadyForConnections(5 * time.Second))
-
-	return srv
-}
-
-func (s *ConnectionServerPublicTestSuite) TearDownTest() {
-	s.client.Close()
-	s.server.Shutdown()
-}
-
-func (s *ConnectionServerPublicTestSuite) TestReconnect() {
-	tests := []struct {
-		name         string
-		validateFunc func()
-	}{
-		{
-			name: "a call while the client closes and connects is its result or ErrNotConnected",
-			validateFunc: func() {
-				ctx := context.Background()
-				stop := make(chan struct{})
-				var calls sync.WaitGroup
-				var mu sync.Mutex
-				var unexpected []error
-
-				calls.Add(1)
-				go func() {
-					defer calls.Done()
-					for {
-						select {
-						case <-stop:
-							return
-						default:
-						}
-						_ = s.client.ConnectedURL()
-						_ = s.client.ConnectedServerVersion()
-						for _, err := range []error{
-							s.client.PublishCore(ctx, "x", []byte("y")),
-							subscribe(ctx, s.client),
-						} {
-							if err != nil && !isClosedOrNotConnected(err) {
-								mu.Lock()
-								unexpected = append(unexpected, err)
-								mu.Unlock()
-							}
-						}
-					}
-				}()
-
-				for range 20 {
-					s.client.Close()
-					s.Require().NoError(s.client.Connect(context.Background()))
-				}
-				close(stop)
-				calls.Wait()
-
-				s.Empty(unexpected)
-				s.NotEmpty(s.client.ConnectedURL())
-			},
-		},
-		{
-			name: "logs the drop and the reconnect when the server comes back",
-			validateFunc: func() {
-				srv := s.start(-1)
-				port := srv.Addr().(*net.TCPAddr).Port
-
-				var logs syncBuffer
-				c := client.New(slog.New(slog.NewTextHandler(&logs, nil)), &client.Options{
-					Host:      "127.0.0.1",
-					Port:      port,
-					Reconnect: client.ReconnectOptions{Wait: 50 * time.Millisecond},
-				})
-				s.Require().NoError(c.Connect(context.Background()))
-				defer c.Close()
-
-				srv.Shutdown()
-				srv.WaitForShutdown()
-				s.Eventually(func() bool {
-					return strings.Contains(logs.String(), `msg="disconnected from NATS"`)
-				}, 5*time.Second, 10*time.Millisecond)
-
-				again := s.start(port)
-				defer again.Shutdown()
-				s.Eventually(func() bool {
-					return strings.Contains(logs.String(), `msg="reconnected to NATS"`)
-				}, 5*time.Second, 10*time.Millisecond)
-				s.NotEmpty(c.ConnectedURL())
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, tc.validateFunc)
-	}
 }
 
 // subscribe subscribes to a subject and unsubscribes at once.
@@ -603,49 +462,42 @@ func isClosedOrNotConnected(
 		errors.Is(err, nats.ErrBadSubscription)
 }
 
-func (s *ConnectionServerPublicTestSuite) TestSubscribe() {
-	tests := []struct {
-		name         string
-		validateFunc func()
-	}{
-		{
-			name: "the end of ctx unsubscribes",
-			validateFunc: func() {
-				ctx, cancel := context.WithCancel(context.Background())
-				sub, err := s.client.Subscribe(ctx, "x.ctx", func(context.Context, *nats.Msg) {})
-				s.Require().NoError(err)
-				s.True(sub.IsValid())
+// startServer starts a NATS server with opts, and waits until it takes
+// connections. The cleanup of t stops it.
+func startServer(
+	t *testing.T,
+	opts *server.Options,
+) *server.Server {
+	t.Helper()
+	srv, err := server.NewServer(opts)
+	require.NoError(t, err)
+	srv.Start()
+	require.True(t, srv.ReadyForConnections(5*time.Second))
+	t.Cleanup(srv.Shutdown)
 
-				cancel()
-				s.Eventually(
-					func() bool { return !sub.IsValid() },
-					2*time.Second,
-					10*time.Millisecond,
-				)
-			},
-		},
-		{
-			name: "while ctx is live the subscription stays",
-			validateFunc: func() {
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				sub, err := s.client.Subscribe(ctx, "x.live", func(context.Context, *nats.Msg) {})
-				s.Require().NoError(err)
-
-				s.Never(
-					func() bool { return !sub.IsValid() },
-					100*time.Millisecond,
-					10*time.Millisecond,
-				)
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, tc.validateFunc)
-	}
+	return srv
 }
 
-func TestConnectionServerPublicTestSuite(t *testing.T) {
-	suite.Run(t, new(ConnectionServerPublicTestSuite))
+// connectJetStream starts a NATS server with JetStream on a free port, and
+// returns a client that is connected to it. The cleanup of t closes the
+// client and stops the server.
+func connectJetStream(
+	t *testing.T,
+) *client.Client {
+	t.Helper()
+	srv := startServer(t, &server.Options{
+		Host:      "127.0.0.1",
+		Port:      -1,
+		JetStream: true,
+		StoreDir:  t.TempDir(),
+	})
+
+	c := client.New(slog.New(slog.DiscardHandler), &client.Options{
+		Host: "127.0.0.1",
+		Port: srv.Addr().(*net.TCPAddr).Port,
+	})
+	require.NoError(t, c.Connect(context.Background()))
+	t.Cleanup(c.Close)
+
+	return c
 }

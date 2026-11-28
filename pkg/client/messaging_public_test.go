@@ -418,6 +418,39 @@ func (s *MessagingPublicTestSuite) TestSubscribe() {
 				}, 200*time.Millisecond, 5*time.Millisecond)
 			},
 		},
+		{
+			name: "on a server the end of ctx unsubscribes",
+			validateFunc: func() {
+				c := connectJetStream(s.T())
+				ctx, cancel := context.WithCancel(context.Background())
+				sub, err := c.Subscribe(ctx, "x.ctx", func(context.Context, *nats.Msg) {})
+				s.Require().NoError(err)
+				s.True(sub.IsValid())
+
+				cancel()
+				s.Eventually(
+					func() bool { return !sub.IsValid() },
+					2*time.Second,
+					10*time.Millisecond,
+				)
+			},
+		},
+		{
+			name: "on a server the subscription stays while ctx is live",
+			validateFunc: func() {
+				c := connectJetStream(s.T())
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				sub, err := c.Subscribe(ctx, "x.live", func(context.Context, *nats.Msg) {})
+				s.Require().NoError(err)
+
+				s.Never(
+					func() bool { return !sub.IsValid() },
+					100*time.Millisecond,
+					10*time.Millisecond,
+				)
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -489,6 +522,25 @@ func (s *MessagingPublicTestSuite) batchOf(
 }
 
 func (s *MessagingPublicTestSuite) TestConsume() {
+	// jobs returns a client of a real NATS server that has the stream JOBS
+	// and its durable consumer agent. The rows that use it need a real pull
+	// request, which a mock cannot give.
+	jobs := func() *client.Client {
+		c := connectJetStream(s.T())
+		ctx := context.Background()
+		s.Require().NoError(c.StreamCreateOrUpdate(ctx, jetstream.StreamConfig{
+			Name:     "JOBS",
+			Subjects: []string{"jobs.>"},
+			Storage:  jetstream.MemoryStorage,
+		}))
+		s.Require().NoError(c.ConsumerCreateOrUpdate(ctx, "JOBS", jetstream.ConsumerConfig{
+			Durable:   "agent",
+			AckPolicy: jetstream.AckExplicitPolicy,
+		}))
+
+		return c
+	}
+
 	tests := []struct {
 		name         string
 		validateFunc func()
@@ -761,74 +813,51 @@ func (s *MessagingPublicTestSuite) TestConsume() {
 				s.EqualError(err, "failed to get consumer c from stream S: boom")
 			},
 		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, tc.validateFunc)
-	}
-}
-
-func TestMessagingPublicTestSuite(t *testing.T) {
-	suite.Run(t, new(MessagingPublicTestSuite))
-}
-
-// ConsumeServerPublicTestSuite runs Consume against a real NATS server,
-// because only a real pull request shows how long a wait for a message takes.
-type ConsumeServerPublicTestSuite struct {
-	suite.Suite
-
-	server *server.Server
-	client *client.Client
-}
-
-func (s *ConsumeServerPublicTestSuite) SetupTest() {
-	srv, err := server.NewServer(&server.Options{
-		Host:      "127.0.0.1",
-		Port:      -1,
-		JetStream: true,
-		StoreDir:  s.T().TempDir(),
-	})
-	s.Require().NoError(err)
-	srv.Start()
-	s.Require().True(srv.ReadyForConnections(5 * time.Second))
-	s.server = srv
-
-	port := srv.Addr().(*net.TCPAddr).Port
-	s.client = client.New(slog.Default(), &client.Options{Host: "127.0.0.1", Port: port})
-	s.Require().NoError(s.client.Connect(context.Background()))
-
-	ctx := context.Background()
-	s.Require().NoError(s.client.StreamCreateOrUpdate(ctx, jetstream.StreamConfig{
-		Name:     "JOBS",
-		Subjects: []string{"jobs.>"},
-		Storage:  jetstream.MemoryStorage,
-	}))
-	s.Require().NoError(s.client.ConsumerCreateOrUpdate(ctx, "JOBS", jetstream.ConsumerConfig{
-		Durable:   "agent",
-		AckPolicy: jetstream.AckExplicitPolicy,
-	}))
-}
-
-func (s *ConsumeServerPublicTestSuite) TearDownTest() {
-	s.client.Close()
-	s.server.Shutdown()
-}
-
-func (s *ConsumeServerPublicTestSuite) TestConsume() {
-	tests := []struct {
-		name         string
-		validateFunc func()
-	}{
 		{
-			name: "gives a published message to the handler",
+			name: "asks for only the slots that are free, while a handler holds one",
 			validateFunc: func() {
+				ctx, cancel := context.WithCancel(s.ctx)
+				defer cancel()
+
+				// The handler of the first message holds its slot until the
+				// second fetch. So the second turn of the loop takes one slot,
+				// finds no other free, and asks for one message.
+				release := make(chan struct{})
+				consumer := mocks.NewMockConsumer(s.ctrl)
+				gomock.InOrder(
+					consumer.EXPECT().
+						Fetch(2, gomock.Any()).
+						Return(s.batchOf(nil, s.msg("jobs.a", "ack", nil)), nil),
+					consumer.EXPECT().
+						Fetch(1, gomock.Any()).
+						DoAndReturn(func(int, ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+							close(release)
+							cancel()
+
+							return nil, nats.ErrTimeout
+						}),
+				)
+				s.js.EXPECT().Consumer(gomock.Any(), "S", "c").Return(consumer, nil)
+
+				err := s.client.Consume(ctx, "S", "c", func(context.Context, jetstream.Msg) error {
+					<-release
+
+					return nil
+				}, &client.ConsumeOptions{MaxInFlight: 2})
+				s.ErrorIs(err, context.Canceled)
+			},
+		},
+		{
+			name: "on a server gives a published message to the handler",
+			validateFunc: func() {
+				c := jobs()
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
 				got := make(chan string, 1)
 				done := make(chan error, 1)
 				go func() {
-					done <- s.client.Consume(ctx, "JOBS", "agent",
+					done <- c.Consume(ctx, "JOBS", "agent",
 						func(_ context.Context, msg jetstream.Msg) error {
 							got <- string(msg.Data())
 							return nil
@@ -836,7 +865,7 @@ func (s *ConsumeServerPublicTestSuite) TestConsume() {
 				}()
 
 				s.Require().
-					NoError(s.client.Publish(context.Background(), "jobs.x", []byte("job-1")))
+					NoError(c.Publish(context.Background(), "jobs.x", []byte("job-1")))
 				select {
 				case data := <-got:
 					s.Equal("job-1", data)
@@ -848,8 +877,9 @@ func (s *ConsumeServerPublicTestSuite) TestConsume() {
 			},
 		},
 		{
-			name: "handles up to MaxInFlight messages at the same time",
+			name: "on a server handles up to MaxInFlight messages at the same time",
 			validateFunc: func() {
+				c := jobs()
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
@@ -858,7 +888,7 @@ func (s *ConsumeServerPublicTestSuite) TestConsume() {
 				release := make(chan struct{})
 				done := make(chan error, 1)
 				go func() {
-					done <- s.client.Consume(ctx, "JOBS", "agent",
+					done <- c.Consume(ctx, "JOBS", "agent",
 						func(context.Context, jetstream.Msg) error {
 							mu.Lock()
 							running++
@@ -875,7 +905,7 @@ func (s *ConsumeServerPublicTestSuite) TestConsume() {
 
 				for i := range 5 {
 					s.Require().NoError(
-						s.client.Publish(context.Background(), "jobs.x", fmt.Appendf(nil, "job-%d", i)),
+						c.Publish(context.Background(), "jobs.x", fmt.Appendf(nil, "job-%d", i)),
 					)
 				}
 				s.Eventually(func() bool {
@@ -895,19 +925,20 @@ func (s *ConsumeServerPublicTestSuite) TestConsume() {
 			},
 		},
 		{
-			name: "when ctx ends while it waits for a message returns at once",
+			name: "on a server when ctx ends while it waits for a message returns at once",
 			validateFunc: func() {
+				c := jobs()
 				ctx, cancel := context.WithCancel(context.Background())
 				done := make(chan error, 1)
 				go func() {
-					done <- s.client.Consume(ctx, "JOBS", "agent",
+					done <- c.Consume(ctx, "JOBS", "agent",
 						func(context.Context, jetstream.Msg) error { return nil }, nil)
 				}()
 
 				// Wait until the server has the pull request of Consume. It
 				// expires after 30 seconds, so a return within 2 seconds shows
 				// that ctx ended it.
-				js, err := s.client.JetStream()
+				js, err := c.JetStream()
 				s.Require().NoError(err)
 				s.Eventually(func() bool {
 					cons, err := js.Consumer(context.Background(), "JOBS", "agent")
@@ -937,6 +968,6 @@ func (s *ConsumeServerPublicTestSuite) TestConsume() {
 	}
 }
 
-func TestConsumeServerPublicTestSuite(t *testing.T) {
-	suite.Run(t, new(ConsumeServerPublicTestSuite))
+func TestMessagingPublicTestSuite(t *testing.T) {
+	suite.Run(t, new(MessagingPublicTestSuite))
 }
