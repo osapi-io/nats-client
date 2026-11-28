@@ -281,6 +281,8 @@ only. `just go-unit-cov-check` is the exact gate at the target.
 - Suite names: `*_public_test.go` has `{Name}PublicTestSuite`, and `*_test.go`
   has `{Name}TestSuite`.
 - Use `testify/suite` with table-driven cases.
+- Do not write a custom assertion message. Write `s.Equal(want, got)`, not
+  `s.Equal(want, got, "expected equal")`. The name of the row tells what failed.
 - Write one suite method for each function under test. Success, errors and edge
   cases are rows in one table, not different methods.
 - `export_test.go` gives external tests access to unexported symbols, through an
