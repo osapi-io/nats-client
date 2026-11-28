@@ -40,6 +40,11 @@ a handler is a child of the span of the publish. The client uses the global text
 map propagator for the headers. The application sets it, for example to
 `propagation.TraceContext{}`.
 
+NATS header keys are case sensitive. The client writes each key as the
+propagator gives it, such as `traceparent`, and reads a key in any case. Thus
+the trace continues across a client in another language, such as nats.js or
+nats.java, which write the W3C keys in lower case.
+
 ## Metric
 
 `nats.client.operation.duration` is a histogram of the duration of each call, in

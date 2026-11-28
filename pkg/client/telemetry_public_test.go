@@ -309,6 +309,9 @@ func (s *TelemetryPublicTestSuite) TestErrors() {
 	})
 }
 
+// w3cTraceparent is the example traceparent of the W3C Trace Context spec.
+const w3cTraceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+
 func (s *TelemetryPublicTestSuite) TestMessageContext() {
 	tests := []struct {
 		name         string
@@ -334,7 +337,9 @@ func (s *TelemetryPublicTestSuite) TestMessageContext() {
 				s.Equal("nats.publish_core", publish.Name())
 				s.Equal(trace.SpanKindProducer, publish.SpanKind())
 				s.Equal("enroll.request", attrs(publish.Attributes())["messaging.destination.name"])
-				s.NotEmpty(sent.Header.Get("Traceparent"))
+				// The key is the W3C key, in lower case, as other clients
+				// write it and read it.
+				s.NotEmpty(sent.Header.Get("traceparent"))
 
 				// MessageContext reads it back.
 				got := trace.SpanContextFromContext(
@@ -364,6 +369,28 @@ func (s *TelemetryPublicTestSuite) TestMessageContext() {
 				s.Equal(trace.SpanKindConsumer, receive.SpanKind())
 				s.Equal(publish.SpanContext().SpanID(), receive.Parent().SpanID())
 				s.Equal(receive.SpanContext().SpanID(), handled.SpanID())
+			},
+		},
+		{
+			name: "reads a trace context that another client wrote with a lower-case key",
+			validateFunc: func() {
+				got := trace.SpanContextFromContext(client.MessageContext(
+					context.Background(),
+					nats.Header{"traceparent": {w3cTraceparent}},
+				))
+				s.True(got.IsValid())
+				s.Equal("4bf92f3577b34da6a3ce929d0e0e4736", got.TraceID().String())
+			},
+		},
+		{
+			name: "reads a trace context with a key in canonical case",
+			validateFunc: func() {
+				got := trace.SpanContextFromContext(client.MessageContext(
+					context.Background(),
+					nats.Header{"Traceparent": {w3cTraceparent}},
+				))
+				s.True(got.IsValid())
+				s.Equal("00f067aa0ba902b7", got.SpanID().String())
 			},
 		},
 		{
