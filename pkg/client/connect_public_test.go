@@ -56,6 +56,11 @@ type ConnectPublicTestSuite struct {
 	mockCtrl *gomock.Controller
 	mockNATS *mocks.MockNATSConnector
 	client   *client.Client
+
+	// release ends a dial of the mock that waits on it.
+	release chan struct{}
+	// closedConn closes when the mock connection is closed.
+	closedConn chan struct{}
 }
 
 func (s *ConnectPublicTestSuite) SetupTest() {
@@ -70,6 +75,8 @@ func (s *ConnectPublicTestSuite) SetupTest() {
 	}
 	s.client = client.New(logger, opts)
 	s.client.NC = s.mockNATS
+	s.release = make(chan struct{})
+	s.closedConn = make(chan struct{})
 }
 
 func (s *ConnectPublicTestSuite) SetupSubTest() {
@@ -645,11 +652,104 @@ func (s *ConnectPublicTestSuite) TestConnectContext() {
 
 						return &nats.Conn{}, nil
 					})
-				s.mockNATS.EXPECT().Close().Times(1)
+				s.expectClose()
 			},
 			validateFunc: func(err error, _ nats.Options) {
 				s.ErrorIs(err, context.Canceled)
 				s.Nil(client.JetStreamOf(s.client))
+				<-s.closedConn
+			},
+		},
+		{
+			name: "a ctx that ends returns at once, and the late connection is closed",
+			ctx: func() (context.Context, context.CancelFunc) {
+				return context.WithCancel(context.Background())
+			},
+			mockSetup: func(cancel context.CancelFunc, _ *nats.Options) {
+				s.mockNATS.EXPECT().
+					Connect(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(string, ...nats.Option) (*nats.Conn, error) {
+						cancel()
+						<-s.release
+
+						return &nats.Conn{}, nil
+					})
+				s.expectClose()
+			},
+			validateFunc: func(err error, _ nats.Options) {
+				// Connect returned while the dial still waits.
+				s.ErrorIs(err, context.Canceled)
+				s.Nil(client.JetStreamOf(s.client))
+				s.ErrorIs(s.client.Connect(context.Background()), client.ErrConnected)
+
+				close(s.release)
+				<-s.closedConn
+			},
+		},
+		{
+			name: "Close while the dial runs ends Connect, and closes the late connection",
+			ctx: func() (context.Context, context.CancelFunc) {
+				return context.WithCancel(context.Background())
+			},
+			mockSetup: func(context.CancelFunc, *nats.Options) {
+				s.mockNATS.EXPECT().
+					Connect(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(string, ...nats.Option) (*nats.Conn, error) {
+						// Close does not wait for the lock of the dial.
+						s.client.Close()
+						<-s.release
+
+						return &nats.Conn{}, nil
+					})
+				s.expectClose()
+			},
+			validateFunc: func(err error, _ nats.Options) {
+				s.ErrorIs(err, context.Canceled)
+				s.Nil(client.JetStreamOf(s.client))
+
+				close(s.release)
+				<-s.closedConn
+			},
+		},
+		{
+			name: "a Close after the dial returned, before Connect ends, closes the connection",
+			ctx: func() (context.Context, context.CancelFunc) {
+				return context.WithCancel(context.Background())
+			},
+			mockSetup: func(context.CancelFunc, *nats.Options) {
+				s.T().Cleanup(client.SetAfterDial(s.client.Close))
+				s.mockNATS.EXPECT().
+					Connect(gomock.Any(), gomock.Any()).
+					Return(&nats.Conn{}, nil)
+				s.expectClose()
+			},
+			validateFunc: func(err error, _ nats.Options) {
+				s.ErrorIs(err, context.Canceled)
+				s.Nil(client.JetStreamOf(s.client))
+				<-s.closedConn
+			},
+		},
+		{
+			name: "a failed dial after ctx ended closes nothing",
+			ctx: func() (context.Context, context.CancelFunc) {
+				return context.WithCancel(context.Background())
+			},
+			mockSetup: func(cancel context.CancelFunc, _ *nats.Options) {
+				s.mockNATS.EXPECT().
+					Connect(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(string, ...nats.Option) (*nats.Conn, error) {
+						cancel()
+						<-s.release
+						defer close(s.closedConn)
+
+						return nil, errors.New("no servers available")
+					})
+			},
+			validateFunc: func(err error, _ nats.Options) {
+				s.ErrorIs(err, context.Canceled)
+
+				close(s.release)
+				<-s.closedConn
 			},
 		},
 	}
@@ -664,6 +764,15 @@ func (s *ConnectPublicTestSuite) TestConnectContext() {
 			tc.validateFunc(s.client.Connect(ctx), got)
 		})
 	}
+}
+
+// expectClose expects one Close of the mock connection, which closes
+// s.closedConn.
+func (s *ConnectPublicTestSuite) expectClose() {
+	s.mockNATS.EXPECT().
+		Close().
+		Do(func() { close(s.closedConn) }).
+		Times(1)
 }
 
 // stubJetStream makes Connect get a mock JetStream API.

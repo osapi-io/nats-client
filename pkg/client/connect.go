@@ -51,11 +51,16 @@ var GetJetStream = func(nc *nats.Conn) (jetstream.JetStream, error) {
 // This method returns an error if there are any issues during connection.
 //
 // ctx bounds the dial. Its deadline is the dial timeout of each server, in
-// place of the default of nats.go. A ctx that ended before the dial, or while
-// it ran, ends Connect with ctx's error, and leaves no connection.
+// place of the default of nats.go. A ctx that ends before the dial, or while
+// it runs, ends Connect at once with ctx's error, and leaves no connection: a
+// connection that the dial makes after that is closed. A Close while the dial
+// runs ends Connect in the same way.
 //
-// A second Connect without a Close between returns ErrConnected, so that the
-// first connection does not leak.
+// Connect does not hold the lock of the client while it dials, so Close and
+// the other calls do not wait for the dial.
+//
+// A second Connect without a Close between, or while a first Connect dials,
+// returns ErrConnected, so that the first connection does not leak.
 func (c *Client) Connect(
 	ctx context.Context,
 ) error {
@@ -63,13 +68,37 @@ func (c *Client) Connect(
 		return fmt.Errorf("connect to nats: %w", err)
 	}
 
+	dialCtx, natsURL, opts, err := c.beginConnect(ctx)
+	if err != nil {
+		return err
+	}
+
+	r, late := c.dial(dialCtx, natsURL, opts)
+	if late {
+		return fmt.Errorf("connect to nats: %w", dialCtx.Err())
+	}
+	afterDial()
+
+	return c.finishConnect(dialCtx, r)
+}
+
+// afterDial runs between a dial that returned in time and the end of
+// Connect. Tests set it, to run a Close in that gap.
+var afterDial = func() {}
+
+// beginConnect checks the state and the options under the lock, marks the
+// client as connecting, and returns the context of the dial, the URL and the
+// options of nats.go.
+func (c *Client) beginConnect(
+	ctx context.Context,
+) (context.Context, string, []nats.Option, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.js != nil {
-		return ErrConnected
+	if c.js != nil || c.cancelDial != nil {
+		return nil, "", nil, ErrConnected
 	}
 	if c.opts == nil {
-		return ErrNoOptions
+		return nil, "", nil, ErrNoOptions
 	}
 
 	scheme := "nats"
@@ -85,9 +114,6 @@ func (c *Client) Connect(
 		slog.String("client_name", c.opts.Name),
 	)
 
-	var nc *nats.Conn
-	var err error
-
 	opts := c.reconnectOptions()
 	if c.opts.Name != "" {
 		opts = append(opts, nats.Name(c.opts.Name))
@@ -99,50 +125,122 @@ func (c *Client) Connect(
 		opts = append(opts, nats.Timeout(max(time.Until(deadline), time.Millisecond)))
 	}
 
+	auth, err := c.authOptions()
+	if err != nil {
+		return nil, "", nil, err
+	}
+	opts = append(opts, auth...)
+
+	dialCtx, cancel := context.WithCancel(ctx)
+	c.cancelDial = cancel
+
+	return dialCtx, natsURL, opts, nil
+}
+
+// authOptions returns the options of nats.go for the authentication of the
+// options.
+func (c *Client) authOptions() ([]nats.Option, error) {
 	switch c.opts.Auth.AuthType {
 	case NoAuth:
-		nc, err = c.NC.Connect(natsURL, opts...)
+		return nil, nil
 	case UserPassAuth:
-		opts = append(opts, nats.UserInfo(c.opts.Auth.Username, c.opts.Auth.Password))
-		nc, err = c.NC.Connect(natsURL, opts...)
+		return []nats.Option{
+			nats.UserInfo(c.opts.Auth.Username, c.opts.Auth.Password),
+		}, nil
 	case NKeyAuth:
-		kp, kpErr := c.nkeyPair()
-		if kpErr != nil {
-			return kpErr
+		kp, err := c.nkeyPair()
+		if err != nil {
+			return nil, err
 		}
 
-		pubKey, pubErr := kp.PublicKey()
-		if pubErr != nil {
-			return fmt.Errorf("failed to get public key from nkey: %w", pubErr)
+		pubKey, err := kp.PublicKey()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get public key from nkey: %w", err)
 		}
 
-		opts = append(opts, nats.Nkey(pubKey, func(nonce []byte) ([]byte, error) {
-			return kp.Sign(nonce)
-		}))
-
-		nc, err = c.NC.Connect(natsURL, opts...)
+		return []nats.Option{
+			nats.Nkey(pubKey, func(nonce []byte) ([]byte, error) {
+				return kp.Sign(nonce)
+			}),
+		}, nil
 	case CredsAuth:
 		// nats.UserCredentials reads the file on each connect, so a missing
 		// file is reported here rather than as a failed handshake.
-		if _, statErr := os.Stat(c.opts.Auth.CredsFile); statErr != nil {
-			return fmt.Errorf("failed to read creds file: %w", statErr)
+		if _, err := os.Stat(c.opts.Auth.CredsFile); err != nil {
+			return nil, fmt.Errorf("failed to read creds file: %w", err)
 		}
-		opts = append(opts, nats.UserCredentials(c.opts.Auth.CredsFile))
-		nc, err = c.NC.Connect(natsURL, opts...)
-	default:
-		return fmt.Errorf("unsupported authentication method")
-	}
 
-	if err != nil {
-		return fmt.Errorf("error connecting to nats: %w", err)
+		return []nats.Option{nats.UserCredentials(c.opts.Auth.CredsFile)}, nil
+	default:
+		return nil, fmt.Errorf("unsupported authentication method")
 	}
-	if err := ctx.Err(); err != nil {
+}
+
+// dialResult is the connection, or the error, of one dial.
+type dialResult struct {
+	nc  *nats.Conn
+	err error
+}
+
+// dial connects to natsURL in a goroutine, and waits until it ends or ctx
+// ends. late is true when ctx ended first, and the result is then empty.
+// Then the dial goes on, and the connection that it makes is closed. The
+// client stays connecting until then, so that no Connect dials beside it.
+func (c *Client) dial(
+	ctx context.Context,
+	natsURL string,
+	opts []nats.Option,
+) (dialResult, bool) {
+	done := make(chan dialResult, 1)
+	go func() {
+		nc, err := c.NC.Connect(natsURL, opts...)
+		done <- dialResult{nc: nc, err: err}
+	}()
+
+	select {
+	case r := <-done:
+		return r, false
+	case <-ctx.Done():
+		go func() {
+			if r := <-done; r.err == nil {
+				c.NC.Close()
+			}
+
+			c.mu.Lock()
+			c.cancelDial()
+			c.cancelDial = nil
+			c.mu.Unlock()
+		}()
+
+		return dialResult{}, true
+	}
+}
+
+// finishConnect ends a dial that returned in time. Under the lock, it stores
+// the JetStream API of the connection of r, or closes the connection when
+// ctx ended or JetStream could not start.
+func (c *Client) finishConnect(
+	ctx context.Context,
+	r dialResult,
+) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// A Close since the dial returned ended ctx. Read it before the cancel
+	// below ends it too.
+	ended := ctx.Err()
+	c.cancelDial()
+	c.cancelDial = nil
+
+	if r.err != nil {
+		return fmt.Errorf("error connecting to nats: %w", r.err)
+	}
+	if ended != nil {
 		c.NC.Close()
 
-		return fmt.Errorf("connect to nats: %w", err)
+		return fmt.Errorf("connect to nats: %w", ended)
 	}
 
-	extJS, err := GetJetStream(nc)
+	extJS, err := GetJetStream(r.nc)
 	if err != nil {
 		// The connection would keep trying to reconnect, with no client to
 		// close it.

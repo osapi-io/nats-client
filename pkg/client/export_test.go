@@ -67,3 +67,14 @@ func OptionsOf(
 ) *Options {
 	return c.opts
 }
+
+// SetAfterDial sets what Connect runs between a dial that returned in time
+// and its end, and returns a func that restores it.
+func SetAfterDial(
+	fn func(),
+) func() {
+	old := afterDial
+	afterDial = fn
+
+	return func() { afterDial = old }
+}

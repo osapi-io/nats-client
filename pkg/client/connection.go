@@ -106,6 +106,12 @@ func forget(
 func (c *Client) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.cancelDial != nil {
+		// A Connect dials. It closes the connection that the dial makes.
+		c.cancelDial()
+
+		return
+	}
 	if c.NC != nil {
 		c.NC.Close()
 	}

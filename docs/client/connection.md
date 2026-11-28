@@ -106,7 +106,8 @@ credential, and does not wait.
   `ConnectedServerVersion` return an empty string then.
 - A call can run while another goroutine calls `Close` or `Connect`. It returns
   its result or `ErrNotConnected`.
-- A second `Connect` without a `Close` between returns `ErrConnected`.
+- A second `Connect` without a `Close` between returns `ErrConnected`. So does a
+  `Connect` while a first `Connect` dials.
 - `Connect` on a client that `New` made with nil options returns `ErrNoOptions`.
   A nil logger in `New` is `slog.Default()`.
 - When JetStream fails to start, `Connect` closes the connection that it made,
@@ -117,8 +118,12 @@ credential, and does not wait.
   a `Close` and the next `Connect` keeps no handle of the old connection.
 - `Connect` clears the seed bytes of the nkey file after it parses them.
 - The deadline of the ctx that `Connect` gets is the dial timeout of each
-  server. A ctx that ended before the dial, or while it ran, ends `Connect` with
-  the error of the ctx, and leaves no connection.
+  server. A ctx that ended before the dial, or while it ran, ends `Connect` at
+  once with the error of the ctx, and leaves no connection. A connection that
+  the dial makes after that is closed. A `Close` while `Connect` dials ends it
+  in the same way.
+- `Connect` does not hold the lock of the client while it dials. Thus `Close`
+  and the other calls do not wait for a dial.
 - The end of the ctx that `Subscribe` gets unsubscribes. `PublishCore` with a
   ctx that ended publishes nothing.
 - `JetStream` returns the JetStream API of the connection, for a call that the
