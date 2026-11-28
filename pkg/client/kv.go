@@ -246,6 +246,12 @@ func readKeys(
 			return nil, fmt.Errorf("list the keys of %s: %w", bucket, ctx.Err())
 		case entry, ok := <-updates:
 			if !ok {
+				// nats.go closes the channel when ctx ends too. Then the
+				// end of ctx is the reason.
+				if err := ctx.Err(); err != nil {
+					return nil, fmt.Errorf("list the keys of %s: %w", bucket, err)
+				}
+
 				return nil, fmt.Errorf("list the keys of %s: %w", bucket, ErrWatchStopped)
 			}
 			if entry == nil {

@@ -275,7 +275,6 @@ func (s *KVPublicTestSuite) TestCalls() {
 	}
 }
 
-// lister returns a lister that yields keys, then closes.
 // keyWatcher is a watcher of keys that sends an entry for each key, then
 // the nil entry that marks the end of the keys when end is true, or closes
 // its channel before that mark when end is false.
@@ -375,6 +374,25 @@ func (s *KVPublicTestSuite) TestKVKeys() {
 					err,
 					"list the keys of b: the watch stopped before the end of the keys",
 				)
+				s.Nil(got)
+			},
+		},
+		{
+			name: "when ctx ends and the watch closes its channel returns the error of ctx",
+			ctx: func() context.Context {
+				ctx, cancel := context.WithCancel(s.ctx)
+				cancel()
+
+				return ctx
+			},
+			setup: func() {
+				s.kv.EXPECT().
+					WatchAll(gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(s.keyWatcher(false), nil)
+			},
+			validateFunc: func(got []string, err error) {
+				s.ErrorIs(err, context.Canceled)
+				s.NotErrorIs(err, client.ErrWatchStopped)
 				s.Nil(got)
 			},
 		},
