@@ -38,7 +38,8 @@ msgs, err := c.StreamRead(ctx, "AUDIT", 1, 100)
 - `StreamRead` returns the messages that the stream has now, and does not wait
   for more. Thus a read of more messages than the stream has returns at once,
   with the messages that it has. A sequence of 0 reads from the first message. A
-  `count` less than 1 is an error.
+  `count` less than 1, or more than `MaxStreamReadCount` (10000), is an error.
+  Read a longer stream in pages.
 - `StreamRead` deletes the consumer that it read with, so a read leaves no
   consumer on the server.
 - When the read stops with an error, `StreamRead` returns the messages that it

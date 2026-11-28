@@ -449,6 +449,20 @@ func (s *StreamPublicTestSuite) TestStreamRead() {
 			s.EqualError(err, fmt.Sprintf("read stream S: count %d is less than 1", count))
 		}
 	})
+
+	s.Run(
+		"with a count more than MaxStreamReadCount returns an error, and allocates nothing",
+		func() {
+			for _, count := range []int{client.MaxStreamReadCount + 1, 1 << 40} {
+				_, err := s.client.StreamRead(s.ctx, "S", 0, count)
+				s.EqualError(err, fmt.Sprintf(
+					"read stream S: count %d is more than %d",
+					count,
+					client.MaxStreamReadCount,
+				))
+			}
+		},
+	)
 }
 
 func TestStreamPublicTestSuite(t *testing.T) {

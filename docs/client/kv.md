@@ -39,9 +39,12 @@ keys, err := c.KVKeys(ctx, "job-queue", "jobs.>")
 - A bucket with no keys makes `KVKeys` return an empty list, not an error.
 - When `ctx` ends during the list, `KVKeys` returns the error of `ctx`, not the
   keys that it got before.
+- When the watch of `KVKeys` stops before the end of the keys, such as when the
+  connection drops, `KVKeys` returns `ErrWatchStopped`, not a short list.
 - `KVWatch` sends the current values first, then each change. NATS sends a nil
   entry after the current values. The channel does not send it. The channel
-  closes when `ctx` ends, or when the watch stops.
+  closes when `ctx` ends, or when the watch stops. Thus a channel that closes
+  while `ctx` is still live tells the caller that the watch ended.
 - NATS cannot change the storage type of a bucket that exists. When only the
   storage type is different, `KVCreateOrUpdate` keeps the bucket as it is, and
   does not apply the other changes.
