@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -33,7 +32,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -216,5 +214,5 @@ func MessageContext(
 	ctx context.Context,
 	header nats.Header,
 ) context.Context {
-	return otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(http.Header(header)))
+	return otel.GetTextMapPropagator().Extract(ctx, headerCarrier(header))
 }

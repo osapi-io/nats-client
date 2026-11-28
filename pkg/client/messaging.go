@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"sync"
 	"time"
 
@@ -33,7 +32,6 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -98,7 +96,7 @@ func inject(
 	ctx context.Context,
 	header nats.Header,
 ) {
-	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(http.Header(header)))
+	otel.GetTextMapPropagator().Inject(ctx, headerCarrier(header))
 }
 
 // publish runs send as the publish of a message to subject, with a producer
