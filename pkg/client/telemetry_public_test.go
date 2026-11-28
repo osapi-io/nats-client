@@ -123,48 +123,121 @@ func (s *TelemetryPublicTestSuite) points() []map[string]string {
 	return out
 }
 
-func (s *TelemetryPublicTestSuite) TestCallInsideATrace() {
-	s.js.EXPECT().KeyValue(gomock.Any(), "jobs").Return(s.kv, nil)
-	s.kv.EXPECT().Put(gomock.Any(), "jobs.1", []byte("v")).
-		DoAndReturn(func(ctx context.Context, _ string, _ []byte) (uint64, error) {
-			s.True(trace.SpanContextFromContext(ctx).IsValid(), "the call runs inside its span")
-			return 1, nil
-		})
+func (s *TelemetryPublicTestSuite) TestCalls() {
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "a call inside a trace makes a client span with the call's attributes",
+			validateFunc: func() {
+				s.js.EXPECT().KeyValue(gomock.Any(), "jobs").Return(s.kv, nil)
+				s.kv.EXPECT().Put(gomock.Any(), "jobs.1", []byte("v")).
+					DoAndReturn(func(ctx context.Context, _ string, _ []byte) (uint64, error) {
+						s.True(
+							trace.SpanContextFromContext(ctx).IsValid(),
+							"the call runs inside its span",
+						)
+						return 1, nil
+					})
 
-	ctx, req := s.request()
-	_, err := s.client.KVPut(ctx, "jobs", "jobs.1", []byte("v"))
-	req.End()
-	s.Require().NoError(err)
+				ctx, req := s.request()
+				_, err := s.client.KVPut(ctx, "jobs", "jobs.1", []byte("v"))
+				req.End()
+				s.Require().NoError(err)
 
-	ended := s.spans.Ended()
-	s.Require().Len(ended, 2)
-	span := ended[0]
-	s.Equal("kv.put", span.Name())
-	s.Equal(trace.SpanKindClient, span.SpanKind())
-	s.Equal(req.SpanContext().SpanID(), span.Parent().SpanID())
-	s.Equal(codes.Unset, span.Status().Code)
-	s.Equal(map[string]string{
-		"db.system.name":    "nats",
-		"db.operation.name": "kv.put",
-		"db.namespace":      "jobs",
-		"nats.kv.key":       "jobs.1",
-	}, attrs(span.Attributes()))
+				ended := s.spans.Ended()
+				s.Require().Len(ended, 2)
+				span := ended[0]
+				s.Equal("kv.put", span.Name())
+				s.Equal(trace.SpanKindClient, span.SpanKind())
+				s.Equal(req.SpanContext().SpanID(), span.Parent().SpanID())
+				s.Equal(codes.Unset, span.Status().Code)
+				s.Equal(map[string]string{
+					"db.system.name":    "nats",
+					"db.operation.name": "kv.put",
+					"db.namespace":      "jobs",
+					"nats.kv.key":       "jobs.1",
+				}, attrs(span.Attributes()))
 
-	s.Equal([]map[string]string{{
-		"db.system.name":    "nats",
-		"db.operation.name": "kv.put",
-		"db.namespace":      "jobs",
-	}}, s.points(), "the metric never has the key")
-}
+				s.Equal([]map[string]string{{
+					"db.system.name":    "nats",
+					"db.operation.name": "kv.put",
+					"db.namespace":      "jobs",
+				}}, s.points(), "the metric never has the key")
+			},
+		},
+		{
+			name: "a call outside a trace makes no span and still records the metric",
+			validateFunc: func() {
+				s.js.EXPECT().KeyValue(gomock.Any(), "jobs").Return(s.kv, nil)
+				s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil)
 
-func (s *TelemetryPublicTestSuite) TestCallOutsideATrace() {
-	s.js.EXPECT().KeyValue(gomock.Any(), "jobs").Return(s.kv, nil)
-	s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil)
+				s.Require().NoError(s.client.KVDelete(context.Background(), "jobs", "k"))
 
-	s.Require().NoError(s.client.KVDelete(context.Background(), "jobs", "k"))
+				s.Empty(s.spans.Ended(), "background work makes no root span")
+				s.Len(s.points(), 1, "the metric is recorded outside a trace too")
+			},
+		},
+		{
+			name: "an object store call names its bucket and object",
+			validateFunc: func() {
+				store := mocks.NewMockObjectStore(s.ctrl)
+				s.js.EXPECT().ObjectStore(gomock.Any(), "files").Return(store, nil)
+				store.EXPECT().GetBytes(gomock.Any(), "a.conf").Return([]byte("x"), nil)
 
-	s.Empty(s.spans.Ended(), "background work makes no root span")
-	s.Len(s.points(), 1, "the metric is recorded outside a trace too")
+				ctx, req := s.request()
+				_, err := s.client.ObjectGetBytes(ctx, "files", "a.conf")
+				req.End()
+				s.Require().NoError(err)
+
+				got := attrs(s.spans.Ended()[0].Attributes())
+				s.Equal("objectstore.get", got["db.operation.name"])
+				s.Equal("files", got["db.namespace"])
+				s.Equal("a.conf", got["nats.object.name"])
+			},
+		},
+		{
+			name: "with no provider uses the global ones",
+			validateFunc: func() {
+				previous := otel.GetTracerProvider()
+				otel.SetTracerProvider(s.tp)
+				defer otel.SetTracerProvider(previous)
+
+				c := client.New(slog.Default(), &client.Options{Telemetry: true})
+				client.SetJetStream(c, s.js)
+				s.js.EXPECT().KeyValue(gomock.Any(), "jobs").Return(s.kv, nil)
+				s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil)
+
+				ctx, req := s.request()
+				s.Require().NoError(c.KVDelete(ctx, "jobs", "k"))
+				req.End()
+				s.Equal("kv.delete", s.spans.Ended()[0].Name())
+			},
+		},
+		{
+			name: "a meter provider that fails turns telemetry off and the calls still work",
+			validateFunc: func() {
+				c := client.New(slog.Default(), &client.Options{
+					Telemetry:      true,
+					TracerProvider: s.tp,
+					MeterProvider:  brokenMeterProvider{},
+				})
+				client.SetJetStream(c, s.js)
+				s.js.EXPECT().KeyValue(gomock.Any(), "jobs").Return(s.kv, nil)
+				s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil)
+
+				ctx, req := s.request()
+				s.Require().NoError(c.KVDelete(ctx, "jobs", "k"), "the calls still work")
+				req.End()
+				s.Len(s.spans.Ended(), 1, "telemetry is off, so only the request has a span")
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
 }
 
 func (s *TelemetryPublicTestSuite) TestErrors() {
@@ -236,86 +309,77 @@ func (s *TelemetryPublicTestSuite) TestErrors() {
 	})
 }
 
-func (s *TelemetryPublicTestSuite) TestObjectAndStreamAttributes() {
-	store := mocks.NewMockObjectStore(s.ctrl)
-	s.js.EXPECT().ObjectStore(gomock.Any(), "files").Return(store, nil)
-	store.EXPECT().GetBytes(gomock.Any(), "a.conf").Return([]byte("x"), nil)
+func (s *TelemetryPublicTestSuite) TestMessageContext() {
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "a publish carries the trace context to a subscriber",
+			validateFunc: func() {
+				nc := mocks.NewMockNATSConnector(s.ctrl)
+				s.client.NC = nc
 
-	ctx, req := s.request()
-	_, err := s.client.ObjectGetBytes(ctx, "files", "a.conf")
-	req.End()
-	s.Require().NoError(err)
+				// The publish puts the trace context in the headers of the message.
+				var sent *nats.Msg
+				nc.EXPECT().PublishMsg(gomock.Any()).DoAndReturn(func(msg *nats.Msg) error {
+					sent = msg
+					return nil
+				})
+				ctx, req := s.request()
+				s.Require().NoError(s.client.PublishCore(ctx, "enroll.request", []byte("x")))
+				req.End()
 
-	got := attrs(s.spans.Ended()[0].Attributes())
-	s.Equal("objectstore.get", got["db.operation.name"])
-	s.Equal("files", got["db.namespace"])
-	s.Equal("a.conf", got["nats.object.name"])
-}
+				publish := s.spans.Ended()[0]
+				s.Equal("nats.publish_core", publish.Name())
+				s.Equal(trace.SpanKindProducer, publish.SpanKind())
+				s.Equal("enroll.request", attrs(publish.Attributes())["messaging.destination.name"])
+				s.NotEmpty(sent.Header.Get("Traceparent"))
 
-func (s *TelemetryPublicTestSuite) TestPropagation() {
-	nc := mocks.NewMockNATSConnector(s.ctrl)
-	s.client.NC = nc
+				// MessageContext reads it back.
+				got := trace.SpanContextFromContext(
+					client.MessageContext(context.Background(), sent.Header),
+				)
+				s.Equal(publish.SpanContext().TraceID(), got.TraceID())
+				s.Equal(publish.SpanContext().SpanID(), got.SpanID())
 
-	// The publish puts the trace context in the headers of the message.
-	var sent *nats.Msg
-	nc.EXPECT().PublishMsg(gomock.Any()).DoAndReturn(func(msg *nats.Msg) error {
-		sent = msg
-		return nil
-	})
-	ctx, req := s.request()
-	s.Require().NoError(s.client.PublishCore(ctx, "enroll.request", []byte("x")))
-	req.End()
+				// A subscriber continues the trace in a consumer span, and its handler
+				// gets that span.
+				var deliver nats.MsgHandler
+				nc.EXPECT().Subscribe("enroll.request", gomock.Any()).
+					DoAndReturn(func(_ string, h nats.MsgHandler) (*nats.Subscription, error) {
+						deliver = h
+						return &nats.Subscription{}, nil
+					})
+				var handled trace.SpanContext
+				_, err := s.client.Subscribe(context.Background(), "enroll.request",
+					func(ctx context.Context, _ *nats.Msg) {
+						handled = trace.SpanContextFromContext(ctx)
+					})
+				s.Require().NoError(err)
+				deliver(sent)
 
-	publish := s.spans.Ended()[0]
-	s.Equal("nats.publish_core", publish.Name())
-	s.Equal(trace.SpanKindProducer, publish.SpanKind())
-	s.Equal("enroll.request", attrs(publish.Attributes())["messaging.destination.name"])
-	s.NotEmpty(sent.Header.Get("Traceparent"))
+				receive := s.spans.Ended()[2]
+				s.Equal("nats.receive", receive.Name())
+				s.Equal(trace.SpanKindConsumer, receive.SpanKind())
+				s.Equal(publish.SpanContext().SpanID(), receive.Parent().SpanID())
+				s.Equal(receive.SpanContext().SpanID(), handled.SpanID())
+			},
+		},
+		{
+			name: "headers with no trace context give a context with no span",
+			validateFunc: func() {
+				got := trace.SpanContextFromContext(
+					client.MessageContext(context.Background(), nats.Header{}),
+				)
+				s.False(got.IsValid())
+			},
+		},
+	}
 
-	// MessageContext reads it back.
-	got := trace.SpanContextFromContext(client.MessageContext(context.Background(), sent.Header))
-	s.Equal(publish.SpanContext().TraceID(), got.TraceID())
-	s.Equal(publish.SpanContext().SpanID(), got.SpanID())
-
-	// A subscriber continues the trace in a consumer span, and its handler
-	// gets that span.
-	var deliver nats.MsgHandler
-	nc.EXPECT().Subscribe("enroll.request", gomock.Any()).
-		DoAndReturn(func(_ string, h nats.MsgHandler) (*nats.Subscription, error) {
-			deliver = h
-			return &nats.Subscription{}, nil
-		})
-	var handled trace.SpanContext
-	_, err := s.client.Subscribe(context.Background(), "enroll.request",
-		func(ctx context.Context, _ *nats.Msg) {
-			handled = trace.SpanContextFromContext(ctx)
-		})
-	s.Require().NoError(err)
-	deliver(sent)
-
-	receive := s.spans.Ended()[2]
-	s.Equal("nats.receive", receive.Name())
-	s.Equal(trace.SpanKindConsumer, receive.SpanKind())
-	s.Equal(publish.SpanContext().SpanID(), receive.Parent().SpanID())
-	s.Equal(receive.SpanContext().SpanID(), handled.SpanID())
-}
-
-func (s *TelemetryPublicTestSuite) TestGlobalProviders() {
-	s.Run("with no provider uses the global ones", func() {
-		previous := otel.GetTracerProvider()
-		otel.SetTracerProvider(s.tp)
-		defer otel.SetTracerProvider(previous)
-
-		c := client.New(slog.Default(), &client.Options{Telemetry: true})
-		client.SetJetStream(c, s.js)
-		s.js.EXPECT().KeyValue(gomock.Any(), "jobs").Return(s.kv, nil)
-		s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil)
-
-		ctx, req := s.request()
-		s.Require().NoError(c.KVDelete(ctx, "jobs", "k"))
-		req.End()
-		s.Equal("kv.delete", s.spans.Ended()[0].Name())
-	})
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
 }
 
 // brokenMeterProvider makes a meter that cannot make a histogram.
@@ -332,22 +396,6 @@ func (brokenMeter) Float64Histogram(
 	...metric.Float64HistogramOption,
 ) (metric.Float64Histogram, error) {
 	return nil, errBoom
-}
-
-func (s *TelemetryPublicTestSuite) TestBrokenMeterProvider() {
-	c := client.New(slog.Default(), &client.Options{
-		Telemetry:      true,
-		TracerProvider: s.tp,
-		MeterProvider:  brokenMeterProvider{},
-	})
-	client.SetJetStream(c, s.js)
-	s.js.EXPECT().KeyValue(gomock.Any(), "jobs").Return(s.kv, nil)
-	s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil)
-
-	ctx, req := s.request()
-	s.Require().NoError(c.KVDelete(ctx, "jobs", "k"), "the calls still work")
-	req.End()
-	s.Len(s.spans.Ended(), 1, "telemetry is off, so only the request has a span")
 }
 
 func TestTelemetryPublicTestSuite(t *testing.T) {

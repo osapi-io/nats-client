@@ -23,14 +23,23 @@ package client_test
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/big"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
@@ -369,6 +378,26 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 				s.Contains(err.Error(), "error enabling jetstream")
 			},
 		},
+		{
+			name:     "with nil options and a nil logger returns ErrNoOptions",
+			authType: client.NoAuth,
+			mockSetup: func() {
+				s.client = client.New(nil, nil)
+			},
+			validateFunc: func(err error) {
+				s.ErrorIs(err, client.ErrNoOptions)
+			},
+		},
+		{
+			name:     "a second Connect without Close returns ErrConnected",
+			authType: client.NoAuth,
+			mockSetup: func() {
+				client.SetJetStream(s.client, mocks.NewMockJetStream(s.mockCtrl))
+			},
+			validateFunc: func(err error) {
+				s.ErrorIs(err, client.ErrConnected)
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -379,12 +408,6 @@ func (s *ConnectPublicTestSuite) TestConnect() {
 			tc.validateFunc(s.client.Connect(context.Background()))
 		})
 	}
-}
-
-func (s *ConnectPublicTestSuite) TestConnectWithoutOptions() {
-	s.Run("with nil options and a nil logger returns ErrNoOptions", func() {
-		s.ErrorIs(client.New(nil, nil).Connect(context.Background()), client.ErrNoOptions)
-	})
 }
 
 func (s *ConnectPublicTestSuite) TestGetJetStream() {
@@ -652,13 +675,6 @@ func (s *ConnectPublicTestSuite) stubJetStream() {
 	s.T().Cleanup(func() { client.GetJetStream = orig })
 }
 
-func (s *ConnectPublicTestSuite) TestConnectTwice() {
-	s.Run("a second Connect without Close returns ErrConnected", func() {
-		client.SetJetStream(s.client, mocks.NewMockJetStream(s.mockCtrl))
-		s.ErrorIs(s.client.Connect(context.Background()), client.ErrConnected)
-	})
-}
-
 func (s *ConnectPublicTestSuite) TestConnectURL() {
 	tests := []struct {
 		name string
@@ -680,3 +696,104 @@ func (s *ConnectPublicTestSuite) TestConnectURL() {
 func TestConnectPublicTestSuite(t *testing.T) {
 	suite.Run(t, new(ConnectPublicTestSuite))
 }
+
+// ConnectTLSPublicTestSuite connects to a real NATS server that serves TLS,
+// because only a real handshake shows that the client checks the server.
+type ConnectTLSPublicTestSuite struct {
+	suite.Suite
+
+	server *server.Server
+	port   int
+	roots  *x509.CertPool
+}
+
+func (s *ConnectTLSPublicTestSuite) SetupTest() {
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	tmpl := x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "localhost"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1)},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &key.PublicKey, key)
+	s.Require().NoError(err)
+	cert, err := x509.ParseCertificate(der)
+	s.Require().NoError(err)
+	s.roots = x509.NewCertPool()
+	s.roots.AddCert(cert)
+
+	srv, err := server.NewServer(&server.Options{
+		Host:      "127.0.0.1",
+		Port:      -1,
+		JetStream: true,
+		StoreDir:  s.T().TempDir(),
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}},
+			MinVersion:   tls.VersionTLS12,
+		},
+	})
+	s.Require().NoError(err)
+	srv.Start()
+	s.Require().True(srv.ReadyForConnections(5 * time.Second))
+	s.server = srv
+	s.port = srv.Addr().(*net.TCPAddr).Port
+}
+
+func (s *ConnectTLSPublicTestSuite) TearDownTest() {
+	s.server.Shutdown()
+}
+
+func (s *ConnectTLSPublicTestSuite) TestConnect() {
+	tests := []struct {
+		name         string
+		tls          *tls.Config
+		validateFunc func(*client.Client, error)
+	}{
+		{
+			name: "when the client trusts the server's certificate, it connects with TLS",
+			tls:  &tls.Config{RootCAs: s.roots, MinVersion: tls.VersionTLS12},
+			validateFunc: func(c *client.Client, err error) {
+				s.Require().NoError(err)
+				s.Contains(c.ConnectedURL(), "tls://")
+				c.Close()
+			},
+		},
+		{
+			name: "when the client does not trust the certificate, it is refused",
+			tls:  &tls.Config{RootCAs: x509.NewCertPool(), MinVersion: tls.VersionTLS12},
+			validateFunc: func(_ *client.Client, err error) {
+				s.ErrorContains(err, "certificate")
+			},
+		},
+		{
+			name: "when the client has no TLS, the server refuses it",
+			validateFunc: func(_ *client.Client, err error) {
+				s.Error(err)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			c := client.New(slog.New(slog.DiscardHandler), &client.Options{
+				Host: "127.0.0.1",
+				Port: s.port,
+				TLS:  tc.tls,
+			})
+			tc.validateFunc(c, c.Connect(context.Background()))
+		})
+	}
+}
+
+func TestConnectTLSPublicTestSuite(t *testing.T) {
+	suite.Run(t, new(ConnectTLSPublicTestSuite))
+}
+
+// ReconnectServerPublicTestSuite stops a real NATS server under a connected
+// client and starts it again, because only a real connection shows the
+// reconnect and its log.

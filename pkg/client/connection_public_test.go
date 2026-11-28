@@ -21,13 +21,19 @@
 package client_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"os"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
@@ -64,10 +70,39 @@ func (s *ConnectionPublicTestSuite) TearDownTest() {
 }
 
 func (s *ConnectionPublicTestSuite) TestClose() {
+	// kv is the bucket handle that the first row reads before and after Close.
+	var kv *mocks.MockKeyValue
+
 	tests := []struct {
-		name      string
-		setupFunc func()
+		name         string
+		setupFunc    func()
+		validateFunc func()
 	}{
+		{
+			name: "a call after Close is ErrNotConnected, and a new connection asks for each handle again",
+			setupFunc: func() {
+				ctx := context.Background()
+				kv = mocks.NewMockKeyValue(s.mockCtrl)
+				kv.EXPECT().Get(gomock.Any(), "k").Return(nil, jetstream.ErrKeyNotFound).Times(2)
+				s.mockJS.EXPECT().KeyValue(gomock.Any(), "b").Return(kv, nil)
+				_, err := s.client.KVGet(ctx, "b", "k")
+				s.ErrorIs(err, jetstream.ErrKeyNotFound)
+
+				s.mockNATS.EXPECT().Close()
+			},
+			validateFunc: func() {
+				ctx := context.Background()
+				s.Nil(client.JetStreamOf(s.client))
+				_, err := s.client.KVGet(ctx, "b", "k")
+				s.ErrorIs(err, client.ErrNotConnected)
+
+				js := mocks.NewMockJetStream(s.mockCtrl)
+				js.EXPECT().KeyValue(gomock.Any(), "b").Return(kv, nil)
+				client.SetJetStream(s.client, js)
+				_, err = s.client.KVGet(ctx, "b", "k")
+				s.ErrorIs(err, jetstream.ErrKeyNotFound)
+			},
+		},
 		{
 			name: "closes the underlying connection",
 			setupFunc: func() {
@@ -86,34 +121,11 @@ func (s *ConnectionPublicTestSuite) TestClose() {
 		s.Run(tc.name, func() {
 			tc.setupFunc()
 			s.client.Close()
+			if tc.validateFunc != nil {
+				tc.validateFunc()
+			}
 		})
 	}
-}
-
-func (s *ConnectionPublicTestSuite) TestCloseForgetsTheConnection() {
-	s.Run(
-		"a call after Close is ErrNotConnected, and a new connection asks for each handle again",
-		func() {
-			ctx := context.Background()
-			kv := mocks.NewMockKeyValue(s.mockCtrl)
-			kv.EXPECT().Get(gomock.Any(), "k").Return(nil, jetstream.ErrKeyNotFound).Times(2)
-			s.mockJS.EXPECT().KeyValue(gomock.Any(), "b").Return(kv, nil)
-			_, err := s.client.KVGet(ctx, "b", "k")
-			s.ErrorIs(err, jetstream.ErrKeyNotFound)
-
-			s.mockNATS.EXPECT().Close()
-			s.client.Close()
-			s.Nil(client.JetStreamOf(s.client))
-			_, err = s.client.KVGet(ctx, "b", "k")
-			s.ErrorIs(err, client.ErrNotConnected)
-
-			js := mocks.NewMockJetStream(s.mockCtrl)
-			js.EXPECT().KeyValue(gomock.Any(), "b").Return(kv, nil)
-			client.SetJetStream(s.client, js)
-			_, err = s.client.KVGet(ctx, "b", "k")
-			s.ErrorIs(err, jetstream.ErrKeyNotFound)
-		},
-	)
 }
 
 func (s *ConnectionPublicTestSuite) TestCloseDuringCalls() {
@@ -170,33 +182,74 @@ func (s *ConnectionPublicTestSuite) TestCloseDuringCalls() {
 
 func (s *ConnectionPublicTestSuite) TestNotConnected() {
 	ctx := context.Background()
-	calls := map[string]func() error{
-		"Publish": func() error { return s.client.Publish(ctx, "x", nil) },
-		"Consume": func() error {
-			return s.client.Consume(ctx, "S", "c",
-				func(context.Context, jetstream.Msg) error { return nil }, nil)
+	tests := []struct {
+		name         string
+		call         func() error
+		validateFunc func(error)
+	}{
+		{
+			name:         "Publish",
+			call:         func() error { return s.client.Publish(ctx, "x", nil) },
+			validateFunc: func(err error) { s.ErrorIs(err, client.ErrNotConnected) },
 		},
-		"KVCreateOrUpdate": func() error {
-			return s.client.KVCreateOrUpdate(ctx, jetstream.KeyValueConfig{Bucket: "b"})
+		{
+			name: "Consume",
+			call: func() error {
+				return s.client.Consume(ctx, "S", "c",
+					func(context.Context, jetstream.Msg) error { return nil }, nil)
+			},
+			validateFunc: func(err error) { s.ErrorIs(err, client.ErrNotConnected) },
 		},
-		"KVGet": func() error { _, err := s.client.KVGet(ctx, "b", "k"); return err },
-		"ObjectStoreCreateOrUpdate": func() error {
-			return s.client.ObjectStoreCreateOrUpdate(
-				ctx, jetstream.ObjectStoreConfig{Bucket: "b"})
+		{
+			name: "KVCreateOrUpdate",
+			call: func() error {
+				return s.client.KVCreateOrUpdate(ctx, jetstream.KeyValueConfig{Bucket: "b"})
+			},
+			validateFunc: func(err error) { s.ErrorIs(err, client.ErrNotConnected) },
 		},
-		"ObjectGetBytes": func() error { _, err := s.client.ObjectGetBytes(ctx, "b", "o"); return err },
-		"StreamCreateOrUpdate": func() error {
-			return s.client.StreamCreateOrUpdate(ctx, jetstream.StreamConfig{Name: "S"})
+		{
+			name:         "KVGet",
+			call:         func() error { _, err := s.client.KVGet(ctx, "b", "k"); return err },
+			validateFunc: func(err error) { s.ErrorIs(err, client.ErrNotConnected) },
 		},
-		"ConsumerCreateOrUpdate": func() error {
-			return s.client.ConsumerCreateOrUpdate(ctx, "S", jetstream.ConsumerConfig{})
+		{
+			name: "ObjectStoreCreateOrUpdate",
+			call: func() error {
+				return s.client.ObjectStoreCreateOrUpdate(
+					ctx, jetstream.ObjectStoreConfig{Bucket: "b"})
+			},
+			validateFunc: func(err error) { s.ErrorIs(err, client.ErrNotConnected) },
 		},
-		"StreamInfo": func() error { _, err := s.client.StreamInfo(ctx, "S"); return err },
+		{
+			name:         "ObjectGetBytes",
+			call:         func() error { _, err := s.client.ObjectGetBytes(ctx, "b", "o"); return err },
+			validateFunc: func(err error) { s.ErrorIs(err, client.ErrNotConnected) },
+		},
+		{
+			name: "StreamCreateOrUpdate",
+			call: func() error {
+				return s.client.StreamCreateOrUpdate(ctx, jetstream.StreamConfig{Name: "S"})
+			},
+			validateFunc: func(err error) { s.ErrorIs(err, client.ErrNotConnected) },
+		},
+		{
+			name: "ConsumerCreateOrUpdate",
+			call: func() error {
+				return s.client.ConsumerCreateOrUpdate(ctx, "S", jetstream.ConsumerConfig{})
+			},
+			validateFunc: func(err error) { s.ErrorIs(err, client.ErrNotConnected) },
+		},
+		{
+			name:         "StreamInfo",
+			call:         func() error { _, err := s.client.StreamInfo(ctx, "S"); return err },
+			validateFunc: func(err error) { s.ErrorIs(err, client.ErrNotConnected) },
+		},
 	}
-	for name, call := range calls {
-		s.Run(name+" before Connect returns ErrNotConnected", func() {
+
+	for _, tc := range tests {
+		s.Run(tc.name+" before Connect returns ErrNotConnected", func() {
 			client.SetJetStream(s.client, nil)
-			s.ErrorIs(call(), client.ErrNotConnected)
+			tc.validateFunc(tc.call())
 		})
 	}
 }
@@ -204,53 +257,73 @@ func (s *ConnectionPublicTestSuite) TestNotConnected() {
 func (s *ConnectionPublicTestSuite) TestGoneHandle() {
 	ctx := context.Background()
 
-	s.Run("a bucket that is gone is asked for again at the next call", func() {
-		kv := mocks.NewMockKeyValue(s.mockCtrl)
-		gomock.InOrder(
-			kv.EXPECT().Get(gomock.Any(), "k").Return(nil, jetstream.ErrNoStreamResponse),
-			kv.EXPECT().Get(gomock.Any(), "k").Return(nil, jetstream.ErrKeyNotFound),
-		)
-		s.mockJS.EXPECT().KeyValue(gomock.Any(), "b").Return(kv, nil).Times(2)
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "a bucket that is gone is asked for again at the next call",
+			validateFunc: func() {
+				kv := mocks.NewMockKeyValue(s.mockCtrl)
+				gomock.InOrder(
+					kv.EXPECT().Get(gomock.Any(), "k").Return(nil, jetstream.ErrNoStreamResponse),
+					kv.EXPECT().Get(gomock.Any(), "k").Return(nil, jetstream.ErrKeyNotFound),
+				)
+				s.mockJS.EXPECT().KeyValue(gomock.Any(), "b").Return(kv, nil).Times(2)
 
-		_, err := s.client.KVGet(ctx, "b", "k")
-		s.ErrorIs(err, jetstream.ErrNoStreamResponse)
-		_, err = s.client.KVGet(ctx, "b", "k")
-		s.ErrorIs(err, jetstream.ErrKeyNotFound)
-	})
+				_, err := s.client.KVGet(ctx, "b", "k")
+				s.ErrorIs(err, jetstream.ErrNoStreamResponse)
+				_, err = s.client.KVGet(ctx, "b", "k")
+				s.ErrorIs(err, jetstream.ErrKeyNotFound)
+			},
+		},
+		{
+			name: "an object store that is gone is asked for again at the next call",
+			validateFunc: func() {
+				store := mocks.NewMockObjectStore(s.mockCtrl)
+				gomock.InOrder(
+					store.EXPECT().
+						GetBytes(gomock.Any(), "o").
+						Return(nil, jetstream.ErrBucketNotFound),
+					store.EXPECT().GetBytes(gomock.Any(), "o").Return([]byte("x"), nil),
+				)
+				s.mockJS.EXPECT().ObjectStore(gomock.Any(), "b").Return(store, nil).Times(2)
 
-	s.Run("an object store that is gone is asked for again at the next call", func() {
-		store := mocks.NewMockObjectStore(s.mockCtrl)
-		gomock.InOrder(
-			store.EXPECT().GetBytes(gomock.Any(), "o").Return(nil, jetstream.ErrBucketNotFound),
-			store.EXPECT().GetBytes(gomock.Any(), "o").Return([]byte("x"), nil),
-		)
-		s.mockJS.EXPECT().ObjectStore(gomock.Any(), "b").Return(store, nil).Times(2)
+				_, err := s.client.ObjectGetBytes(ctx, "b", "o")
+				s.ErrorIs(err, jetstream.ErrBucketNotFound)
+				got, err := s.client.ObjectGetBytes(ctx, "b", "o")
+				s.Require().NoError(err)
+				s.Equal([]byte("x"), got)
+			},
+		},
+		{
+			name: "a stream that is gone is asked for again at the next call",
+			validateFunc: func() {
+				stream := mocks.NewMockStream(s.mockCtrl)
+				gomock.InOrder(
+					stream.EXPECT().Info(gomock.Any()).Return(nil, jetstream.ErrStreamNotFound),
+					stream.EXPECT().
+						OrderedConsumer(gomock.Any(), gomock.Any()).
+						Return(nil, jetstream.ErrStreamNotFound),
+					stream.EXPECT().
+						GetMsg(gomock.Any(), uint64(1)).
+						Return(nil, jetstream.ErrMsgNotFound),
+				)
+				s.mockJS.EXPECT().Stream(gomock.Any(), "S").Return(stream, nil).Times(3)
 
-		_, err := s.client.ObjectGetBytes(ctx, "b", "o")
-		s.ErrorIs(err, jetstream.ErrBucketNotFound)
-		got, err := s.client.ObjectGetBytes(ctx, "b", "o")
-		s.Require().NoError(err)
-		s.Equal([]byte("x"), got)
-	})
+				_, err := s.client.StreamInfo(ctx, "S")
+				s.ErrorIs(err, jetstream.ErrStreamNotFound)
+				_, err = s.client.StreamRead(ctx, "S", 0, 1)
+				s.ErrorIs(err, jetstream.ErrStreamNotFound)
+				_, err = s.client.StreamGetMsg(ctx, "S", 1)
+				s.ErrorIs(err, jetstream.ErrMsgNotFound)
+			},
+		},
+	}
 
-	s.Run("a stream that is gone is asked for again at the next call", func() {
-		stream := mocks.NewMockStream(s.mockCtrl)
-		gomock.InOrder(
-			stream.EXPECT().Info(gomock.Any()).Return(nil, jetstream.ErrStreamNotFound),
-			stream.EXPECT().
-				OrderedConsumer(gomock.Any(), gomock.Any()).
-				Return(nil, jetstream.ErrStreamNotFound),
-			stream.EXPECT().GetMsg(gomock.Any(), uint64(1)).Return(nil, jetstream.ErrMsgNotFound),
-		)
-		s.mockJS.EXPECT().Stream(gomock.Any(), "S").Return(stream, nil).Times(3)
-
-		_, err := s.client.StreamInfo(ctx, "S")
-		s.ErrorIs(err, jetstream.ErrStreamNotFound)
-		_, err = s.client.StreamRead(ctx, "S", 0, 1)
-		s.ErrorIs(err, jetstream.ErrStreamNotFound)
-		_, err = s.client.StreamGetMsg(ctx, "S", 1)
-		s.ErrorIs(err, jetstream.ErrMsgNotFound)
-	})
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
 }
 
 func (s *ConnectionPublicTestSuite) TestJetStream() {
@@ -323,17 +396,256 @@ func (s *ConnectionPublicTestSuite) TestConnectedURL() {
 }
 
 func (s *ConnectionPublicTestSuite) TestConnectedServerVersion() {
-	s.Run("returns the version of the connection", func() {
-		s.mockNATS.EXPECT().ConnectedServerVersion().Return("2.11.0")
-		s.Equal("2.11.0", s.client.ConnectedServerVersion())
-	})
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "returns the version of the connection",
+			validateFunc: func() {
+				s.mockNATS.EXPECT().ConnectedServerVersion().Return("2.11.0")
+				s.Equal("2.11.0", s.client.ConnectedServerVersion())
+			},
+		},
+		{
+			name: "returns empty string when NC is nil",
+			validateFunc: func() {
+				s.client.NC = nil
+				s.Empty(s.client.ConnectedServerVersion())
+			},
+		},
+	}
 
-	s.Run("returns empty string when NC is nil", func() {
-		s.client.NC = nil
-		s.Empty(s.client.ConnectedServerVersion())
-	})
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
 }
 
 func TestConnectionPublicTestSuite(t *testing.T) {
 	suite.Run(t, new(ConnectionPublicTestSuite))
+}
+
+// ConnectionServerPublicTestSuite runs calls against a real NATS server while
+// the client closes and connects again, because only a real connection shows
+// a race on it. Run it with -race.
+type ConnectionServerPublicTestSuite struct {
+	suite.Suite
+
+	server *server.Server
+	client *client.Client
+}
+
+func (s *ConnectionServerPublicTestSuite) SetupTest() {
+	srv, err := server.NewServer(&server.Options{
+		Host:      "127.0.0.1",
+		Port:      -1,
+		JetStream: true,
+		StoreDir:  s.T().TempDir(),
+	})
+	s.Require().NoError(err)
+	srv.Start()
+	s.Require().True(srv.ReadyForConnections(5 * time.Second))
+	s.server = srv
+
+	port := srv.Addr().(*net.TCPAddr).Port
+	s.client = client.New(
+		slog.New(slog.DiscardHandler),
+		&client.Options{Host: "127.0.0.1", Port: port},
+	)
+	s.Require().NoError(s.client.Connect(context.Background()))
+}
+
+// syncBuffer is a bytes.Buffer that the handlers of the connection, which
+// run in their own goroutine, and the test can use at the same time.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(
+	p []byte,
+) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buf.String()
+}
+
+// start starts a NATS server on port, or on a free port when port is -1.
+func (s *ConnectionServerPublicTestSuite) start(
+	port int,
+) *server.Server {
+	srv, err := server.NewServer(&server.Options{Host: "127.0.0.1", Port: port})
+	s.Require().NoError(err)
+	srv.Start()
+	s.Require().True(srv.ReadyForConnections(5 * time.Second))
+
+	return srv
+}
+
+func (s *ConnectionServerPublicTestSuite) TearDownTest() {
+	s.client.Close()
+	s.server.Shutdown()
+}
+
+func (s *ConnectionServerPublicTestSuite) TestReconnect() {
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "a call while the client closes and connects is its result or ErrNotConnected",
+			validateFunc: func() {
+				ctx := context.Background()
+				stop := make(chan struct{})
+				var calls sync.WaitGroup
+				var mu sync.Mutex
+				var unexpected []error
+
+				calls.Add(1)
+				go func() {
+					defer calls.Done()
+					for {
+						select {
+						case <-stop:
+							return
+						default:
+						}
+						_ = s.client.ConnectedURL()
+						_ = s.client.ConnectedServerVersion()
+						for _, err := range []error{
+							s.client.PublishCore(ctx, "x", []byte("y")),
+							subscribe(ctx, s.client),
+						} {
+							if err != nil && !isClosedOrNotConnected(err) {
+								mu.Lock()
+								unexpected = append(unexpected, err)
+								mu.Unlock()
+							}
+						}
+					}
+				}()
+
+				for range 20 {
+					s.client.Close()
+					s.Require().NoError(s.client.Connect(context.Background()))
+				}
+				close(stop)
+				calls.Wait()
+
+				s.Empty(unexpected)
+				s.NotEmpty(s.client.ConnectedURL())
+			},
+		},
+		{
+			name: "logs the drop and the reconnect when the server comes back",
+			validateFunc: func() {
+				srv := s.start(-1)
+				port := srv.Addr().(*net.TCPAddr).Port
+
+				var logs syncBuffer
+				c := client.New(slog.New(slog.NewTextHandler(&logs, nil)), &client.Options{
+					Host:      "127.0.0.1",
+					Port:      port,
+					Reconnect: client.ReconnectOptions{Wait: 50 * time.Millisecond},
+				})
+				s.Require().NoError(c.Connect(context.Background()))
+				defer c.Close()
+
+				srv.Shutdown()
+				srv.WaitForShutdown()
+				s.Eventually(func() bool {
+					return strings.Contains(logs.String(), `msg="disconnected from NATS"`)
+				}, 5*time.Second, 10*time.Millisecond)
+
+				again := s.start(port)
+				defer again.Shutdown()
+				s.Eventually(func() bool {
+					return strings.Contains(logs.String(), `msg="reconnected to NATS"`)
+				}, 5*time.Second, 10*time.Millisecond)
+				s.NotEmpty(c.ConnectedURL())
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
+}
+
+// subscribe subscribes to a subject and unsubscribes at once.
+func subscribe(
+	ctx context.Context,
+	c *client.Client,
+) error {
+	sub, err := c.Subscribe(ctx, "x", func(context.Context, *nats.Msg) {})
+	if err != nil {
+		return err
+	}
+
+	return sub.Unsubscribe()
+}
+
+// isClosedOrNotConnected reports whether err is the result of a call that
+// raced a Close.
+func isClosedOrNotConnected(
+	err error,
+) bool {
+	return errors.Is(err, client.ErrNotConnected) ||
+		errors.Is(err, nats.ErrConnectionClosed) ||
+		errors.Is(err, nats.ErrBadSubscription)
+}
+
+func (s *ConnectionServerPublicTestSuite) TestSubscribe() {
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "the end of ctx unsubscribes",
+			validateFunc: func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				sub, err := s.client.Subscribe(ctx, "x.ctx", func(context.Context, *nats.Msg) {})
+				s.Require().NoError(err)
+				s.True(sub.IsValid())
+
+				cancel()
+				s.Eventually(
+					func() bool { return !sub.IsValid() },
+					2*time.Second,
+					10*time.Millisecond,
+				)
+			},
+		},
+		{
+			name: "while ctx is live the subscription stays",
+			validateFunc: func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				sub, err := s.client.Subscribe(ctx, "x.live", func(context.Context, *nats.Msg) {})
+				s.Require().NoError(err)
+
+				s.Never(
+					func() bool { return !sub.IsValid() },
+					100*time.Millisecond,
+					10*time.Millisecond,
+				)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
+}
+
+func TestConnectionServerPublicTestSuite(t *testing.T) {
+	suite.Run(t, new(ConnectionServerPublicTestSuite))
 }

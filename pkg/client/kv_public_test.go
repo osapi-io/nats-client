@@ -128,48 +128,66 @@ func (s *KVPublicTestSuite) TestKVCreateOrUpdate() {
 }
 
 func (s *KVPublicTestSuite) TestHandle() {
-	s.Run("when the bucket is not there returns the error", func() {
-		s.js.EXPECT().KeyValue(gomock.Any(), "b").Return(nil, jetstream.ErrBucketNotFound)
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "when the bucket is not there returns the error",
+			validateFunc: func() {
+				s.js.EXPECT().KeyValue(gomock.Any(), "b").Return(nil, jetstream.ErrBucketNotFound)
 
-		_, err := s.client.KVGet(s.ctx, "b", "k")
-		s.ErrorIs(err, jetstream.ErrBucketNotFound)
-		s.ErrorContains(err, "failed to get KV bucket b")
-	})
+				_, err := s.client.KVGet(s.ctx, "b", "k")
+				s.ErrorIs(err, jetstream.ErrBucketNotFound)
+				s.ErrorContains(err, "failed to get KV bucket b")
+			},
+		},
+		{
+			name: "asks the server for the handle once",
+			validateFunc: func() {
+				s.open()
+				s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil).Times(2)
 
-	s.Run("asks the server for the handle once", func() {
-		s.open()
-		s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil).Times(2)
+				s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
+				s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
+			},
+		},
+		{
+			name: "keeps no handle of a connection that changed during the call",
+			validateFunc: func() {
+				next := mocks.NewMockJetStream(s.ctrl)
+				// The connection closes and connects again while the server
+				// answers on the old one.
+				s.js.EXPECT().KeyValue(gomock.Any(), "b").
+					DoAndReturn(func(context.Context, string) (jetstream.KeyValue, error) {
+						client.SetJetStream(s.client, next)
+						return s.kv, nil
+					})
+				fresh := mocks.NewMockKeyValue(s.ctrl)
+				next.EXPECT().KeyValue(gomock.Any(), "b").Return(fresh, nil)
+				s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil)
+				fresh.EXPECT().Delete(gomock.Any(), "k").Return(nil)
 
-		s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
-		s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
-	})
+				s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
+				s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
+			},
+		},
+		{
+			name: "asks again after a call says the connection closed",
+			validateFunc: func() {
+				s.js.EXPECT().KeyValue(gomock.Any(), "b").Return(s.kv, nil).Times(2)
+				s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nats.ErrConnectionClosed)
+				s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil)
 
-	s.Run("keeps no handle of a connection that changed during the call", func() {
-		next := mocks.NewMockJetStream(s.ctrl)
-		// The connection closes and connects again while the server
-		// answers on the old one.
-		s.js.EXPECT().KeyValue(gomock.Any(), "b").
-			DoAndReturn(func(context.Context, string) (jetstream.KeyValue, error) {
-				client.SetJetStream(s.client, next)
-				return s.kv, nil
-			})
-		fresh := mocks.NewMockKeyValue(s.ctrl)
-		next.EXPECT().KeyValue(gomock.Any(), "b").Return(fresh, nil)
-		s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil)
-		fresh.EXPECT().Delete(gomock.Any(), "k").Return(nil)
+				s.ErrorIs(s.client.KVDelete(s.ctx, "b", "k"), nats.ErrConnectionClosed)
+				s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
+			},
+		},
+	}
 
-		s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
-		s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
-	})
-
-	s.Run("asks again after a call says the connection closed", func() {
-		s.js.EXPECT().KeyValue(gomock.Any(), "b").Return(s.kv, nil).Times(2)
-		s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nats.ErrConnectionClosed)
-		s.kv.EXPECT().Delete(gomock.Any(), "k").Return(nil)
-
-		s.ErrorIs(s.client.KVDelete(s.ctx, "b", "k"), nats.ErrConnectionClosed)
-		s.NoError(s.client.KVDelete(s.ctx, "b", "k"))
-	})
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
 }
 
 func (s *KVPublicTestSuite) TestCalls() {
@@ -342,78 +360,96 @@ func (s *KVPublicTestSuite) TestKVKeys() {
 }
 
 func (s *KVPublicTestSuite) TestKVWatch() {
-	s.Run("when the watch cannot start returns the error", func() {
-		s.open()
-		s.kv.EXPECT().Watch(gomock.Any(), "jobs.>").Return(nil, errBoom)
+	tests := []struct {
+		name         string
+		validateFunc func()
+	}{
+		{
+			name: "when the watch cannot start returns the error",
+			validateFunc: func() {
+				s.open()
+				s.kv.EXPECT().Watch(gomock.Any(), "jobs.>").Return(nil, errBoom)
 
-		ch, err := s.client.KVWatch(s.ctx, "b", "jobs.>")
-		s.ErrorIs(err, errBoom)
-		s.Nil(ch)
-	})
+				ch, err := s.client.KVWatch(s.ctx, "b", "jobs.>")
+				s.ErrorIs(err, errBoom)
+				s.Nil(ch)
+			},
+		},
+		{
+			name: "sends each entry and drops the marker after the current values",
+			validateFunc: func() {
+				updates := make(chan jetstream.KeyValueEntry, 3)
+				first := mocks.NewMockKeyValueEntry(s.ctrl)
+				second := mocks.NewMockKeyValueEntry(s.ctrl)
+				updates <- first
+				updates <- nil
+				updates <- second
+				close(updates)
 
-	s.Run("sends each entry and drops the marker after the current values", func() {
-		updates := make(chan jetstream.KeyValueEntry, 3)
-		first := mocks.NewMockKeyValueEntry(s.ctrl)
-		second := mocks.NewMockKeyValueEntry(s.ctrl)
-		updates <- first
-		updates <- nil
-		updates <- second
-		close(updates)
+				watcher := mocks.NewMockKeyWatcher(s.ctrl)
+				watcher.EXPECT().Updates().Return(updates).AnyTimes()
+				watcher.EXPECT().Stop().Return(nil)
+				s.open()
+				s.kv.EXPECT().Watch(gomock.Any(), ">", gomock.Any()).Return(watcher, nil)
 
-		watcher := mocks.NewMockKeyWatcher(s.ctrl)
-		watcher.EXPECT().Updates().Return(updates).AnyTimes()
-		watcher.EXPECT().Stop().Return(nil)
-		s.open()
-		s.kv.EXPECT().Watch(gomock.Any(), ">", gomock.Any()).Return(watcher, nil)
+				ch, err := s.client.KVWatch(s.ctx, "b", ">", jetstream.IncludeHistory())
+				s.Require().NoError(err)
 
-		ch, err := s.client.KVWatch(s.ctx, "b", ">", jetstream.IncludeHistory())
-		s.Require().NoError(err)
+				var got []jetstream.KeyValueEntry
+				for e := range ch {
+					got = append(got, e)
+				}
+				s.Equal([]jetstream.KeyValueEntry{first, second}, got)
+			},
+		},
+		{
+			name: "when ctx ends stops the watch and closes the channel",
+			validateFunc: func() {
+				watcher := mocks.NewMockKeyWatcher(s.ctrl)
+				watcher.EXPECT().Updates().Return(make(chan jetstream.KeyValueEntry)).AnyTimes()
+				stopped := make(chan struct{})
+				watcher.EXPECT().Stop().DoAndReturn(func() error {
+					close(stopped)
+					return nil
+				})
+				s.open()
+				s.kv.EXPECT().Watch(gomock.Any(), ">").Return(watcher, nil)
 
-		var got []jetstream.KeyValueEntry
-		for e := range ch {
-			got = append(got, e)
-		}
-		s.Equal([]jetstream.KeyValueEntry{first, second}, got)
-	})
+				ctx, cancel := context.WithCancel(s.ctx)
+				ch, err := s.client.KVWatch(ctx, "b", ">")
+				s.Require().NoError(err)
+				cancel()
 
-	s.Run("when ctx ends stops the watch and closes the channel", func() {
-		watcher := mocks.NewMockKeyWatcher(s.ctrl)
-		watcher.EXPECT().Updates().Return(make(chan jetstream.KeyValueEntry)).AnyTimes()
-		stopped := make(chan struct{})
-		watcher.EXPECT().Stop().DoAndReturn(func() error {
-			close(stopped)
-			return nil
-		})
-		s.open()
-		s.kv.EXPECT().Watch(gomock.Any(), ">").Return(watcher, nil)
+				s.closes(ch)
+				<-stopped
+			},
+		},
+		{
+			name: "when ctx ends while an entry waits closes the channel",
+			validateFunc: func() {
+				updates := make(chan jetstream.KeyValueEntry, 1)
+				updates <- mocks.NewMockKeyValueEntry(s.ctrl)
+				watcher := mocks.NewMockKeyWatcher(s.ctrl)
+				watcher.EXPECT().Updates().Return(updates).AnyTimes()
+				watcher.EXPECT().Stop().Return(nil)
+				s.open()
+				s.kv.EXPECT().Watch(gomock.Any(), ">").Return(watcher, nil)
 
-		ctx, cancel := context.WithCancel(s.ctx)
-		ch, err := s.client.KVWatch(ctx, "b", ">")
-		s.Require().NoError(err)
-		cancel()
+				ctx, cancel := context.WithCancel(s.ctx)
+				ch, err := s.client.KVWatch(ctx, "b", ">")
+				s.Require().NoError(err)
+				// Nobody reads the entry, so the send waits until ctx ends.
+				time.Sleep(20 * time.Millisecond)
+				cancel()
 
-		s.closes(ch)
-		<-stopped
-	})
+				s.closes(ch)
+			},
+		},
+	}
 
-	s.Run("when ctx ends while an entry waits closes the channel", func() {
-		updates := make(chan jetstream.KeyValueEntry, 1)
-		updates <- mocks.NewMockKeyValueEntry(s.ctrl)
-		watcher := mocks.NewMockKeyWatcher(s.ctrl)
-		watcher.EXPECT().Updates().Return(updates).AnyTimes()
-		watcher.EXPECT().Stop().Return(nil)
-		s.open()
-		s.kv.EXPECT().Watch(gomock.Any(), ">").Return(watcher, nil)
-
-		ctx, cancel := context.WithCancel(s.ctx)
-		ch, err := s.client.KVWatch(ctx, "b", ">")
-		s.Require().NoError(err)
-		// Nobody reads the entry, so the send waits until ctx ends.
-		time.Sleep(20 * time.Millisecond)
-		cancel()
-
-		s.closes(ch)
-	})
+	for _, tc := range tests {
+		s.Run(tc.name, tc.validateFunc)
+	}
 }
 
 // closes waits for ch to close, and fails when it does not.
