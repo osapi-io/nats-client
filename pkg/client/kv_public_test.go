@@ -275,59 +275,148 @@ func (s *KVPublicTestSuite) TestCalls() {
 	}
 }
 
-// lister returns a lister that yields keys, then closes.
-func (s *KVPublicTestSuite) lister(
+// keyWatcher is a watcher of keys that sends an entry for each key, then
+// the nil entry that marks the end of the keys when end is true, or closes
+// its channel before that mark when end is false.
+func (s *KVPublicTestSuite) keyWatcher(
+	end bool,
 	keys ...string,
-) *mocks.MockKeyLister {
-	ch := make(chan string, len(keys))
+) *mocks.MockKeyWatcher {
+	ch := make(chan jetstream.KeyValueEntry, len(keys)+1)
 	for _, k := range keys {
-		ch <- k
+		e := mocks.NewMockKeyValueEntry(s.ctrl)
+		e.EXPECT().Key().Return(k)
+		ch <- e
 	}
-	close(ch)
-	l := mocks.NewMockKeyLister(s.ctrl)
-	l.EXPECT().Keys().Return(ch)
+	if end {
+		ch <- nil
+	} else {
+		close(ch)
+	}
+	w := mocks.NewMockKeyWatcher(s.ctrl)
+	w.EXPECT().Updates().Return(ch).AnyTimes()
+	w.EXPECT().Stop().Return(nil)
 
-	return l
+	return w
 }
 
 func (s *KVPublicTestSuite) TestKVKeys() {
 	tests := []struct {
-		name    string
-		filters []string
-		setup   func()
-		want    []string
-		wantErr bool
+		name         string
+		filters      []string
+		ctx          func() context.Context
+		setup        func()
+		validateFunc func([]string, error)
 	}{
 		{
 			name: "with no filter returns each key",
 			setup: func() {
-				s.kv.EXPECT().ListKeys(gomock.Any()).Return(s.lister("a", "b"), nil)
+				s.kv.EXPECT().
+					WatchAll(gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(s.keyWatcher(true, "a", "b"), nil)
 			},
-			want: []string{"a", "b"},
+			validateFunc: func(got []string, err error) {
+				s.Require().NoError(err)
+				s.Equal([]string{"a", "b"}, got)
+			},
 		},
 		{
 			name:    "with filters returns the keys that match",
 			filters: []string{"jobs.>", "status.>"},
 			setup: func() {
 				s.kv.EXPECT().
-					ListKeysFiltered(gomock.Any(), "jobs.>", "status.>").
-					Return(s.lister("jobs.1"), nil)
+					WatchFiltered(
+						gomock.Any(),
+						[]string{"jobs.>", "status.>"},
+						gomock.Any(),
+						gomock.Any(),
+					).
+					Return(s.keyWatcher(true, "jobs.1"), nil)
 			},
-			want: []string{"jobs.1"},
+			validateFunc: func(got []string, err error) {
+				s.Require().NoError(err)
+				s.Equal([]string{"jobs.1"}, got)
+			},
 		},
 		{
 			name: "when the bucket is empty returns an empty list",
 			setup: func() {
-				s.kv.EXPECT().ListKeys(gomock.Any()).Return(s.lister(), nil)
+				s.kv.EXPECT().
+					WatchAll(gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(s.keyWatcher(true), nil)
 			},
-			want: []string{},
+			validateFunc: func(got []string, err error) {
+				s.Require().NoError(err)
+				s.Equal([]string{}, got)
+			},
 		},
 		{
 			name: "when the list fails returns the error",
 			setup: func() {
-				s.kv.EXPECT().ListKeys(gomock.Any()).Return(nil, errBoom)
+				s.kv.EXPECT().
+					WatchAll(gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(nil, errBoom)
 			},
-			wantErr: true,
+			validateFunc: func(_ []string, err error) {
+				s.ErrorIs(err, errBoom)
+			},
+		},
+		{
+			name: "when the watch stops before the end returns ErrWatchStopped, not a short list",
+			setup: func() {
+				s.kv.EXPECT().
+					WatchAll(gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(s.keyWatcher(false, "a"), nil)
+			},
+			validateFunc: func(got []string, err error) {
+				s.ErrorIs(err, client.ErrWatchStopped)
+				s.EqualError(
+					err,
+					"list the keys of b: the watch stopped before the end of the keys",
+				)
+				s.Nil(got)
+			},
+		},
+		{
+			name: "when ctx ends and the watch closes its channel returns the error of ctx",
+			ctx: func() context.Context {
+				ctx, cancel := context.WithCancel(s.ctx)
+				cancel()
+
+				return ctx
+			},
+			setup: func() {
+				s.kv.EXPECT().
+					WatchAll(gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(s.keyWatcher(false), nil)
+			},
+			validateFunc: func(got []string, err error) {
+				s.ErrorIs(err, context.Canceled)
+				s.NotErrorIs(err, client.ErrWatchStopped)
+				s.Nil(got)
+			},
+		},
+		{
+			name: "when ctx ends during the list returns its error, not a short list",
+			ctx: func() context.Context {
+				ctx, cancel := context.WithCancel(s.ctx)
+				cancel()
+
+				return ctx
+			},
+			setup: func() {
+				w := mocks.NewMockKeyWatcher(s.ctrl)
+				w.EXPECT().Updates().Return(make(chan jetstream.KeyValueEntry))
+				w.EXPECT().Stop().Return(nil)
+				s.kv.EXPECT().
+					WatchAll(gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(w, nil)
+			},
+			validateFunc: func(got []string, err error) {
+				s.ErrorIs(err, context.Canceled)
+				s.EqualError(err, "list the keys of b: context canceled")
+				s.Nil(got)
+			},
 		},
 	}
 
@@ -335,28 +424,14 @@ func (s *KVPublicTestSuite) TestKVKeys() {
 		s.Run(tc.name, func() {
 			s.open()
 			tc.setup()
-
-			got, err := s.client.KVKeys(s.ctx, "b", tc.filters...)
-			if tc.wantErr {
-				s.ErrorIs(err, errBoom)
-				return
+			ctx := s.ctx
+			if tc.ctx != nil {
+				ctx = tc.ctx()
 			}
-			s.Require().NoError(err)
-			s.Equal(tc.want, got)
+
+			tc.validateFunc(s.client.KVKeys(ctx, "b", tc.filters...))
 		})
 	}
-
-	s.Run("when ctx ends during the list returns its error, not a short list", func() {
-		s.open()
-		ctx, cancel := context.WithCancel(s.ctx)
-		cancel()
-		s.kv.EXPECT().ListKeys(gomock.Any()).Return(s.lister("a"), nil)
-
-		got, err := s.client.KVKeys(ctx, "b")
-		s.ErrorIs(err, context.Canceled)
-		s.EqualError(err, "list the keys of b: context canceled")
-		s.Nil(got)
-	})
 }
 
 func (s *KVPublicTestSuite) TestKVWatch() {
@@ -438,8 +513,13 @@ func (s *KVPublicTestSuite) TestKVWatch() {
 				ctx, cancel := context.WithCancel(s.ctx)
 				ch, err := s.client.KVWatch(ctx, "b", ">")
 				s.Require().NoError(err)
-				// Nobody reads the entry, so the send waits until ctx ends.
-				time.Sleep(20 * time.Millisecond)
+				// Nobody reads the entry, so once the watch took it from
+				// updates, its send waits until ctx ends.
+				s.Eventually(
+					func() bool { return len(updates) == 0 },
+					time.Second,
+					time.Millisecond,
+				)
 				cancel()
 
 				s.closes(ch)

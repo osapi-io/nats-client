@@ -269,12 +269,16 @@ func (c *Client) StreamPurgeSubject(
 	return err
 }
 
+// MaxStreamReadCount is the largest count of one StreamRead. The read keeps
+// a buffer of count messages, so a caller reads a long stream in pages.
+const MaxStreamReadCount = 10000
+
 // StreamRead reads up to count messages of the stream name in order, from the
 // sequence from, or from the first message when from is 0. It returns the
 // messages that the stream has now, and does not wait for more. count must be
-// 1 or more. When the read stopped with an error, it returns the messages
-// that it read with the error. It deletes the consumer that it read with, so
-// a read leaves no consumer on the server.
+// 1 or more, and MaxStreamReadCount or less. When the read stopped with an
+// error, it returns the messages that it read with the error. It deletes the
+// consumer that it read with, so a read leaves no consumer on the server.
 func (c *Client) StreamRead(
 	ctx context.Context,
 	name string,
@@ -286,6 +290,14 @@ func (c *Client) StreamRead(
 		func(ctx context.Context) ([]jetstream.Msg, error) {
 			if count < 1 {
 				return nil, fmt.Errorf("read stream %s: count %d is less than 1", name, count)
+			}
+			if count > MaxStreamReadCount {
+				return nil, fmt.Errorf(
+					"read stream %s: count %d is more than %d",
+					name,
+					count,
+					MaxStreamReadCount,
+				)
 			}
 			s, err := c.stream(ctx, name)
 			if err != nil {

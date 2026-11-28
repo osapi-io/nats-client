@@ -22,6 +22,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -192,9 +193,15 @@ func (c *Client) KVDelete(
 		})
 }
 
+// ErrWatchStopped is the error of a KVKeys whose watch stopped before NATS
+// sent the end of the keys, such as when the connection dropped. The list is
+// not complete, so KVKeys returns no keys with it.
+var ErrWatchStopped = errors.New("the watch stopped before the end of the keys")
+
 // KVKeys returns the keys of bucket that match one of filters, such as
 // "jobs.>", or each key when there is no filter. A bucket with no key returns
-// an empty list, not an error.
+// an empty list, not an error. A list that the end of ctx, or a stop of the
+// watch, cut short returns an error, never a short list.
 func (c *Client) KVKeys(
 	ctx context.Context,
 	bucket string,
@@ -203,32 +210,56 @@ func (c *Client) KVKeys(
 	return observe(ctx, c.tel, newOp("kv.keys", bucket),
 		func(ctx context.Context) ([]string, error) {
 			return onKV(ctx, c, bucket, func(kv jetstream.KeyValue) ([]string, error) {
+				opts := []jetstream.WatchOpt{jetstream.IgnoreDeletes(), jetstream.MetaOnly()}
 				var (
-					lister jetstream.KeyLister
-					err    error
+					watcher jetstream.KeyWatcher
+					err     error
 				)
 				if len(filters) == 0 {
-					lister, err = kv.ListKeys(ctx)
+					watcher, err = kv.WatchAll(ctx, opts...)
 				} else {
-					lister, err = kv.ListKeysFiltered(ctx, filters...)
+					watcher, err = kv.WatchFiltered(ctx, filters, opts...)
 				}
 				if err != nil {
 					return nil, err
 				}
+				defer func() { _ = watcher.Stop() }()
 
-				keys := []string{}
-				for key := range lister.Keys() {
-					keys = append(keys, key)
-				}
-				// The lister closes its channel when ctx ends, so a list
-				// that ctx cut short is not a full one.
+				return readKeys(ctx, bucket, watcher.Updates())
+			})
+		})
+}
+
+// readKeys reads the keys that updates sends until NATS marks their end
+// with a nil entry. A channel that closes before that mark, as it does when
+// the connection drops, is ErrWatchStopped, not a short list. The end of
+// ctx is ctx's error.
+func readKeys(
+	ctx context.Context,
+	bucket string,
+	updates <-chan jetstream.KeyValueEntry,
+) ([]string, error) {
+	keys := []string{}
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("list the keys of %s: %w", bucket, ctx.Err())
+		case entry, ok := <-updates:
+			if !ok {
+				// nats.go closes the channel when ctx ends too. Then the
+				// end of ctx is the reason.
 				if err := ctx.Err(); err != nil {
 					return nil, fmt.Errorf("list the keys of %s: %w", bucket, err)
 				}
 
+				return nil, fmt.Errorf("list the keys of %s: %w", bucket, ErrWatchStopped)
+			}
+			if entry == nil {
 				return keys, nil
-			})
-		})
+			}
+			keys = append(keys, entry.Key())
+		}
+	}
 }
 
 // KVWatch sends each change to a key of bucket that matches pattern, such as
@@ -236,7 +267,10 @@ func (c *Client) KVKeys(
 // current values come first. The channel carries entries only: it does not
 // mark the end of the current values, so a caller that needs a full snapshot
 // reads the keys with KVKeys and KVGet. The watch stops, and the channel
-// closes, when ctx ends. The span covers the start of the watch.
+// closes, when ctx ends. The channel also closes when the watch stops on its
+// own, such as when the connection closes. A caller that sees the channel
+// close while its ctx is still live knows that the watch ended, and can
+// start it again. The span covers the start of the watch.
 func (c *Client) KVWatch(
 	ctx context.Context,
 	bucket string,
